@@ -36,12 +36,25 @@ export function pickMessage(
   return { message, recent: nextRecent };
 }
 
-/** 所有情绪球是否至少配有 15 条文案（供单元测试与内容自检使用）。 */
+/**
+ * 每种情绪需要配多少条文案（单元测试与内容自检使用）。
+ * 默认 15 条；个别情绪可以按需声明自己的最低条数。
+ */
+export const DEFAULT_MIN_MESSAGES = 15;
+
+/** 情绪 → 该情绪允许的最少文案条数（未列出的情绪按 DEFAULT_MIN_MESSAGES 校验）。 */
+export const MIN_MESSAGES_BY_EMOTION: Partial<Record<EmotionId, number>> = {
+  // 焦虑：文案已按需求整体替换为一组短句，共 8 条。
+  anxiety: 8,
+};
+
+/** 所有情绪球是否达到各自的最低文案条数（供单元测试与内容自检使用）。 */
 export function validateEmotionLibrary(): { ok: boolean; problems: string[] } {
   const problems: string[] = [];
   for (const emotion of EMOTIONS) {
-    if (emotion.messages.length < 15) {
-      problems.push(`${emotion.label} 的文案不足 15 条（当前 ${emotion.messages.length} 条）`);
+    const min = MIN_MESSAGES_BY_EMOTION[emotion.id] ?? DEFAULT_MIN_MESSAGES;
+    if (emotion.messages.length < min) {
+      problems.push(`${emotion.label} 的文案不足 ${min} 条（当前 ${emotion.messages.length} 条）`);
     }
     const unique = new Set(emotion.messages);
     if (unique.size !== emotion.messages.length) {
