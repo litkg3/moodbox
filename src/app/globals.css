@@ -1,0 +1,1314 @@
+@import 'tailwindcss';
+
+/* ============================================================
+   MoodBox 设计系统
+   低饱和、柔和、留白优先。所有颜色都来自同一套「雾面」色盘，
+   避免出现高饱和的塑料感色块。
+
+   主题：白日（day）/ 星空（night）
+   - 白日是奶油白 + 薰衣草雾的柔光；
+   - 星空是深靛蓝夜空 + 星点，两者共用同一套间距、圆角、层级。
+   切换方式：<html data-theme="night">，由内联脚本在首帧前写入，
+   因此不会闪白，也不会与 React 的水合结果冲突。
+   ============================================================ */
+
+@theme {
+  --color-cream: #fbf7f3;
+  --color-mist: #f4eff2;
+  --color-petal: #f7ece9;
+
+  --color-ink: #332c3c;
+  --color-ink-soft: #564e60;
+  --color-ink-faint: #746c80;
+  --color-ink-ghost: #968fa1;
+
+  --color-lavender: #c9b6e8;
+  --color-lavender-deep: #8e76b8;
+  --color-fog: #9fb3ce;
+  --color-blush: #f2bfbe;
+  --color-apricot: #f2c9a4;
+  --color-butter: #f5dfa4;
+  --color-sage: #c2cfc1;
+
+  --font-display: 'PingFang SC', 'HarmonyOS Sans SC', 'Source Han Sans SC', 'Noto Sans SC',
+    'Microsoft YaHei', system-ui, sans-serif;
+  --font-sans: 'PingFang SC', 'HarmonyOS Sans SC', 'Source Han Sans SC', 'Noto Sans SC',
+    'Microsoft YaHei', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --radius-orb: 999px;
+
+  --shadow-lift: 0 24px 60px -32px rgba(70, 55, 92, 0.38);
+  --shadow-float: 0 40px 90px -50px rgba(70, 55, 92, 0.45);
+  --shadow-card: 0 18px 46px -30px rgba(70, 55, 92, 0.32);
+}
+
+/* ---------------- 星空主题的 token 覆写 ---------------- */
+
+html[data-theme='night'] {
+  --color-cream: #0a0917;
+  --color-mist: #12101f;
+  --color-petal: #17142a;
+
+  --color-ink: #f4f0fb;
+  --color-ink-soft: #d6cde8;
+  --color-ink-faint: #ada2c6;
+  --color-ink-ghost: #8b81a6;
+
+  --color-lavender: #7b65a8;
+  --color-lavender-deep: #c9b4ef;
+  --color-fog: #8ea6c8;
+  --color-blush: #a87a86;
+  --color-apricot: #bb9269;
+  --color-butter: #c0ad76;
+  --color-sage: #8ba383;
+
+  --shadow-lift: 0 28px 70px -34px rgba(0, 0, 0, 0.75);
+  --shadow-float: 0 44px 100px -50px rgba(0, 0, 0, 0.85);
+  --shadow-card: 0 20px 50px -30px rgba(0, 0, 0, 0.7);
+}
+
+/*
+ * 夜间把「白色」本身重映射成一层抬高的深紫灰。
+ *
+ * 这样做的收益很大：整个项目里 `bg-white/70`、`border-white/60`、
+ * `hover:bg-white/45` 这类写法有 60 多处，它们表达的都是
+ * 「比底色亮一点的一层」，并不真的是白色。重映射之后，
+ * 层次关系（越不透明越靠前）和悬停反馈全部原样保留，
+ * 不必逐个组件改颜色，也不会漏掉某个角落。
+ */
+html[data-theme='night'] {
+  --color-white: #322d4e;
+}
+
+/* ---------------- 基础排版 ---------------- */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+  color-scheme: light;
+}
+
+html[data-theme='night'] {
+  color-scheme: dark;
+}
+
+body {
+  min-height: 100dvh;
+  background-color: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-synthesis-weight: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+  transition: background-color 0.9s ease, color 0.6s ease;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-lavender) 48%, transparent);
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-lavender-deep) 70%, transparent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* 安静一点的滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-ink-ghost) 40%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-ink-ghost) 34%, transparent);
+  border-radius: 99px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------------- 背景：柔光 + 雾面 + 噪点 / 夜空 ---------------- */
+
+.mb-stage {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background:
+    radial-gradient(125% 95% at 12% 4%, #fdf6ef 0%, rgba(253, 246, 239, 0) 58%),
+    radial-gradient(100% 85% at 92% 6%, #efe7f9 0%, rgba(239, 231, 249, 0) 60%),
+    radial-gradient(110% 100% at 82% 92%, #e6eef7 0%, rgba(230, 238, 247, 0) 62%),
+    radial-gradient(90% 80% at 16% 96%, #fbece7 0%, rgba(251, 236, 231, 0) 58%),
+    linear-gradient(178deg, #fcf8f4 0%, #f7f2f3 46%, #f0edf5 100%);
+  transition: background 1.2s ease;
+}
+
+html[data-theme='night'] .mb-stage {
+  background:
+    radial-gradient(120% 90% at 18% 2%, #211a4a 0%, rgba(33, 26, 74, 0) 58%),
+    radial-gradient(100% 85% at 88% 8%, #1a2450 0%, rgba(26, 36, 80, 0) 62%),
+    radial-gradient(110% 100% at 78% 96%, #2a1840 0%, rgba(42, 24, 64, 0) 60%),
+    radial-gradient(90% 80% at 10% 92%, #101d3a 0%, rgba(16, 29, 58, 0) 62%),
+    linear-gradient(176deg, #070612 0%, #0b0a1e 42%, #0a0a1c 72%, #06050f 100%);
+}
+
+.mb-aurora {
+  position: absolute;
+  border-radius: 999px;
+  will-change: transform;
+  opacity: 0.75;
+  transition: opacity 1.2s ease;
+}
+
+.mb-aurora--one {
+  top: -18vmax;
+  left: -10vmax;
+  width: 62vmax;
+  height: 52vmax;
+  background: radial-gradient(
+    circle at 45% 45%,
+    rgba(216, 198, 240, 0.55) 0%,
+    rgba(216, 198, 240, 0.18) 42%,
+    rgba(216, 198, 240, 0) 70%
+  );
+  animation: mb-drift-a 46s ease-in-out infinite;
+}
+
+.mb-aurora--two {
+  right: -16vmax;
+  top: 4vmax;
+  width: 58vmax;
+  height: 48vmax;
+  background: radial-gradient(
+    circle at 55% 50%,
+    rgba(184, 204, 232, 0.5) 0%,
+    rgba(184, 204, 232, 0.16) 44%,
+    rgba(184, 204, 232, 0) 72%
+  );
+  animation: mb-drift-b 58s ease-in-out infinite;
+}
+
+.mb-aurora--three {
+  left: 18vmax;
+  bottom: -26vmax;
+  width: 66vmax;
+  height: 50vmax;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(246, 214, 210, 0.5) 0%,
+    rgba(246, 214, 210, 0.16) 46%,
+    rgba(246, 214, 210, 0) 74%
+  );
+  animation: mb-drift-c 64s ease-in-out infinite;
+}
+
+html[data-theme='night'] .mb-aurora--one {
+  background: radial-gradient(
+    circle at 45% 45%,
+    rgba(120, 96, 210, 0.5) 0%,
+    rgba(120, 96, 210, 0.16) 44%,
+    rgba(120, 96, 210, 0) 72%
+  );
+}
+
+html[data-theme='night'] .mb-aurora--two {
+  background: radial-gradient(
+    circle at 55% 50%,
+    rgba(70, 110, 180, 0.42) 0%,
+    rgba(70, 110, 180, 0.14) 46%,
+    rgba(70, 110, 180, 0) 74%
+  );
+}
+
+html[data-theme='night'] .mb-aurora--three {
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(140, 70, 150, 0.36) 0%,
+    rgba(140, 70, 150, 0.12) 48%,
+    rgba(140, 70, 150, 0) 76%
+  );
+}
+
+/* 极细的噪点，让大面积渐变不至于像 CSS 练习 */
+.mb-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.28;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.16'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  transition: opacity 1s ease, mix-blend-mode 1s ease;
+}
+
+html[data-theme='night'] .mb-grain {
+  opacity: 0.2;
+  mix-blend-mode: soft-light;
+}
+
+@keyframes mb-drift-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(4vmax, 3vmax, 0) scale(1.06);
+  }
+}
+
+@keyframes mb-drift-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.02);
+  }
+  50% {
+    transform: translate3d(-5vmax, 4vmax, 0) scale(0.97);
+  }
+}
+
+@keyframes mb-drift-c {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(3vmax, -4vmax, 0) scale(1.05);
+  }
+}
+
+/* ---------------- 星野（只在星空主题出现） ---------------- */
+
+.mb-starfield {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+  pointer-events: none;
+}
+
+html[data-theme='night'] .mb-starfield {
+  opacity: 1;
+}
+
+.mb-stardot {
+  position: absolute;
+  border-radius: 999px;
+  background: #ffffff;
+  opacity: 0.6;
+  animation: mb-twinkle var(--star-duration, 5s) ease-in-out infinite;
+  animation-delay: var(--star-delay, 0s);
+}
+
+/* 夜空里那一层极淡的银河：靠一条倾斜的柔光带，而不是画一堆点 */
+.mb-milkyway {
+  position: absolute;
+  inset: -20% -10%;
+  opacity: 0;
+  transition: opacity 1.6s ease;
+  background: radial-gradient(
+    ellipse 46% 22% at 62% 34%,
+    rgba(150, 130, 220, 0.16) 0%,
+    rgba(120, 150, 210, 0.08) 42%,
+    rgba(120, 150, 210, 0) 72%
+  );
+  transform: rotate(-16deg);
+  pointer-events: none;
+}
+
+html[data-theme='night'] .mb-milkyway {
+  opacity: 1;
+}
+
+/* ---------------- 玻璃质感 / 表面 ---------------- */
+
+.mb-glass {
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.74) 0%, rgba(255, 255, 255, 0.44) 100%);
+  backdrop-filter: blur(26px) saturate(1.12);
+  -webkit-backdrop-filter: blur(26px) saturate(1.12);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow:
+    0 20px 52px -34px rgba(70, 55, 92, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+.mb-glass-soft {
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.56) 0%, rgba(255, 255, 255, 0.3) 100%);
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+html[data-theme='night'] .mb-glass {
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.045) 100%);
+  backdrop-filter: blur(26px) saturate(1.05);
+  -webkit-backdrop-filter: blur(26px) saturate(1.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 24px 60px -34px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+html[data-theme='night'] .mb-glass-soft {
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
+  backdrop-filter: blur(18px) saturate(1.04);
+  -webkit-backdrop-filter: blur(18px) saturate(1.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/*
+ * 实心一点的卡片表面。
+ * 新页面统一用它，避免每个组件各写一套白色透明底，
+ * 换主题时也只需要改这里一处。
+ */
+.mb-surface {
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow:
+    0 18px 46px -32px rgba(70, 55, 92, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(18px) saturate(1.06);
+  -webkit-backdrop-filter: blur(18px) saturate(1.06);
+}
+
+.mb-surface-solid {
+  background: rgba(255, 253, 251, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  box-shadow: 0 22px 54px -34px rgba(70, 55, 92, 0.42);
+}
+
+html[data-theme='night'] .mb-surface {
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 22px 56px -34px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme='night'] .mb-surface-solid {
+  background: rgba(21, 19, 38, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 26px 60px -34px rgba(0, 0, 0, 0.85);
+}
+
+/* 分隔线 */
+.mb-divider {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-ink-ghost) 0%, transparent) 0%,
+    color-mix(in srgb, var(--color-ink-ghost) 30%, transparent) 50%,
+    color-mix(in srgb, var(--color-ink-ghost) 0%, transparent) 100%
+  );
+}
+
+/* 表单输入框 */
+.mb-field {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.66);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--color-ink);
+  outline: none;
+  transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.mb-field::placeholder {
+  color: var(--color-ink-ghost);
+}
+
+.mb-field:focus {
+  border-color: color-mix(in srgb, var(--color-lavender-deep) 55%, transparent);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-lavender) 26%, transparent);
+}
+
+html[data-theme='night'] .mb-field {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+html[data-theme='night'] .mb-field:focus {
+  border-color: rgba(201, 180, 239, 0.5);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(140, 116, 200, 0.24);
+}
+
+/* 小标签 */
+.mb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.55);
+  padding: 0.25rem 0.7rem;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-faint);
+}
+
+html[data-theme='night'] .mb-chip {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* 页头滚动后的那层薄幕 */
+.mb-header-veil {
+  background: linear-gradient(
+    180deg,
+    rgba(252, 248, 244, 0.88) 0%,
+    rgba(252, 248, 244, 0.44) 62%,
+    rgba(252, 248, 244, 0) 100%
+  );
+}
+
+html[data-theme='night'] .mb-header-veil {
+  background: linear-gradient(
+    180deg,
+    rgba(8, 7, 18, 0.9) 0%,
+    rgba(8, 7, 18, 0.5) 62%,
+    rgba(8, 7, 18, 0) 100%
+  );
+}
+
+/* 导航里被选中的那一颗 */
+.mb-pill-active {
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--color-ink);
+  box-shadow: 0 4px 14px -10px rgba(70, 55, 92, 0.8);
+}
+
+html[data-theme='night'] .mb-pill-active {
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 4px 14px -10px rgba(0, 0, 0, 0.9);
+}
+
+/* 日历里被选中的那一天：白日是一块淡紫粉的纸，夜里是一格被月光照到的位置 */
+.mb-day-selected {
+  background: linear-gradient(150deg, rgba(232, 222, 247, 0.95), rgba(250, 235, 238, 0.9));
+  box-shadow: 0 10px 24px -18px rgba(120, 95, 150, 0.8);
+}
+
+html[data-theme='night'] .mb-day-selected {
+  background: linear-gradient(150deg, rgba(148, 126, 210, 0.34), rgba(198, 140, 160, 0.22));
+  box-shadow:
+    0 12px 28px -18px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 rgba(198, 188, 240, 0.22);
+}
+
+/* 整块面板（弹层 / 抽屉）：比玻璃更实，承载正文 */
+.mb-panel {
+  background: linear-gradient(168deg, rgba(255, 253, 250, 0.985) 0%, rgba(250, 246, 247, 0.975) 100%);
+  backdrop-filter: blur(22px) saturate(1.08);
+  -webkit-backdrop-filter: blur(22px) saturate(1.08);
+}
+
+html[data-theme='night'] .mb-panel {
+  background: linear-gradient(168deg, rgba(26, 23, 45, 0.99) 0%, rgba(18, 16, 33, 0.985) 100%);
+}
+
+/*
+ * 情绪面板 / 统一浮层用的「深灰紫」卡片。
+ * 它在两种主题下都是深的 —— 所以卡片内部的文字统一用浅色，
+ * 不要再用 text-ink 这类跟随主题的 token。
+ */
+.mb-deep-card {
+  background: linear-gradient(
+    168deg,
+    rgba(63, 56, 92, 0.985) 0%,
+    rgba(45, 40, 68, 0.995) 56%,
+    rgba(34, 30, 52, 1) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  color: #f5f2fc;
+  box-shadow:
+    0 34px 90px -56px rgba(0, 0, 0, 0.92),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* 深色卡片里的次要文字 */
+.mb-deep-muted {
+  color: #bdb4d4;
+}
+
+.mb-deep-faint {
+  color: #948bab;
+}
+
+/* 深色卡片里的次级按钮：一层薄薄的白玻璃，不用主题的按钮皮肤 */
+.mb-deep-btn {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #e9e3f7;
+}
+
+.mb-deep-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.mb-deep-btn-primary {
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: linear-gradient(160deg, rgba(190, 172, 234, 0.96), rgba(210, 186, 228, 0.94));
+  color: #2c2542;
+  box-shadow: 0 12px 26px -18px rgba(0, 0, 0, 0.9);
+}
+
+.mb-deep-btn-primary:hover {
+  filter: brightness(1.05);
+}
+
+/* 痛苦类情绪的支持提示：低饱和暖调，夜间调暗 */
+.mb-support-note {
+  border: 1px solid rgba(158, 95, 92, 0.16);
+  background: rgba(247, 231, 228, 0.55);
+}
+
+html[data-theme='night'] .mb-support-note {
+  border-color: rgba(220, 150, 140, 0.2);
+  background: rgba(120, 62, 62, 0.22);
+}
+
+/* 纸片质感：快乐记忆卡片、便签。白日是暖白，夜里是深一点的纸 */
+.mb-paper {
+  background: linear-gradient(162deg, rgba(255, 253, 249, 0.97) 0%, rgba(251, 244, 236, 0.92) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 16px 36px -30px rgba(90, 68, 60, 0.6);
+}
+
+html[data-theme='night'] .mb-paper {
+  background: linear-gradient(162deg, rgba(32, 28, 52, 0.96) 0%, rgba(24, 21, 40, 0.94) 100%);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 18px 40px -30px rgba(0, 0, 0, 0.85);
+}
+
+/* 「我不开心了」的整屏底色：白日是暖奶油，夜里是一层更暗的暖褐 */
+.mb-comfort-stage {
+  background: linear-gradient(155deg, #fdf4ea 0%, #fbe9e6 38%, #f4e8f4 72%, #eef0f8 100%);
+}
+
+html[data-theme='night'] .mb-comfort-stage {
+  background: linear-gradient(155deg, #171225 0%, #20162a 38%, #241a30 68%, #14101f 100%);
+}
+
+/*
+ * 开心罐的玻璃。
+ *
+ * 这层玻璃没法交给 `--color-white` 那个 token 处理：它需要的是
+ * 「一块真实的白玻璃」，白天要够透、够亮；夜里如果还保持这个亮度，
+ * 就会在深色天空里变成一坨发光的白块 —— 罐子里的字也跟着糊掉。
+ * 所以单独给三个部件写一对渐变，夜里换成"深紫玻璃 + 冷调高光"，
+ * 结构不变，只降低明度。
+ */
+.mb-jar-lid {
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(226, 214, 244, 0.85));
+  box-shadow: 0 4px 10px -6px rgba(70, 55, 92, 0.5);
+}
+
+.mb-jar-neck {
+  border-left: 1px solid rgba(255, 255, 255, 0.6);
+  border-right: 1px solid rgba(255, 255, 255, 0.6);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.2));
+}
+
+.mb-jar-body {
+  border: 1px solid rgba(158, 143, 190, 0.46);
+  background: linear-gradient(
+    168deg,
+    rgba(255, 255, 255, 0.52) 0%,
+    rgba(238, 232, 250, 0.42) 38%,
+    rgba(205, 214, 242, 0.36) 74%,
+    rgba(184, 164, 222, 0.34) 100%
+  );
+  box-shadow:
+    0 36px 74px -40px rgba(70, 55, 92, 0.62),
+    inset 0 3px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -30px 56px -40px rgba(142, 118, 184, 0.7);
+}
+
+/* 玻璃高光：白天是白，夜里换成弱一点的冷光，避免整块发亮 */
+.mb-jar-gloss {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0));
+}
+
+.mb-jar-gloss-soft {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0));
+}
+
+html[data-theme='night'] .mb-jar-lid {
+  border-color: rgba(198, 188, 232, 0.32);
+  background: linear-gradient(180deg, rgba(120, 106, 168, 0.55), rgba(78, 68, 118, 0.5));
+  box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.9);
+}
+
+html[data-theme='night'] .mb-jar-neck {
+  border-color: rgba(198, 188, 232, 0.2);
+  background: linear-gradient(180deg, rgba(120, 106, 168, 0.26), rgba(60, 52, 96, 0.2));
+}
+
+html[data-theme='night'] .mb-jar-body {
+  border-color: rgba(198, 188, 232, 0.2);
+  background: linear-gradient(
+    168deg,
+    rgba(150, 140, 200, 0.16) 0%,
+    rgba(112, 100, 168, 0.14) 38%,
+    rgba(72, 62, 116, 0.2) 74%,
+    rgba(56, 46, 96, 0.26) 100%
+  );
+  box-shadow:
+    0 40px 80px -42px rgba(0, 0, 0, 0.9),
+    inset 0 2px 0 rgba(198, 188, 232, 0.18),
+    inset 0 -32px 60px -42px rgba(120, 100, 180, 0.5);
+}
+
+html[data-theme='night'] .mb-jar-gloss {
+  background: linear-gradient(180deg, rgba(206, 196, 238, 0.34), rgba(206, 196, 238, 0));
+}
+
+html[data-theme='night'] .mb-jar-gloss-soft {
+  background: linear-gradient(180deg, rgba(206, 196, 238, 0.2), rgba(206, 196, 238, 0));
+}
+
+/*
+ * 呼吸练习的圆。
+ *
+ * 白日是一颗接近白色的柔光球，坐在上面的是深色文字 —— 对比度刚好。
+ * 夜里如果沿用它，球本身就变成整屏最亮的东西，球心的倒计时反而看不清，
+ * 所以夜间换成深紫柔光：仍然"在发亮"，但亮不过文字。
+ */
+.mb-breath-orb {
+  background: radial-gradient(
+    circle at 38% 30%,
+    rgba(255, 255, 255, 0.85),
+    rgba(201, 182, 232, 0.5) 46%,
+    rgba(159, 179, 206, 0.35) 100%
+  );
+  box-shadow: 0 28px 60px -34px rgba(130, 105, 170, 0.7);
+}
+
+html[data-theme='night'] .mb-breath-orb {
+  background: radial-gradient(
+    circle at 38% 30%,
+    rgba(186, 172, 232, 0.34),
+    rgba(118, 98, 176, 0.28) 46%,
+    rgba(70, 58, 116, 0.26) 100%
+  );
+  box-shadow:
+    0 30px 70px -36px rgba(0, 0, 0, 0.9),
+    inset 0 2px 0 rgba(198, 188, 232, 0.16);
+}
+
+/* 球心那两行小字：夜里提高一档亮度，否则贴在深紫玻璃上看不清 */
+html[data-theme='night'] .mb-breath-label,
+html[data-theme='night'] .mb-breath-hint {
+  color: var(--color-ink-soft);
+}
+
+/* 那张被抽出来的回忆纸条 */
+.mb-comfort-note {
+  background: linear-gradient(165deg, #fffdf8 0%, #fdf7ef 58%, #fbf2e8 100%);
+  box-shadow:
+    0 34px 70px -40px rgba(120, 85, 60, 0.55),
+    0 2px 6px -2px rgba(120, 85, 60, 0.12);
+}
+
+html[data-theme='night'] .mb-comfort-note {
+  background: linear-gradient(165deg, #2a2238 0%, #251f34 58%, #211b2f 100%);
+  box-shadow:
+    0 34px 70px -40px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* 纸条上方那条胶带 */
+.mb-comfort-tape {
+  background: linear-gradient(180deg, rgba(246, 231, 208, 0.85), rgba(244, 226, 201, 0.6));
+  box-shadow: 0 2px 6px -4px rgba(120, 85, 60, 0.5);
+}
+
+html[data-theme='night'] .mb-comfort-tape {
+  background: linear-gradient(180deg, rgba(150, 124, 100, 0.5), rgba(120, 98, 84, 0.35));
+}
+
+/*
+ * 暖色提示框（错误提示 / 关怀提醒 / 危险动作）。
+ *
+ * 这几处用的是浅暖底 + 深棕字，在夜空里会变成刺眼的浅色块。
+ * 它们语义一致、写法也一致（都以 158,95,92 这个暖褐描边为特征），
+ * 所以在这里按这个特征统一压暗，不必逐个组件改。
+ */
+html[data-theme='night'] [class*='border-[rgba(158,95,92'] {
+  background-color: rgba(126, 66, 66, 0.22);
+  border-color: rgba(220, 150, 140, 0.26);
+  color: #f0c8c0;
+}
+
+html[data-theme='night'] [class*='border-[rgba(158,95,92'] :is(p, span, a, svg) {
+  color: #f0c8c0;
+}
+
+/* ---------------- 按钮 ---------------- */
+
+/*
+ * 按钮底色用 CSS 变量而不是 Tailwind 任意值，
+ * 这样夜间主题只需要覆写变量，不必改组件。
+ */
+.mb-btn-primary {
+  background: linear-gradient(135deg, #efe6fa 0%, #f8e9ee 52%, #fdf1e4 100%);
+  color: #3b3345;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 14px 34px -20px rgba(130, 105, 170, 0.75);
+}
+
+.mb-btn-primary:hover {
+  box-shadow: 0 18px 40px -20px rgba(130, 105, 170, 0.6);
+}
+
+.mb-btn-warm {
+  background: linear-gradient(135deg, #fbe7d6 0%, #f9e4e4 55%, #f3e6f6 100%);
+  color: #6d4c45;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 16px 38px -22px rgba(190, 140, 120, 0.75);
+}
+
+.mb-btn-danger {
+  background: linear-gradient(135deg, #f7ded9 0%, #f3d2d2 100%);
+  color: #8a4a45;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.mb-btn-danger:hover {
+  filter: brightness(1.02);
+}
+
+html[data-theme='night'] .mb-btn-primary {
+  background: linear-gradient(135deg, #64519a 0%, #6d4f76 54%, #7a5a56 100%);
+  color: #fdfaff;
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 16px 38px -20px rgba(0, 0, 0, 0.8);
+}
+
+html[data-theme='night'] .mb-btn-warm {
+  /* 夜空里不用实心暖色块，改用一层带暖光的半透明玻璃 */
+  background: linear-gradient(
+    135deg,
+    rgba(238, 178, 148, 0.26) 0%,
+    rgba(226, 156, 168, 0.22) 55%,
+    rgba(196, 166, 226, 0.22) 100%
+  );
+  color: #ffe4d4;
+  border-color: rgba(255, 206, 182, 0.32);
+  box-shadow:
+    0 14px 34px -20px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 224, 205, 0.28);
+}
+
+html[data-theme='night'] .mb-btn-warm:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(238, 178, 148, 0.34) 0%,
+    rgba(226, 156, 168, 0.3) 55%,
+    rgba(196, 166, 226, 0.3) 100%
+  );
+}
+
+html[data-theme='night'] .mb-btn-danger {
+  background: linear-gradient(135deg, #6d3634 0%, #5a2a2c 100%);
+  color: #ffdcd6;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* ---------------- 情绪球 ---------------- */
+
+/*
+ * 尺寸与位置全部由 CSS 变量驱动：
+ * 桌面端 / 移动端两套坐标写在同一个元素上，靠媒体查询切换，
+ * 这样就不需要用 JS 监听窗口宽度，也不会出现 hydration 不一致。
+ */
+.emotion-sky {
+  --orb-base: clamp(96px, 9.4vw, 146px);
+  --orb-base-m: clamp(72px, 21vw, 92px);
+}
+
+.orb-anchor {
+  position: absolute;
+  left: var(--orb-x);
+  top: var(--orb-y);
+  width: calc(var(--orb-base) * var(--orb-scale));
+  height: calc(var(--orb-base) * var(--orb-scale));
+  /*
+   * 居中基准。keyframes 的每一帧都自带 -50% 位移，
+   * 但“减少动效”下 animation 会被置为 none，若这里不写死，
+   * 球就会以左上角对齐坐标点，整体偏移半个球。
+   */
+  transform: translate3d(-50%, -50%, 0);
+  animation: mb-orb-drift var(--orb-duration) ease-in-out infinite;
+  animation-delay: var(--orb-delay);
+  will-change: transform;
+}
+
+/*
+ * 宽度不足 1024px 时使用紧凑坐标：球更小、数量更少、围绕文字一圈。
+ * 断点之所以不取 767px，是因为 768–1023（平板竖屏）用桌面坐标时，
+ * 中央文字栏会占到约七成宽，两侧的球会压到标题上。
+ */
+@media (max-width: 1023px) {
+  .orb-anchor {
+    left: var(--orb-x-m);
+    top: var(--orb-y-m);
+    width: calc(var(--orb-base-m) * var(--orb-scale-m));
+    height: calc(var(--orb-base-m) * var(--orb-scale-m));
+    animation-duration: calc(var(--orb-duration) * 1.2);
+  }
+
+  .orb-desktop-only {
+    display: none;
+  }
+}
+
+@keyframes mb-orb-drift {
+  0% {
+    transform: translate3d(-50%, -50%, 0);
+  }
+  25% {
+    transform: translate3d(calc(-50% + var(--orb-drift-x)), calc(-50% - var(--orb-drift-y)), 0);
+  }
+  50% {
+    transform: translate3d(calc(-50% - var(--orb-drift-x) * 0.7), calc(-50% + var(--orb-drift-y)), 0);
+  }
+  75% {
+    transform: translate3d(calc(-50% + var(--orb-drift-x) * 0.45), calc(-50% + var(--orb-drift-y) * 0.55), 0);
+  }
+  100% {
+    transform: translate3d(-50%, -50%, 0);
+  }
+}
+
+.orb-breath {
+  animation: mb-orb-breathe calc(var(--orb-duration) * 0.55) ease-in-out infinite;
+  animation-delay: var(--orb-delay);
+  will-change: transform;
+}
+
+@keyframes mb-orb-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.028);
+  }
+}
+
+.orb-surface {
+  position: relative;
+  border-radius: 999px;
+  isolation: isolate;
+  background:
+    radial-gradient(
+      120% 120% at 30% 18%,
+      rgba(255, 255, 255, 0.94) 0%,
+      rgba(255, 255, 255, 0.32) 32%,
+      rgba(255, 255, 255, 0) 56%
+    ),
+    radial-gradient(
+      105% 105% at 72% 82%,
+      var(--orb-deep) 0%,
+      var(--orb-mid) 52%,
+      var(--orb-light) 100%
+    );
+  box-shadow:
+    inset 0 -14px 26px -14px rgba(255, 255, 255, 0.55),
+    inset 0 12px 22px -14px rgba(255, 255, 255, 0.85),
+    inset 0 -22px 40px -26px var(--orb-deep),
+    0 26px 52px -24px var(--orb-glow),
+    0 8px 20px -12px var(--orb-glow);
+  transition: box-shadow 0.9s ease;
+}
+
+/* 夜空里球是自己在发光，所以外扩的辉光更明显 */
+html[data-theme='night'] .orb-surface {
+  box-shadow:
+    inset 0 -14px 26px -14px rgba(255, 255, 255, 0.35),
+    inset 0 12px 22px -14px rgba(255, 255, 255, 0.55),
+    inset 0 -22px 40px -26px var(--orb-deep),
+    0 30px 68px -22px var(--orb-glow),
+    0 10px 28px -8px var(--orb-glow);
+}
+
+/* 球体上的一层柔光，制造"内部有光"的感觉 */
+.orb-surface::before {
+  content: '';
+  position: absolute;
+  inset: 8%;
+  border-radius: 999px;
+  background: radial-gradient(
+    60% 60% at 38% 30%,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0) 70%
+  );
+  pointer-events: none;
+}
+
+/* 高光点 */
+.orb-surface::after {
+  content: '';
+  position: absolute;
+  left: 22%;
+  top: 14%;
+  width: 26%;
+  height: 18%;
+  border-radius: 999px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(255, 255, 255, 0) 72%
+  );
+  transform: rotate(-24deg);
+  filter: blur(1px);
+  pointer-events: none;
+}
+
+/*
+ * 关键：两个伪元素都是绝对定位，会盖在普通流内容之上。
+ * 给文字加上定位与层级，球名才不会被柔光糊掉。
+ */
+.orb-surface > * {
+  position: relative;
+  z-index: 2;
+}
+
+/*
+ * 球面文字始终保持深色。
+ *
+ * 一开始夜间主题把球名改成了浅色，但球本身仍是高明度的柔和色块，
+ * 浅字上去就糊成一片。球是"发光的"，不是"变暗的"，
+ * 所以这里的配色不跟着主题变。
+ */
+.orb-label {
+  color: color-mix(in srgb, var(--orb-ink) 68%, #241d2c);
+  text-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.6),
+    0 0 14px rgba(255, 255, 255, 0.35);
+  letter-spacing: 0.12em;
+}
+
+/* 捏爆时飞散的碎片 */
+.orb-shard {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 999px;
+  pointer-events: none;
+  background: radial-gradient(circle, #ffffff 0%, var(--orb-mid) 60%, var(--orb-deep) 100%);
+}
+
+/* ---------------- 底部导航（主页，桌面端） ---------------- */
+
+.mb-dock {
+  border-radius: 26px;
+  padding: 10px 12px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.52) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  box-shadow:
+    0 26px 66px -40px rgba(70, 55, 92, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(28px) saturate(1.14);
+  -webkit-backdrop-filter: blur(28px) saturate(1.14);
+}
+
+html[data-theme='night'] .mb-dock {
+  background: linear-gradient(160deg, rgba(26, 24, 46, 0.82) 0%, rgba(18, 16, 34, 0.68) 100%);
+  border-color: rgba(255, 255, 255, 0.11);
+  box-shadow:
+    0 30px 74px -40px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+.mb-dock-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 34px;
+  padding: 0 0.7rem;
+  border-radius: 12px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-soft);
+  transition: background 0.4s ease, color 0.4s ease, transform 0.4s ease;
+  white-space: nowrap;
+}
+
+.mb-dock-item:hover {
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--color-ink);
+  transform: translateY(-1px);
+}
+
+.mb-dock-item[data-active='true'] {
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--color-ink);
+  box-shadow: 0 6px 18px -12px rgba(70, 55, 92, 0.8);
+}
+
+html[data-theme='night'] .mb-dock-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme='night'] .mb-dock-item[data-active='true'] {
+  background: rgba(255, 255, 255, 0.13);
+  box-shadow: 0 6px 18px -12px rgba(0, 0, 0, 0.9);
+}
+
+.mb-dock-group-label {
+  font-size: 9.5px;
+  letter-spacing: 0.36em;
+  color: var(--color-ink-ghost);
+  text-transform: uppercase;
+  padding-left: 0.35rem;
+}
+
+/* ---------------- 通用细节 ---------------- */
+
+.mb-hairline {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-ink-ghost) 0%, transparent) 0%,
+    color-mix(in srgb, var(--color-ink-ghost) 30%, transparent) 50%,
+    color-mix(in srgb, var(--color-ink-ghost) 0%, transparent) 100%
+  );
+}
+
+.mb-underline {
+  position: relative;
+}
+
+.mb-underline::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.35;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mb-underline:hover::after,
+.mb-underline:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.mb-fade-in {
+  animation: mb-fade-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes mb-fade-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.mb-star {
+  position: absolute;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 253, 244, 1) 0%, rgba(255, 236, 190, 0.55) 42%, rgba(255, 236, 190, 0) 72%);
+  box-shadow: 0 0 12px 2px rgba(255, 238, 205, 0.55);
+  animation: mb-twinkle var(--star-duration, 4s) ease-in-out infinite;
+  animation-delay: var(--star-delay, 0s);
+  pointer-events: none;
+}
+
+@keyframes mb-twinkle {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.08);
+  }
+}
+
+.mb-noise-line {
+  background-image: repeating-linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-ink-ghost) 16%, transparent) 0px,
+    color-mix(in srgb, var(--color-ink-ghost) 16%, transparent) 1px,
+    transparent 1px,
+    transparent 30px
+  );
+}
+
+/* 音量滑杆：细、安静、没有系统默认的蓝 */
+.mb-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-lavender-deep) 55%, transparent),
+    color-mix(in srgb, var(--color-lavender) 30%, transparent)
+  );
+  outline: none;
+  cursor: pointer;
+}
+
+.mb-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fffdfb;
+  border: 1px solid color-mix(in srgb, var(--color-lavender-deep) 45%, transparent);
+  box-shadow: 0 2px 6px rgba(70, 55, 92, 0.22);
+  transition: transform 0.2s ease;
+}
+
+.mb-range::-webkit-slider-thumb:hover {
+  transform: scale(1.12);
+}
+
+.mb-range::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fffdfb;
+  border: 1px solid color-mix(in srgb, var(--color-lavender-deep) 45%, transparent);
+  box-shadow: 0 2px 6px rgba(70, 55, 92, 0.22);
+}
+
+/* 横向滚动的导航轨道：隐藏滚动条但保留滚动能力 */
+.mb-scroll-x {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overscroll-behavior-x: contain;
+}
+
+.mb-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * 只在某个主题下出现的元素。
+ * 用 CSS 而不是 React 条件渲染，是为了让首帧（内联脚本已写好 data-theme）
+ * 立刻显示正确的图标，同时避免水合前后内容不一致。
+ */
+.mb-only-day {
+  display: revert;
+}
+
+.mb-only-night {
+  display: none;
+}
+
+html[data-theme='night'] .mb-only-day {
+  display: none;
+}
+
+html[data-theme='night'] .mb-only-night {
+  display: revert;
+}
+
+/* ---------------- 无障碍 / 降低动效 ---------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .mb-aurora,
+  .orb-anchor,
+  .orb-breath,
+  .mb-star,
+  .mb-stardot,
+  .mb-fade-in {
+    animation: none !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* 触屏设备减少模糊图层开销 */
+@media (max-width: 640px) {
+  .mb-glass,
+  .mb-glass-soft,
+  .mb-surface,
+  .mb-dock {
+    backdrop-filter: blur(16px) saturate(1.06);
+    -webkit-backdrop-filter: blur(16px) saturate(1.06);
+  }
+
+  .mb-grain {
+    opacity: 0.22;
+  }
+}
+
+@media print {
+  .mb-stage,
+  .mb-grain,
+  .mb-aurora,
+  .mb-starfield {
+    display: none;
+  }
+}
+
+/* 移动端「更多」：页头里唯一被填色的按钮，避免和「主页」同权重 */
+.mb-more-btn {
+  background: linear-gradient(160deg, rgba(203, 184, 234, 0.96), rgba(232, 213, 237, 0.94));
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  color: #3a3152;
+  box-shadow:
+    0 10px 22px -14px rgba(120, 95, 150, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.mb-more-btn:hover {
+  filter: brightness(1.03);
+}
+
+html[data-theme='night'] .mb-more-btn {
+  background: linear-gradient(160deg, rgba(150, 128, 205, 0.9), rgba(188, 152, 184, 0.78));
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #f7f3ff;
+  box-shadow:
+    0 10px 26px -16px rgba(0, 0, 0, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+html[data-theme='night'] .mb-more-btn:hover {
+  background: linear-gradient(160deg, rgba(162, 140, 216, 0.94), rgba(198, 162, 192, 0.82));
+}

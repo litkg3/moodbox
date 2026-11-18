@@ -1,0 +1,11 @@
+# 统一用 LF 存进仓库：Windows 上也不会因为 CRLF 让整个 diff 变红
+* text=auto eol=lf
+
+# 二进制文件不要做换行转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.woff2 binary
+*.mp3 binary

@@ -1,0 +1,222 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { BookOpen, BookmarkPlus, Check, HeartHandshake, Sparkles, Sun, Wind } from 'lucide-react';
+import { StoryPanel } from '@/components/stories/story-panel';
+import { GlassSheet } from '@/components/ui/glass-sheet';
+import { useToast } from '@/components/ui/toast';
+import { pickMessage } from '@/lib/emotions';
+import { moodBoxStore } from '@/lib/moodbox-store';
+import type { Emotion } from '@/types';
+
+interface EmotionPanelProps {
+  emotion: Emotion | null;
+  onClose: () => void;
+  /** 选择「捏爆它」：卡片退场，球在主页碎裂消失 */
+  onBurst: (emotion: Emotion) => void;
+}
+
+/** 情绪陪伴面板：点击球体后出现，内容逐条切换，绝不生硬跳页。 */
+export function EmotionPanel({ emotion, onClose, onBurst }: EmotionPanelProps) {
+  // 退场动画期间还需要内容，所以「关闭后」多留一小会儿
+  const [held, setHeld] = useState<Emotion | null>(emotion);
+
+  useEffect(() => {
+    if (emotion) {
+      setHeld(emotion);
+      return;
+    }
+    const timer = window.setTimeout(() => setHeld(null), 360);
+    return () => window.clearTimeout(timer);
+  }, [emotion]);
+
+  return (
+    <GlassSheet
+      open={emotion !== null}
+      onClose={onClose}
+      tone="deep"
+      width="md"
+      labelledBy="emotion-panel-title"
+      glowColor={held ? held.palette.mid : undefined}
+    >
+      {held ? (
+        <EmotionPanelContent
+          key={held.id}
+          emotion={held}
+          onClose={onClose}
+          onBurst={onBurst}
+        />
+      ) : null}
+    </GlassSheet>
+  );
+}
+
+function EmotionPanelContent({
+  emotion,
+  onClose,
+  onBurst,
+}: {
+  emotion: Emotion;
+  onClose: () => void;
+  onBurst: (emotion: Emotion) => void;
+}) {
+  const [entry, setEntry] = useState(() => pickMessage(emotion.messages));
+  const [recorded, setRecorded] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [reading, setReading] = useState(false);
+  const reduce = useReducedMotion();
+  const { showToast } = useToast();
+
+  function warmUp() {
+    setEntry((prev) => pickMessage(emotion.messages, prev.recent));
+  }
+
+  async function recordMoment() {
+    if (recorded || recording) return;
+    setRecording(true);
+    try {
+      await moodBoxStore.checkInEmotion(emotion.id);
+      setRecorded(true);
+      showToast('这份心情，已经被今天的你记住了。');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '暂时没能记录，请稍后再试。', 'caution');
+    } finally {
+      setRecording(false);
+    }
+  }
+
+  if (reading) {
+    return (
+      <>
+        {/* 读故事时卡片标题换成故事，但 aria-labelledby 仍然要有落点 */}
+        <h2 id="emotion-panel-title" className="sr-only">
+          {emotion.label}
+        </h2>
+        <StoryPanel onBack={() => setReading(false)} />
+      </>
+    );
+  }
+
+  return (
+    <div className="pt-2">
+      {/* 球本身 + 名字 */}
+      <div className="flex flex-col items-center text-center">
+        <span
+          aria-hidden="true"
+          className="h-12 w-12 rounded-full shadow-[0_14px_30px_-16px_rgba(0,0,0,0.9)]"
+          style={{
+            background: `radial-gradient(120% 120% at 30% 22%, #ffffff 0%, ${emotion.palette.mid} 55%, ${emotion.palette.deep} 100%)`,
+          }}
+        />
+        <h2
+          id="emotion-panel-title"
+          className="mt-4 font-display text-[20px] font-normal tracking-[0.16em] text-[#fff] sm:text-[22px]"
+        >
+          {emotion.label}
+        </h2>
+        <p className="mt-1 text-[9.5px] uppercase tracking-[0.34em] text-[#948bab]">
+          {emotion.latin}
+        </p>
+        <p className="mt-2 text-[11.5px] leading-relaxed tracking-[0.04em] text-[#bdb4d4]">
+          {emotion.whisper}
+        </p>
+      </div>
+
+      {/* 主体那句话：白色、居中、慢慢换 */}
+      <div className="mt-7 flex min-h-[132px] items-center justify-center">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.p
+            key={entry.message}
+            initial={reduce ? { opacity: 0 } : { opacity: 0, y: 10, filter: 'blur(3px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, y: -8, filter: 'blur(3px)' }}
+            transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+            className="text-balance text-center font-display text-[16.5px] font-light leading-[2.05] tracking-[0.03em] text-[#fff] sm:text-[17.5px]"
+            aria-live="polite"
+          >
+            {entry.message}
+          </motion.p>
+        </AnimatePresence>
+      </div>
+
+      {/* 三个按钮，居中排一排（窄屏换行也保持居中） */}
+      <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">
+        <button
+          type="button"
+          onClick={warmUp}
+          className="mb-deep-btn-primary inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-[12.5px] tracking-[0.04em] transition-all duration-300 active:scale-[0.98]"
+        >
+          <Sparkles size={14} strokeWidth={1.7} aria-hidden="true" />
+          再给我一点温暖
+        </button>
+        <button
+          type="button"
+          onClick={() => setReading(true)}
+          className="mb-deep-btn inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-[12.5px] tracking-[0.04em] transition-colors"
+        >
+          <BookOpen size={14} strokeWidth={1.7} aria-hidden="true" />
+          看个小故事
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mb-deep-btn inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-[12.5px] tracking-[0.04em] transition-colors"
+        >
+          <Sun size={14} strokeWidth={1.7} aria-hidden="true" />
+          我感觉好一点了
+        </button>
+      </div>
+
+      {/* 次要动作：记录 / 捏爆 */}
+      <div className="mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 border-t border-white/10 pt-5">
+        <button
+          type="button"
+          onClick={recordMoment}
+          disabled={recorded || recording}
+          aria-live="polite"
+          className="inline-flex items-center gap-1.5 rounded-full text-[11.5px] tracking-[0.05em] text-[#bdb4d4] transition-colors hover:text-[#fff] disabled:cursor-default disabled:text-[#a99cc8]"
+        >
+          {recorded ? (
+            <Check size={13} strokeWidth={1.8} />
+          ) : (
+            <BookmarkPlus size={13} strokeWidth={1.6} />
+          )}
+          {recorded ? '已收进今天的情绪里' : recording ? '正在记录…' : '记录此刻的情绪'}
+        </button>
+
+        {/*
+          「捏爆它」不是删除：球碎掉之后过几秒会自己飘回来。
+          所以它只是当下的一次释放，不需要「恢复」按钮。
+        */}
+        <button
+          type="button"
+          onClick={() => onBurst(emotion)}
+          className="group inline-flex items-center gap-1.5 rounded-full border border-[rgba(226,168,150,0.28)] bg-[rgba(226,168,150,0.12)] px-3 py-1.5 text-[11.5px] tracking-[0.04em] text-[#f0c8bc] transition-colors hover:bg-[rgba(226,168,150,0.2)]"
+          title="把这颗球捏碎，让这股劲儿散掉"
+        >
+          <Wind
+            size={12}
+            strokeWidth={1.7}
+            aria-hidden="true"
+            className="transition-transform duration-500 group-hover:-rotate-12"
+          />
+          捏爆它
+        </button>
+      </div>
+
+      {/* 允许情绪存在，也承认有些情绪需要人帮忙 */}
+      {emotion.supportNote ? (
+        <div className="mt-5 flex gap-3 rounded-2xl border border-[rgba(226,168,150,0.2)] bg-[rgba(226,168,150,0.1)] px-4 py-3.5">
+          <HeartHandshake
+            size={15}
+            strokeWidth={1.5}
+            className="mt-[3px] shrink-0 text-[#e0b4a6]"
+            aria-hidden="true"
+          />
+          <p className="text-[11.5px] leading-[1.85] text-[#e2c4bb]">{emotion.supportNote}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}

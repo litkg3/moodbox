@@ -1,0 +1,632 @@
+'use client';
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import {
+  Check,
+  Database,
+  HeartHandshake,
+  MessageCircle,
+  MessagesSquare,
+  PenLine,
+  Send,
+  ShieldAlert,
+  Trash2,
+  X,
+} from 'lucide-react';
+import { AdminBar } from '@/components/admin/admin-bar';
+import { CrisisNoticeDialog } from '@/components/square/crisis-notice-dialog';
+import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Dialog } from '@/components/ui/dialog';
+import { useToast } from '@/components/ui/toast';
+import { useAdmin } from '@/lib/admin';
+import { describeBackend } from '@/lib/backend';
+import { useSquare, squareStore } from '@/lib/content-stores';
+import { scanForCrisis } from '@/lib/crisis';
+import { formatClock, formatRelativeDay } from '@/lib/date';
+import type { SquarePost, SquareReply } from '@/types';
+import { cn } from '@/lib/utils';
+
+type PendingAction =
+  | { kind: 'post'; content: string; nickname: string }
+  | { kind: 'reply'; postId: string; content: string; nickname: string };
+
+export function SquareView() {
+  const { items: posts, status, error } = useSquare();
+  const { isAdmin } = useAdmin();
+  const { showToast } = useToast();
+
+  /**
+   * 数据来源要挂载后再算。
+   *
+   * 它取决于"这个浏览器有没有被强制走本机"（localStorage），服务端渲染时读不到；
+   * 在渲染里直接算会让首帧文案对不上、控制台报水合不一致。
+   */
+  const [source, setSource] = useState<{ label: string; detail: string } | null>(null);
+  useEffect(() => {
+    const info = describeBackend();
+    setSource({ label: info.label, detail: info.detail });
+  }, []);
+
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [draft, setDraft] = useState({ content: '', nickname: '' });
+  const [crisisOpen, setCrisisOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [working, setWorking] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<SquarePost | null>(null);
+
+  /**
+   * 管理员解锁 / 退出时重新拉一次列表。
+   *
+   * 云端模式下「待审核」只有带着正确口令才返回给前端，
+   * 所以解锁之后必须刷新，否则管理员会看到一个空空的待审核区。
+   */
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    void squareStore.reload();
+  }, [isAdmin]);
+
+  const approved = useMemo(() => posts.filter((post) => post.status === 'approved'), [posts]);
+  const pending = useMemo(() => posts.filter((post) => post.status === 'pending'), [posts]);
+
+  /* ---------------- 发布 ---------------- */
+
+  async function publishPost(content: string, nickname: string) {
+    setWorking(true);
+    try {
+      await squareStore.publish({
+        content,
+        nickname,
+        needsSupport: scanForCrisis(content).flagged,
+      });
+      setComposeOpen(false);
+      setDraft({ content: '', nickname: '' });
+      showToast('发出去了。它会先经过一次审核，然后出现在广场上。');
+    } catch (publishError) {
+      showToast(
+        publishError instanceof Error ? publishError.message : '没能发出去，请稍后再试。',
+        'caution',
+      );
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function requestPublish() {
+    const content = draft.content.trim();
+    if (!content) return;
+    if (scanForCrisis(content).flagged) {
+      setPendingAction({ kind: 'post', content, nickname: draft.nickname.trim() });
+      setCrisisOpen(true);
+      return;
+    }
+    void publishPost(content, draft.nickname.trim());
+  }
+
+  async function publishReply(postId: string, content: string) {
+    setWorking(true);
+    try {
+      await squareStore.reply(postId, {
+        content,
+        needsSupport: scanForCrisis(content).flagged,
+      });
+      showToast('回复已经送达。');
+    } catch (replyError) {
+      showToast(
+        replyError instanceof Error ? replyError.message : '回复失败，请稍后再试。',
+        'caution',
+      );
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function requestReply(postId: string, content: string) {
+    if (scanForCrisis(content).flagged) {
+      setPendingAction({ kind: 'reply', postId, content, nickname: '' });
+      setCrisisOpen(true);
+      return;
+    }
+    void publishReply(postId, content);
+  }
+
+  async function handleCrisisPublish() {
+    const action = pendingAction;
+    setCrisisOpen(false);
+    setPendingAction(null);
+    if (!action) return;
+    if (action.kind === 'post') await publishPost(action.content, action.nickname);
+    else await publishReply(action.postId, action.content);
+  }
+
+  /* ---------------- 管理 ---------------- */
+
+  async function review(postId: string, next: 'approved' | 'rejected') {
+    try {
+      await squareStore.review(postId, next);
+      showToast(next === 'approved' ? '已经放到广场上了。' : '这条先不放出去了。');
+    } catch (reviewError) {
+      showToast(
+        reviewError instanceof Error ? reviewError.message : '操作失败，请稍后再试。',
+        'caution',
+      );
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    try {
+      await squareStore.remove(deleteTarget.id);
+      showToast('这条帖子已经删掉了。');
+      setDeleteTarget(null);
+    } catch (deleteError) {
+      showToast(
+        deleteError instanceof Error ? deleteError.message : '删除失败，请稍后再试。',
+        'caution',
+      );
+    }
+  }
+
+  /** 云端模式下拥抱要发请求，失败必须说出来，不能静默吞掉。 */
+  async function handleHug(postId: string) {
+    try {
+      await squareStore.hug(postId);
+    } catch (hugError) {
+      showToast(
+        hugError instanceof Error ? hugError.message : '没能抱住，请稍后再试。',
+        'caution',
+      );
+    }
+  }
+
+  const loading = status === 'idle' || status === 'loading';
+
+  return (
+    <div>
+      <header className="mb-8 flex flex-col gap-5 sm:mb-10 sm:flex-row sm:items-end sm:justify-between">
+        <div className="max-w-[560px]">
+          <p className="text-[11px] uppercase tracking-[0.42em] text-ink-ghost">Hollow Square</p>
+          <h1 className="mt-3 font-display text-[26px] font-light leading-tight tracking-[0.06em] text-ink sm:text-[34px]">
+            树洞广场
+          </h1>
+          <p className="mt-3 max-w-[48ch] text-pretty text-[13.5px] leading-[1.9] text-ink-faint sm:text-sm">
+            匿名说一句，会有人抱抱你。发出去之前会经过一次审核 ——
+            不是要评判你写得好不好，只是不想让这里变成一个没人看着的地方。
+          </p>
+          {/* 数据存在哪必须写在页面上，不能让人以为换台设备还能看到 */}
+          {source ? (
+            <p className="mt-4 inline-flex items-start gap-1.5 text-[11.5px] leading-relaxed text-ink-ghost">
+              <Database
+                size={12}
+                strokeWidth={1.6}
+                className="mt-[3px] shrink-0"
+                aria-hidden="true"
+              />
+              <span>
+                <span className="text-ink-faint">{source.label}</span>
+                {' · '}
+                {source.detail}
+              </span>
+            </p>
+          ) : null}
+        </div>
+        <Button variant="primary" size="md" onClick={() => setComposeOpen(true)} className="shrink-0">
+          <PenLine size={15} strokeWidth={1.7} />
+          写一条
+        </Button>
+      </header>
+
+      <AdminBar ability="可以审核待发布的内容，删除不合适的帖子" className="mb-7" />
+
+      {isAdmin ? (
+        <section aria-labelledby="pending-title" className="mb-9">
+          <div className="mb-3 flex items-baseline gap-3">
+            <h2 id="pending-title" className="text-[13px] tracking-[0.1em] text-ink">
+              待审核
+            </h2>
+            <span className="text-[11px] text-ink-ghost">{pending.length} 条</span>
+          </div>
+
+          {pending.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-[rgba(141,133,152,0.24)] px-4 py-5 text-center text-[12px] text-ink-ghost">
+              没有待审核的内容。这里是空的，说明大家现在都还好。
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {pending.map((post) => (
+                <li
+                  key={post.id}
+                  className="rounded-2xl border border-[rgba(201,182,232,0.5)] bg-[rgba(201,182,232,0.1)] p-4"
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-ghost">
+                    <span>{post.nickname}</span>
+                    <span>·</span>
+                    <span>
+                      {formatRelativeDay(post.createdAt.slice(0, 10))} {formatClock(post.createdAt)}
+                    </span>
+                    {post.needsSupport ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[rgba(247,222,217,0.7)] px-2 py-0.5 text-[#8a4a45]">
+                        <ShieldAlert size={10} strokeWidth={1.8} aria-hidden="true" />
+                        包含需要留意的表达
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <p className="mt-2 whitespace-pre-line text-pretty text-[13px] leading-[1.95] text-ink-soft">
+                    {post.content}
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Button variant="primary" size="sm" onClick={() => void review(post.id, 'approved')}>
+                      <Check size={13} strokeWidth={1.8} />
+                      放到广场
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => void review(post.id, 'rejected')}>
+                      <X size={13} strokeWidth={1.8} />
+                      不放出去
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(post)}
+                      className="ml-auto inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11.5px] text-[#8a4a45] transition-colors hover:bg-[rgba(247,222,217,0.5)]"
+                    >
+                      <Trash2 size={12} strokeWidth={1.7} aria-hidden="true" />
+                      删除
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
+
+      <section aria-labelledby="square-title">
+        <div className="mb-3 flex items-baseline gap-3">
+          <h2 id="square-title" className="text-[13px] tracking-[0.1em] text-ink">
+            广场
+          </h2>
+          <span className="text-[11px] text-ink-ghost">{approved.length} 条</span>
+        </div>
+
+        {loading ? (
+          <div className="space-y-3">
+            {[0, 1, 2].map((index) => (
+              <div
+                key={index}
+                className="h-[128px] animate-pulse rounded-[22px] border border-white/50 bg-white/30"
+              />
+            ))}
+          </div>
+        ) : status === 'error' || status === 'unavailable' ? (
+          <p className="rounded-2xl border border-[rgba(158,95,92,0.2)] bg-[rgba(247,231,228,0.4)] px-4 py-3 text-[13px] text-[#8a6360]">
+            {error ?? '暂时读不到广场的内容。'}
+          </p>
+        ) : approved.length === 0 ? (
+          <div className="flex flex-col items-center px-6 py-16 text-center">
+            <span className="mb-5 grid h-14 w-14 place-items-center rounded-full bg-[rgba(201,182,232,0.18)]">
+              <MessagesSquare
+                size={20}
+                strokeWidth={1.4}
+                className="text-lavender-deep"
+                aria-hidden="true"
+              />
+            </span>
+            <p className="text-[14px] text-ink-soft">广场上还什么都没有。</p>
+            <p className="mt-2 max-w-[30ch] text-[12.5px] leading-[1.9] text-ink-faint">
+              可以坐一会儿，也可以写下第一句。这里没有认识你的人。
+            </p>
+          </div>
+        ) : (
+          <ul className="space-y-3.5">
+            {approved.map((post) => (
+              <li key={post.id}>
+                <PostCard
+                  post={post}
+                  isAdmin={isAdmin}
+                  working={working}
+                  onHug={() => void handleHug(post.id)}
+                  onReply={(content) => requestReply(post.id, content)}
+                  onDelete={() => setDeleteTarget(post)}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* 写一条 */}
+      <Dialog
+        open={composeOpen}
+        onClose={() => setComposeOpen(false)}
+        title="写一条"
+        description="不会公开你的身份，也不需要登录。发出后需要经过一次审核。"
+        width="md"
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-[11px] text-ink-ghost">
+              {draft.content.length} / 800
+            </p>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button variant="ghost" size="md" onClick={() => setComposeOpen(false)}>
+                先不写了
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={requestPublish}
+                disabled={!draft.content.trim() || working}
+              >
+                <Send size={14} strokeWidth={1.7} />
+                {working ? '正在发送…' : '发出去'}
+              </Button>
+            </div>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <label className="block">
+            <span className="text-[12px] text-ink-soft">想叫什么都可以（可留空）</span>
+            <input
+              value={draft.nickname}
+              onChange={(event) =>
+                setDraft((prev) => ({ ...prev, nickname: event.target.value }))
+              }
+              placeholder="匿名的人"
+              className="mb-field mt-2"
+              maxLength={16}
+            />
+          </label>
+          <label className="block">
+            <span className="text-[12px] text-ink-soft">说点什么</span>
+            <textarea
+              value={draft.content}
+              onChange={(event) => setDraft((prev) => ({ ...prev, content: event.target.value }))}
+              placeholder="今天发生了什么？不用说得很完整。"
+              rows={7}
+              className="mb-field mt-2 resize-y leading-[2]"
+              maxLength={800}
+            />
+          </label>
+          <p className="rounded-2xl border border-white/60 bg-white/40 px-4 py-3 text-[11.5px] leading-[1.9] text-ink-faint">
+            如果内容里出现了可能和伤害自己有关的表达，我们会在发送前先轻轻问一句。
+            那不是要拦你，只是不想装作没看见。
+          </p>
+        </div>
+      </Dialog>
+
+      <CrisisNoticeDialog
+        open={crisisOpen}
+        onClose={() => {
+          setCrisisOpen(false);
+          setPendingAction(null);
+        }}
+        onPublish={() => void handleCrisisPublish()}
+        publishLabel={pendingAction?.kind === 'reply' ? '仍然回复' : '仍然发出去'}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="删除这条帖子？"
+        description="删除后无法恢复，包括它收到的拥抱和回复。"
+        confirmLabel="删除"
+      />
+    </div>
+  );
+}
+
+/* ---------------- 单条帖子 ---------------- */
+
+function PostCard({
+  post,
+  isAdmin,
+  working,
+  onHug,
+  onReply,
+  onDelete,
+}: {
+  post: SquarePost;
+  isAdmin: boolean;
+  working: boolean;
+  onHug: () => void;
+  onReply: (content: string) => void;
+  onDelete: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [hugged, setHugged] = useState(false);
+
+  function submitReply() {
+    const content = replyText.trim();
+    if (!content) return;
+    onReply(content);
+    setReplyText('');
+    setReplyOpen(false);
+    setExpanded(true);
+  }
+
+  return (
+    <article className="rounded-[22px] border border-white/70 bg-white/50 p-5 transition-colors duration-500 hover:bg-white/60 sm:p-6">
+      <header className="flex flex-wrap items-center gap-2 text-[11px] text-ink-ghost">
+        <span className="text-ink-faint">{post.nickname}</span>
+        <span aria-hidden="true">·</span>
+        <span>
+          {formatRelativeDay(post.createdAt.slice(0, 10))} {formatClock(post.createdAt)}
+        </span>
+        {post.isDemo ? (
+          <span className="rounded-full bg-[rgba(141,133,152,0.12)] px-2 py-0.5 tracking-[0.1em]">
+            示例
+          </span>
+        ) : null}
+        {isAdmin ? (
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label="删除这条帖子"
+            className="ml-auto grid h-7 w-7 place-items-center rounded-full text-ink-ghost transition-colors hover:bg-[rgba(247,222,217,0.6)] hover:text-[#8a4a45]"
+          >
+            <Trash2 size={13} strokeWidth={1.7} />
+          </button>
+        ) : null}
+      </header>
+
+      <p className="mt-2.5 whitespace-pre-line text-pretty text-[13.5px] leading-[2] text-ink-soft">
+        {post.content}
+      </p>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            onHug();
+            setHugged(true);
+          }}
+          aria-label={`抱抱这条心事，目前 ${post.hugs} 个拥抱`}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11.5px] transition-all duration-400',
+            hugged
+              ? 'border-[rgba(201,182,232,0.6)] bg-[rgba(201,182,232,0.22)] text-ink'
+              : 'border-[rgba(141,133,152,0.2)] text-ink-faint hover:border-[rgba(201,182,232,0.5)] hover:text-ink',
+          )}
+        >
+          <HeartHandshake
+            size={13}
+            strokeWidth={1.7}
+            aria-hidden="true"
+            className={cn('transition-transform duration-400', hugged && 'scale-110')}
+          />
+          {post.hugs > 0 ? post.hugs : '抱抱'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setReplyOpen((prev) => !prev);
+            setExpanded(true);
+          }}
+          className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(141,133,152,0.2)] px-3 py-1.5 text-[11.5px] text-ink-faint transition-colors hover:text-ink"
+        >
+          <MessageCircle size={13} strokeWidth={1.7} aria-hidden="true" />
+          {post.replies.length > 0 ? `${post.replies.length} 条回复` : '回复'}
+        </button>
+
+        {post.replies.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setExpanded((prev) => !prev)}
+            className="text-[11.5px] text-ink-ghost transition-colors hover:text-ink-faint"
+          >
+            {expanded ? '收起' : '展开看看'}
+          </button>
+        ) : null}
+      </div>
+
+      <AnimatePresence initial={false}>
+        {replyOpen ? (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3">
+              <textarea
+                value={replyText}
+                onChange={(event) => setReplyText(event.target.value)}
+                placeholder="写一句就好，不必给建议。"
+                rows={3}
+                maxLength={400}
+                className="mb-field resize-y text-[12.5px] leading-[1.9]"
+              />
+              <div className="mt-2 flex items-center justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setReplyOpen(false)}>
+                  算了
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={submitReply}
+                  disabled={!replyText.trim() || working}
+                >
+                  <Send size={12} strokeWidth={1.8} />
+                  发送
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence initial={false}>
+        {expanded && post.replies.length > 0 ? (
+          <motion.ul
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
+          >
+            {post.replies.map((reply) => (
+              <ReplyItem key={reply.id} reply={reply} postId={post.id} isAdmin={isAdmin} />
+            ))}
+          </motion.ul>
+        ) : null}
+      </AnimatePresence>
+    </article>
+  );
+}
+
+function ReplyItem({
+  reply,
+  postId,
+  isAdmin,
+}: {
+  reply: SquareReply;
+  postId: string;
+  isAdmin: boolean;
+}) {
+  const { showToast } = useToast();
+
+  async function handleDelete() {
+    try {
+      await squareStore.removeReply(postId, reply.id);
+    } catch (deleteError) {
+      showToast(
+        deleteError instanceof Error ? deleteError.message : '删除回复失败，请稍后再试。',
+        'caution',
+      );
+    }
+  }
+
+  return (
+    <li className="mt-3 border-l-2 border-[rgba(201,182,232,0.45)] pl-3.5">
+      <div className="flex items-center gap-2 text-[10.5px] text-ink-ghost">
+        <span className="text-ink-faint">{reply.nickname}</span>
+        <span aria-hidden="true">·</span>
+        <span>{formatClock(reply.createdAt)}</span>
+        {isAdmin ? (
+          <button
+            type="button"
+            onClick={() => void handleDelete()}
+            aria-label="删除这条回复"
+            className="ml-auto grid h-6 w-6 place-items-center rounded-full text-ink-ghost transition-colors hover:text-[#8a4a45]"
+          >
+            <Trash2 size={11} strokeWidth={1.7} />
+          </button>
+        ) : null}
+      </div>
+      <p className="mt-1 whitespace-pre-line text-[12.5px] leading-[1.9] text-ink-soft">
+        {reply.content}
+      </p>
+    </li>
+  );
+}
