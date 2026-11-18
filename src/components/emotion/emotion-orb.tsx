@@ -16,6 +16,8 @@ export interface EmotionOrbProps {
   receded?: boolean;
   /** 正在被捏爆：播放碎裂动画，结束后由父级把它从天空里移除 */
   bursting?: boolean;
+  /** 画面被压矮时只展示内圈的球（见 emotion-sky 里的 compact 判定） */
+  compactHidden?: boolean;
   onSelect: (emotion: Emotion) => void;
   onBurstComplete?: (emotionId: Emotion['id']) => void;
 }
@@ -57,6 +59,7 @@ export function EmotionOrb({
   active = false,
   receded = false,
   bursting = false,
+  compactHidden = false,
   onSelect,
   onBurstComplete,
 }: EmotionOrbProps) {
@@ -87,7 +90,11 @@ export function EmotionOrb({
 
   return (
     <div
-      className={cn('orb-anchor pointer-events-none', !mobile && 'orb-desktop-only')}
+      className={cn(
+        'orb-anchor pointer-events-none',
+        !mobile && 'orb-desktop-only',
+        compactHidden && 'orb-compact-hide',
+      )}
       style={style}
     >
       <div className="orb-breath relative h-full w-full">

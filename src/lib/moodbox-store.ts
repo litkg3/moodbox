@@ -14,7 +14,7 @@ import {
   updateMemory,
   type MemoryDraft,
 } from '@/lib/memories-repo';
-import { addBurst, clearBursts, listBursts, removeBurst } from '@/lib/bursts-repo';
+import { addBurst, clearBursts, listBursts, removeBurst, settleStaleBursts } from '@/lib/bursts-repo';
 import type { EmotionId, EmotionLog, MemoryRecord } from '@/types';
 
 export type StoreStatus = 'idle' | 'loading' | 'ready' | 'error' | 'unavailable';
@@ -92,6 +92,9 @@ class MoodBoxStore {
     this.emit({ status: 'loading' });
     this.initPromise = (async () => {
       try {
+        // 先把上次没等到「自己飘回来」的捏爆收尾，再把天空一次性读出来。
+        // 顺序不能反：如果先读 bursts，界面会先少一颗球再补回来，闪一下。
+        await settleStaleBursts();
         const [memories, emotionLogs, bursts] = await Promise.all([
           listMemories(),
           listEmotionLogs(),

@@ -51,7 +51,7 @@ export const EMOTIONS: readonly Emotion[] = [
     },
     placement: {
       desktop: { x: 13.5, y: 63, scale: 0.9, duration: 23, delay: 0.9, driftX: 12, driftY: 18 },
-      mobile: { x: 50, y: 78, scale: 0.86, duration: 21, delay: 1.1, driftX: 5, driftY: 7 },
+      mobile: { x: 50, y: 74, scale: 0.84, duration: 21, delay: 1.1, driftX: 5, driftY: 7 },
     },
     messages: [
       '难过的时候不用急着变好。它可以陪你待一会儿。',
@@ -85,7 +85,7 @@ export const EMOTIONS: readonly Emotion[] = [
     },
     placement: {
       desktop: { x: 23, y: 46, scale: 1.15, duration: 21, delay: 0.5, driftX: 16, driftY: 22 },
-      mobile: { x: 14, y: 71, scale: 0.92, duration: 24, delay: 0.6, driftX: 6, driftY: 9 },
+      mobile: { x: 11, y: 71, scale: 0.84, duration: 24, delay: 0.6, driftX: 4, driftY: 6 },
     },
     messages: [
       '也许此刻没有人刚好理解你的心情，但你的感受依然值得被认真对待。',
@@ -119,6 +119,7 @@ export const EMOTIONS: readonly Emotion[] = [
     },
     placement: {
       desktop: { x: 75.5, y: 46, scale: 0.95, duration: 24, delay: 1.4, driftX: 13, driftY: 19 },
+      mobile: { x: 8, y: 93, scale: 0.7, duration: 25, delay: 1.4, driftX: 3, driftY: 5 },
     },
     messages: [
       '情绪低落的时候，世界会显得很吵，而你很安静。这也没关系。',
@@ -186,7 +187,7 @@ export const EMOTIONS: readonly Emotion[] = [
     },
     placement: {
       desktop: { x: 88, y: 24, scale: 1.1, duration: 22, delay: 0.7, driftX: 12, driftY: 17 },
-      mobile: { x: 88, y: 69, scale: 0.82, duration: 23, delay: 0.8, driftX: 5, driftY: 7 },
+      mobile: { x: 82, y: 68, scale: 0.82, duration: 23, delay: 0.8, driftX: 5, driftY: 7 },
     },
     supportNote:
       '如果你此刻有伤害自己的念头，请立刻联系你信任的人，或拨打当地心理援助 / 紧急求助热线。你不需要一个人扛着。',
@@ -222,6 +223,7 @@ export const EMOTIONS: readonly Emotion[] = [
     },
     placement: {
       desktop: { x: 5.5, y: 43, scale: 0.86, duration: 20, delay: 1.1, driftX: 10, driftY: 16 },
+      mobile: { x: 10, y: 50, scale: 0.74, duration: 20, delay: 1.1, driftX: 4, driftY: 6 },
     },
     messages: [
       '害怕的时候，身体比脑子先知道。它只是想保护你。',
@@ -255,7 +257,7 @@ export const EMOTIONS: readonly Emotion[] = [
     },
     placement: {
       desktop: { x: 77, y: 74, scale: 1.0, duration: 18, delay: 1.3, driftX: 15, driftY: 18 },
-      mobile: { x: 20, y: 85, scale: 0.8, duration: 22, delay: 1.3, driftX: 4, driftY: 6 },
+      mobile: { x: 22, y: 79, scale: 0.8, duration: 22, delay: 1.3, driftX: 4, driftY: 6 },
     },
     messages: [
       '考试很重要，但它不是衡量你全部价值的标准。你已经在努力了，也别忘了照顾自己。',
@@ -289,6 +291,7 @@ export const EMOTIONS: readonly Emotion[] = [
     },
     placement: {
       desktop: { x: 89, y: 60, scale: 0.92, duration: 16, delay: 0.4, driftX: 11, driftY: 15 },
+      mobile: { x: 86, y: 40, scale: 0.66, duration: 17, delay: 0.4, driftX: 3, driftY: 5 },
     },
     messages: [
       '烦躁的时候，说明你已经忍了很久了。',
@@ -322,7 +325,7 @@ export const EMOTIONS: readonly Emotion[] = [
     },
     placement: {
       desktop: { x: 27, y: 77, scale: 1.0, duration: 25, delay: 0.6, driftX: 13, driftY: 14 },
-      mobile: { x: 76, y: 85, scale: 0.8, duration: 26, delay: 0.5, driftX: 4, driftY: 6 },
+      mobile: { x: 74, y: 79, scale: 0.8, duration: 26, delay: 0.5, driftX: 4, driftY: 6 },
     },
     messages: [
       '如果今天真的很累，就允许自己休息一会儿吧。生活不是一场不能停下来的比赛。',
@@ -356,6 +359,7 @@ export const EMOTIONS: readonly Emotion[] = [
     },
     placement: {
       desktop: { x: 69, y: 16, scale: 0.88, duration: 21, delay: 0.8, driftX: 12, driftY: 14 },
+      mobile: { x: 34, y: 90, scale: 0.78, duration: 21, delay: 0.8, driftX: 4, driftY: 6 },
     },
     messages: [
       '你在担心的人或事，一定对你很重要。',
@@ -423,7 +427,7 @@ export const EMOTIONS: readonly Emotion[] = [
     },
     placement: {
       desktop: { x: 62, y: 85, scale: 0.88, duration: 24, delay: 0.3, driftX: 10, driftY: 15 },
-      mobile: { x: 90, y: 32, scale: 0.76, duration: 23, delay: 0.4, driftX: 4, driftY: 6 },
+      mobile: { x: 84, y: 32, scale: 0.76, duration: 23, delay: 0.4, driftX: 4, driftY: 6 },
     },
     messages: [
       '明明是别人的问题，难受的却是你。这确实很不公平。',
@@ -444,37 +448,38 @@ export const EMOTIONS: readonly Emotion[] = [
     ],
   },
   {
-    id: 'relief',
-    label: '释然',
-    latin: 'Relief',
-    whisper: '那件事，好像可以放下了',
+    id: 'numbness',
+    label: '麻木',
+    latin: 'Numb',
+    whisper: '什么都不太有感觉了',
     palette: {
-      light: '#E8F0E2',
-      mid: '#BBD4B4',
-      deep: '#82A87A',
-      glow: 'rgba(130, 168, 122, 0.34)',
-      ink: '#5F7F58',
+      light: '#ECEAE6',
+      mid: '#BDB8B0',
+      deep: '#86807A',
+      glow: 'rgba(134, 128, 122, 0.3)',
+      ink: '#6B655F',
     },
     placement: {
+      // 桌面端沿用原来那一颗的位置（右侧偏上），接住小屏那套坐标不动
       desktop: { x: 93, y: 38, scale: 0.86, duration: 20, delay: 1.2, driftX: 9, driftY: 13 },
       mobile: { x: 42, y: 12, scale: 0.74, duration: 21, delay: 1.2, driftX: 4, driftY: 6 },
     },
     messages: [
-      '放下的那一刻通常不隆重，只是某天想起来，没那么疼了。',
-      '你不需要宣布自己已经走出来。安安静静地轻一点就够了。',
-      '有些事不是解决了，是你终于不再需要它有个答案。',
-      '今天的呼吸比上个月顺一点了吗？那就是进展。',
-      '你可以既保留遗憾，也往前走。这两件事不冲突。',
-      '原谅自己比原谅别人更难。可以慢慢来。',
-      '你没有浪费那段时间。你是靠它走到这儿的。',
-      '如果偶尔还是会想起来，不代表你退回去了。',
-      '你终于可以把注意力放回自己身上了。',
-      '松一口气的感觉，值得被好好记住。',
-      '那些咬牙撑过来的部分，只有你自己知道有多重。',
-      '你可以开始想一些和它无关的事了。比如晚饭吃什么。',
-      '不是所有伤口都要讲给别人听。安静地长好也算。',
-      '今天的你，比你以为的更松一点。',
-      '愿这种轻，能待得久一些。',
+      '不是不难过，是暂时感觉不到了。这也是一种反应。',
+      '麻木常常出现在撑了很久之后。身体先替你把感受关小了。',
+      '说不清现在是什么心情，也没关系。不用硬找一个词。',
+      '你可以什么都不想。发一会儿呆也是正当的事。',
+      '如果一件事本该让你开心，你却没有反应，不必责怪自己。',
+      '感受是会回来的。通常不是靠用力，而是靠一点点安全感。',
+      '这时候比起想清楚，先照顾身体更容易些：喝口水、洗把脸、躺一会儿。',
+      '你不是变冷了。你只是暂时把自己调成了省电模式。',
+      '如果连喜欢的歌都不想点开，可以先放着，等哪天想听了再听。',
+      '有人问你怎么了，你可以说「不知道」。这是真话，也够了。',
+      '你可以先不解决任何事情。今天只要过完就行。',
+      '麻木的时候，一个很小的具体动作比一大段道理有用。',
+      '如果这种感觉持续了两周以上，还伴着睡不好或吃不下，找个专业的人聊聊会更稳妥。',
+      '你已经很努力地撑着了。撑住本身就是件费力的事。',
+      '感觉回来的时候，可能先是某个很小的瞬间。留意它。',
     ],
   },
 ];

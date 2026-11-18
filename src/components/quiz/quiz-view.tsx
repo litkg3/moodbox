@@ -145,9 +145,9 @@ const SUGGESTIONS: Record<EmotionId, Suggestion[]> = {
     { label: '心事信箱', tool: 'letters' },
     { label: '树洞广场', href: '/square' },
   ],
-  relief: [
-    { label: '开心罐', tool: 'jar' },
-    { label: '情绪周报', href: '/weekly' },
+  numbness: [
+    { label: '呼吸放松', href: '/breathe' },
+    { label: '心事信箱', tool: 'letters' },
   ],
 };
 
@@ -159,6 +159,7 @@ const TIE_BREAK: readonly EmotionId[] = [
   'anxiety',
   'fear',
   'exhaustion',
+  'numbness',
   'emo',
   'worry',
   'exam',

@@ -23,10 +23,10 @@ describe('捏爆文案', () => {
     expect(burstLine('wronged', '委屈')).toBe('委屈被你捏爆了！负面情绪释放成功');
   });
 
-  it('开心不说「释放成功」，改成好心情会传染', () => {
+  it('开心不说「释放成功」，改成好心情会传染；麻木按负向处理', () => {
     expect(burstLine('joy', '开心')).toBe('开心被你捏爆了，好心情是会传染的哦');
     expect(burstLine('joy', '开心')).not.toContain('负面');
-    expect(burstLine('relief', '释然')).not.toContain('负面');
+    expect(burstLine('numbness', '麻木')).toBe('麻木被你捏爆了！负面情绪释放成功');
   });
 
   it('文案里不出现「飞回来」这类操作提示，也不追问感受', () => {

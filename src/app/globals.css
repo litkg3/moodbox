@@ -1012,6 +1012,18 @@ html[data-theme='night'] .mb-btn-danger {
   .orb-desktop-only {
     display: none;
   }
+
+}
+
+/*
+ * 天空被压矮时的降级（见 emotion-sky 里的 compact）：隐去外圈四颗，
+ * 剩下的球按内圈坐标重新分布 —— 只把外圈的球挪到内侧，内圈的不动，
+ * 避免一开键盘整片球都在跳。
+ */
+@media (max-width: 1023px) {
+  .emotion-sky-compact .orb-compact-hide {
+    display: none;
+  }
 }
 
 @keyframes mb-orb-drift {
@@ -1046,6 +1058,17 @@ html[data-theme='night'] .mb-btn-danger {
   50% {
     transform: scale(1.028);
   }
+}
+
+/*
+ * 弹层打开时暂停漂浮：指尖划动的时候，背后一片球还在各自晃容易让人分心，
+ * 也省下手机 GPU 的合成开销。只暂停、不重置，关掉卡片后从原处继续。
+ */
+.mb-motion-paused .orb-anchor,
+.mb-motion-paused .orb-breath,
+.mb-motion-paused .mb-star,
+.mb-motion-paused .mb-stardot {
+  animation-play-state: paused !important;
 }
 
 .orb-surface {

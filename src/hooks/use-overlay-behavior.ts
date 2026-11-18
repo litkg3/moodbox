@@ -147,11 +147,13 @@ export function useOverlayBehavior<T extends HTMLElement = HTMLDivElement>({
     };
 
     document.addEventListener('keydown', onKeyDown);
+    const unmarkMotion = markOverlayOpen();
     return () => {
       window.clearTimeout(focusTimer);
       document.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = originalOverflow;
       document.body.style.paddingRight = originalPaddingRight;
+      unmarkMotion();
 
       const index = overlayStack.lastIndexOf(id);
       if (index !== -1) overlayStack.splice(index, 1);
@@ -161,4 +163,25 @@ export function useOverlayBehavior<T extends HTMLElement = HTMLDivElement>({
   }, [open]);
 
   return { containerRef };
+}
+
+/**
+ * 有弹层在场时给根节点打一个标记，让背后的漂浮球暂停动画。
+ *
+ * 只处理「当前有没有弹层」这件事：多个弹层叠在一起（卡片里再开表单、确认框）时，
+ * 关掉上面那层不应当把球重新放出来，所以用一个计数器而不是单一布尔。
+ */
+const MOTION_PAUSE_CLASS = 'mb-motion-paused';
+let overlayDepth = 0;
+
+export function markOverlayOpen(): () => void {
+  overlayDepth += 1;
+  document.documentElement.classList.add(MOTION_PAUSE_CLASS);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    overlayDepth = Math.max(0, overlayDepth - 1);
+    if (overlayDepth === 0) document.documentElement.classList.remove(MOTION_PAUSE_CLASS);
+  };
 }

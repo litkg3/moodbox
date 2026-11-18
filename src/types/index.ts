@@ -18,7 +18,7 @@ export const EMOTION_IDS = [
   'worry',
   'lost',
   'wronged',
-  'relief',
+  'numbness',
 ] as const;
 
 export type EmotionId = (typeof EMOTION_IDS)[number];
