@@ -1,4 +1,5 @@
 import { getDB, toStorageError } from '@/lib/db';
+import { EMPTY_USAGE, canPublish, dayKeyOf, quotaMessage, type QuotaUsage } from '@/lib/quota';
 import { createId } from '@/lib/utils';
 import type { PostStatus, SquarePost, SquareReply } from '@/types';
 
@@ -79,6 +80,10 @@ export async function listPosts(viewerId?: string): Promise<SquarePost[]> {
  * 现在由管理员事后删除（见 lib/admin.ts）来兜底不合适的内容。
  */
 export async function createPost(draft: PostDraft): Promise<SquarePost> {
+  // 每天最多 3 条。判在写入之前，且用的是同一份统计函数，
+  // 与界面上的「今天还能发 N 条」不会互相矛盾。
+  const usage = await getQuotaUsage(draft.visitorId);
+  if (!canPublish('post', usage)) throw new Error(quotaMessage('post'));
   const post: SquarePost = {
     id: createId('post'),
     content: draft.content.trim(),
@@ -117,6 +122,34 @@ export async function deletePost(id: string): Promise<void> {
   try {
     const db = await getDB();
     await db.delete('posts', id);
+  } catch (error) {
+    throw toStorageError(error);
+  }
+}
+
+/**
+ * 今天已经发了多少（本机统计）。
+ *
+ * 数两样东西：帖子自己（`visitorId` 对得上的）和回复（帖子里的 `replies`）。
+ * 删掉的记录在 IndexedDB 里已经不存在，所以「删了重发」在本机模式下
+ * 确实会退回额度 —— 这是本机模式的固有限制，文档里写清楚了，
+ * 云端模式下额度由数据库统计，删帖不退。
+ */
+export async function getQuotaUsage(visitorId?: string, now: Date = new Date()): Promise<QuotaUsage> {
+  if (!visitorId) return { ...EMPTY_USAGE };
+  const today = dayKeyOf(now.toISOString());
+  try {
+    const db = await getDB();
+    const posts = await db.getAllFromIndex('posts', 'by-created');
+    let postCount = 0;
+    let replyCount = 0;
+    for (const post of posts) {
+      if (post.visitorId === visitorId && dayKeyOf(post.createdAt) === today) postCount += 1;
+      for (const reply of post.replies) {
+        if (reply.visitorId === visitorId && dayKeyOf(reply.createdAt) === today) replyCount += 1;
+      }
+    }
+    return { posts: postCount, replies: replyCount };
   } catch (error) {
     throw toStorageError(error);
   }
@@ -166,6 +199,9 @@ export async function addReply(postId: string, draft: ReplyDraft): Promise<Squar
   if (charLength(content) > MAX_REPLY_LENGTH) {
     throw new Error(`回复最多 ${MAX_REPLY_LENGTH} 字，再精简一点吧。`);
   }
+  // 每天最多 20 条回复
+  const usage = await getQuotaUsage(draft.visitorId);
+  if (!canPublish('reply', usage)) throw new Error(quotaMessage('reply'));
   try {
     const db = await getDB();
     const existing = await db.get('posts', postId);

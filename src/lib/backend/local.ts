@@ -18,6 +18,7 @@ export const localBackend: ContentBackend = {
   deleteStory: storiesRepo.deleteStory,
 
   listPosts: squareRepo.listPosts,
+  getQuotaUsage: squareRepo.getQuotaUsage,
   createPost: squareRepo.createPost,
   setPostStatus: squareRepo.setPostStatus,
   deletePost: squareRepo.deletePost,

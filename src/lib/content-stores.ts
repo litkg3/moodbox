@@ -4,6 +4,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { getContentBackend } from '@/lib/backend';
 import type { PostDraft, ReplyDraft, StoryDraft } from '@/lib/backend/types';
 import { isIndexedDBSupported } from '@/lib/db';
+import { EMPTY_USAGE, type QuotaUsage } from '@/lib/quota';
 import type { HealingStory, HeartLetter, PostStatus, SquarePost, TimeCapsule } from '@/types';
 
 export type ListStatus = 'idle' | 'loading' | 'ready' | 'error' | 'unavailable';
@@ -143,6 +144,20 @@ class StoriesStore extends ListStore<HealingStory> {
  */
 let squareViewerId: string | undefined;
 
+/**
+ * 今天的额度用量缓存。
+ *
+ * 发帖成功后 +1 而不是每次都问后端：数量只增不减（删帖不退额度），
+ * 本地累加与后端统计不会打架；同时在后台刷新一次，防止多标签页对不上。
+ */
+let quotaUsage: QuotaUsage = { ...EMPTY_USAGE };
+const quotaListeners = new Set<() => void>();
+
+function setQuotaUsage(next: QuotaUsage): void {
+  quotaUsage = next;
+  for (const listener of quotaListeners) listener();
+}
+
 class SquareStore extends ListStore<SquarePost> {
   constructor() {
     super(() => getContentBackend().listPosts(squareViewerId), {
@@ -158,7 +173,19 @@ class SquareStore extends ListStore<SquarePost> {
   setViewer(visitorId: string): void {
     if (squareViewerId === visitorId) return;
     squareViewerId = visitorId;
+    void this.refreshQuota();
     if (this.status === 'ready') void this.refresh();
+  }
+
+  /** 问后端要今天的额度用量；拿不到就保持原值，不影响发帖。 */
+  async refreshQuota(): Promise<void> {
+    if (!squareViewerId) return;
+    try {
+      const usage = await getContentBackend().getQuotaUsage(squareViewerId);
+      setQuotaUsage(usage);
+    } catch {
+      // 额度只是提示，读失败不该打断任何操作
+    }
   }
 
   /** 管理员解锁 / 退出后要重新拉一次：待审核的帖子只有带令牌才看得到。 */
@@ -170,6 +197,9 @@ class SquareStore extends ListStore<SquarePost> {
   async publish(draft: PostDraft): Promise<SquarePost> {
     const post = await getContentBackend().createPost(draft);
     this.setItems([post, ...this.items]);
+    // 先本地 +1（立刻反映到界面上），再问后端要准确值
+    setQuotaUsage({ ...quotaUsage, posts: quotaUsage.posts + 1 });
+    void this.refreshQuota();
     return post;
   }
 
@@ -202,6 +232,8 @@ class SquareStore extends ListStore<SquarePost> {
   async reply(postId: string, draft: ReplyDraft): Promise<void> {
     const next = await getContentBackend().addReply(postId, draft);
     this.setItems(this.items.map((item) => (item.id === postId ? next : item)));
+    setQuotaUsage({ ...quotaUsage, replies: quotaUsage.replies + 1 });
+    void this.refreshQuota();
   }
 
   async removeReply(postId: string, replyId: string): Promise<void> {
@@ -293,3 +325,19 @@ export const useStories = () => useListStore(storiesStore);
 export const useSquare = () => useListStore(squareStore);
 export const useLetters = () => useListStore(lettersStore);
 export const useCapsules = () => useListStore(capsulesStore);
+
+/**
+ * 订阅「今天已用额度」。
+ *
+ * 服务端快照恒定（全零），客户端挂载后由 `setViewer` → `refreshQuota`
+ * 填真实值，因此不会出现水合不一致，也不会在首帧闪一个错误的数字。
+ */
+function subscribeQuota(listener: () => void): () => void {
+  quotaListeners.add(listener);
+  return () => {
+    quotaListeners.delete(listener);
+  };
+}
+
+export const useQuotaUsage = (): QuotaUsage =>
+  useSyncExternalStore(subscribeQuota, () => quotaUsage, () => EMPTY_USAGE);

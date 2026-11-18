@@ -16,6 +16,7 @@ import type { ContentBackend, PostDraft, ReplyDraft, StoryDraft } from '@/lib/ba
  *   DELETE /stories/:id              → 204
  *
  *   GET    /posts                    → SquarePost[]（管理员可见 pending）
+ *   GET    /quota?viewer=:id         → { posts, replies }（今天已用额度）
  *   POST   /posts                    → SquarePost（发出即公开，服务端直接落 approved）
  *   PATCH  /posts/:id                → SquarePost（body: { status }）
  *   DELETE /posts/:id                → 204
@@ -106,6 +107,19 @@ export function createHttpBackend(options: HttpBackendOptions): ContentBackend {
 
     listPosts: (viewerId?: string) =>
       request(`/posts${viewerId ? `?viewer=${encodeURIComponent(viewerId)}` : ''}`),
+    // 每日配额由服务端统计并在这里取回；远端没实现时退化为全零，
+    // 界面只是不显示「还能发几条」，不会因此挡住发帖（拦截仍在服务端的 POST 里）
+    getQuotaUsage: async (visitorId?: string) => {
+      if (!visitorId) return { posts: 0, replies: 0 };
+      try {
+        const data = await request<{ posts?: number; replies?: number }>(
+          `/quota?viewer=${encodeURIComponent(visitorId)}`,
+        );
+        return { posts: Number(data?.posts ?? 0), replies: Number(data?.replies ?? 0) };
+      } catch {
+        return { posts: 0, replies: 0 };
+      }
+    },
     createPost: (draft: PostDraft) =>
       request('/posts', { method: 'POST', body: JSON.stringify(draft) }),
     setPostStatus: (id, status: PostStatus) =>

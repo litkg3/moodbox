@@ -1,3 +1,4 @@
+import type { QuotaUsage } from '@/lib/quota';
 import type { HealingStory, HeartLetter, PostStatus, SquarePost, TimeCapsule } from '@/types';
 
 export interface StoryDraft {
@@ -56,6 +57,15 @@ export interface ContentBackend {
   deleteStory(id: string): Promise<void>;
 
   listPosts(viewerId?: string): Promise<SquarePost[]>;
+
+  /**
+   * 今天已经发了多少条帖子 / 回复（按访客的匿名标识统计）。
+   *
+   * 只用于界面提示「今天还能发几条」，不是拦截本身：
+   * 真正的拦截发生在写入时（`createPost` / `addReply` 内部再判一次，
+   * 云端由数据库函数判）。不传 visitorId 时返回全零。
+   */
+  getQuotaUsage(visitorId?: string): Promise<QuotaUsage>;
   createPost(draft: PostDraft): Promise<SquarePost>;
   setPostStatus(id: string, status: PostStatus): Promise<SquarePost>;
   deletePost(id: string): Promise<void>;

@@ -141,6 +141,20 @@ export function translateSupabaseError(error: unknown): Error {
   return new Error(message || '云端请求失败，请稍后再试。');
 }
 
+/** 本机提示的兜底文案里会出现这句，用来认出"是配额问题"而不是别的失败。 */
+const QUOTA_HINT = /今天已经(发满|回复满)|每天.*条/u;
+
+/**
+ * 判断一个错误是不是「今天发满了」。
+ *
+ * 云端与本地给的是同一句中文（`lib/quota.ts` 的 `quotaMessage`），
+ * 所以按文案匹配就够了；这里不另造错误码，免得两套说法漂移。
+ */
+export function isQuotaError(error: unknown): boolean {
+  if (error instanceof Error) return QUOTA_HINT.test(error.message);
+  return QUOTA_HINT.test(errorParts(error).text);
+}
+
 export interface SupabaseBackendOptions {
   /** 当前标签页的管理员令牌；没有解锁时返回 null */
   getToken?: () => string | null;
@@ -223,9 +237,30 @@ export function createSupabaseBackend(options: SupabaseBackendOptions = {}): Con
       return (Array.isArray(data) ? data : []).map(toPost);
     },
 
+    /**
+     * 今天的额度用量。
+     *
+     * 统计在数据库里做（`moodbox_quota`），因为只有服务端看得见
+     * 「同一个 IP 今天一共发了多少条」—— 本地算的话，清掉浏览器存储就能重置。
+     * 函数还没建（旧版 schema）时退回全零：界面不显示剩余额度，
+     * 但发帖时服务端仍会拦，不会因此放行。
+     */
+    async getQuotaUsage(visitorId?: string) {
+      if (!visitorId) return { posts: 0, replies: 0 };
+      try {
+        const data = await rawRpc<unknown>('moodbox_quota', { p_visitor: visitorId });
+        const row = (data ?? {}) as Record<string, unknown>;
+        return { posts: Number(row.posts ?? 0), replies: Number(row.replies ?? 0) };
+      } catch (error) {
+        if (isFunctionMissing(error) || isNetworkError(error)) return { posts: 0, replies: 0 };
+        // 其他错误（权限、连不上）也不该让整个页面挂掉，交给发帖时再报
+        return { posts: 0, replies: 0 };
+      }
+    },
+
     async createPost(draft: PostDraft) {
-      // 注意：`status` 不由客户端传。数据库函数里写死了 `pending`，
-      // 所以就算有人改了前端代码，也没法跳过审核。
+      // 状态不由客户端传：数据库函数里写死了 `approved`。
+      // 每日 3 条的额度也在同一个函数里数（moodbox_quota），前端绕不过去。
       const created = toPost(
         await rpc('moodbox_square_create', {
           p_content: draft.content,

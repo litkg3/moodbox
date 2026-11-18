@@ -20,6 +20,11 @@
 --    这里只存它的 md5 指纹（visitor_hash），不存 IP 原文。列表接口只回
 --    `mine: true/false`，指纹不下发，所以「删自己的」这条规则在服务端成立。
 --    归属地（region）是城市级文字，由前端解析后带上，仅用于展示。
+--
+--    版本：v5（2026-11）
+--      v5 新增：发帖/回复的内容安全拦截（黄赌毒、联系方式、硬广告）
+--               与每日配额（每人每天 3 条帖子、20 条回复，按 Asia/Shanghai 自然日）。
+--      升级方式：把本文件**整段**重新执行一次即可，不会清掉已有内容。
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -301,6 +306,173 @@ as $$
      or public.moodbox_is_admin(p_token);
 $$;
 
+/*
+ * 内容安全关键词（与服务端拦截共用）。
+ *
+ * 前端 lib/sensitive.ts 里那份词表的**子集**，只放「写了就肯定不该发」
+ * 的黄赌毒与硬广告。服务端这层的意义是：前端 JS 可以被绕过，
+ * 这里被绕过需要直接调 RPC —— 至少拦住脚本批量灌广告。
+ *
+ * 匹配方式与前端对齐：把文本里的空白和标点去掉，再做包含匹配。
+ * 只放短语，不放单字，避免误伤正常倾诉。
+ */
+create or replace function public.moodbox_blocked_terms()
+returns text[]
+language sql
+immutable
+set search_path = public, pg_temp
+as $$
+  select array[
+    -- 赌博
+    '博彩', '网赌', '六合彩', '时时彩', '百家乐', '棋牌代理', '下注赢', '下注平台',
+    -- 色情
+    '约炮', '裸聊', '援交', '包养', '成人视频', '色情服务', '上门服务', '楼凤', '同城约',
+    -- 毒品 / 违禁品
+    '冰毒', '摇头丸', 'k粉', '麻古', '制毒', '炸药配方', '枪支买卖', '迷药', '听话水',
+    -- 诈骗引流 / 硬广告
+    '加微信', '加vx', '加v信', '刷单', '日赚', '躺赚', '高额返利', '稳赚不赔',
+    '贷款秒批', '高利贷', '裸贷', '洗钱', '跑分', '代开发票', '办假证',
+    -- 辱骂
+    '傻逼', '煞笔', '沙比', '脑残', '智障', '婊子'
+  ];
+$$;
+
+/*
+ * 归一化：全角标点 / 空白 / 常见符号都会被去掉。
+ *
+ * 为什么不用 regexp_replace(..., '[[:space:][:punct:]]', ...)：
+ * 那是按**服务器 locale** 判定的，C locale 下中文全角逗号「，」不算 punct，
+ * 于是一句「加，微，信」就能绕过去。translate 是逐字符查表，
+ * 与数据库的 locale 无关，结果稳定。
+ */
+create or replace function public.moodbox_normalize(p_text text)
+returns text
+language sql
+immutable
+set search_path = public, pg_temp
+as $$
+  select lower(translate(
+    coalesce(p_text, ''),
+    '，。！？；：“”‘’（）【】《》、…—～·　 ,.;:!?"''()[]<>/\|_=+*&^%$#@~`-',
+    ''
+  ));
+$$;
+
+/*
+ * 每日发布配额：一个访客（同一匿名指纹）每天最多 3 条帖子、20 条回复。
+ *
+ * 为什么放在数据库里数：前端那份统计只存在于当前浏览器，
+ * 清一下 localStorage 或者直接调 RPC 就绕过去了。这里按 visitor_hash
+ * 数「今天已经落库的条数」，才是真正拦得住的那一层。
+ *
+ * 「今天」按 Asia/Shanghai 的自然日算 —— 广场是中文社区，
+ * 用 UTC 的话，早上 8 点前发的东西会被算到前一天，用户很难理解。
+ *
+ * 删帖不退额度：数的是"今天发出过多少条"，不是"现在还剩多少条"。
+ * 否则「发三条 → 全删 → 再发三条」就是免费无限发。
+ */
+create or replace function public.moodbox_daily_post_limit()
+returns integer language sql immutable
+set search_path = public, pg_temp
+as $$ select 3 $$;
+
+create or replace function public.moodbox_daily_reply_limit()
+returns integer language sql immutable
+set search_path = public, pg_temp
+as $$ select 20 $$;
+
+-- 今天的起点（含）：Asia/Shanghai 的 0 点，换算成 timestamptz
+create or replace function public.moodbox_day_start()
+returns timestamptz language sql stable
+set search_path = public, pg_temp
+as $$
+  select date_trunc('day', now() at time zone 'Asia/Shanghai') at time zone 'Asia/Shanghai';
+$$;
+
+-- 某个访客今天已发 / 已回复的条数
+create or replace function public.moodbox_quota_used(p_visitor text)
+returns table (posts integer, replies integer)
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select
+    (select count(*)::int
+       from public.square_posts
+      where visitor_hash = public.moodbox_visitor_hash(p_visitor)
+        and created_at >= public.moodbox_day_start()),
+    (select count(*)::int
+       from public.square_replies
+      where visitor_hash = public.moodbox_visitor_hash(p_visitor)
+        and created_at >= public.moodbox_day_start());
+$$;
+
+/*
+ * 给前端查「今天还能发几条」。
+ *
+ * 只回数字，不回任何帖子内容，所以它泄漏不了别人的东西 ——
+ * 就算有人拿别人的 visitor key 来查，也只能知道"这个人今天发了几条"，
+ * 而这本来就是公开信息（数一下广场上的帖子就知道了）。
+ * 匿名指纹取不到时返回 0/0，界面据此不显示剩余额度。
+ */
+create or replace function public.moodbox_quota(p_visitor text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_posts   integer;
+  v_replies integer;
+begin
+  if public.moodbox_visitor_hash(p_visitor) is null then
+    return jsonb_build_object('posts', 0, 'replies', 0);
+  end if;
+  select q.posts, q.replies into v_posts, v_replies
+    from public.moodbox_quota_used(p_visitor) q;
+  return jsonb_build_object(
+    'posts', coalesce(v_posts, 0),
+    'replies', coalesce(v_replies, 0),
+    'postLimit', public.moodbox_daily_post_limit(),
+    'replyLimit', public.moodbox_daily_reply_limit()
+  );
+end;
+$$;
+
+-- 这段文本里有没有不该出现的内容（布尔）
+create or replace function public.moodbox_content_blocked(p_text text)
+returns boolean
+language plpgsql
+immutable
+set search_path = public, pg_temp
+as $$
+declare
+  v_norm  text;
+  v_terms text[] := public.moodbox_blocked_terms();
+  v_term  text;
+begin
+  if p_text is null or btrim(p_text) = '' then
+    return false;
+  end if;
+  -- 去掉空白与标点，保留字母数字（与前端 normalizeForScan 一致）
+  v_norm := public.moodbox_normalize(p_text);
+  -- 词表本身也要归一化：像「加vx」这种带字母的短语，不归一化就永远匹配不上
+  foreach v_term in array v_terms
+  loop
+    if position(public.moodbox_normalize(v_term) in v_norm) > 0 then
+      return true;
+    end if;
+  end loop;
+  -- 中国大陆手机号：不留联系方式
+  if v_norm ~ '(^|[^0-9])1[3-9][0-9]{9}([^0-9]|$)' then
+    return true;
+  end if;
+  return false;
+end;
+$$;
+
 -- 发帖：发出即公开（status 直接写 approved）。
 -- 之前的「先审后发」已经取消：广场是给人倾诉的地方，等审反而劝退。
 -- 管理员仍可以事后删除，见 moodbox_square_delete。
@@ -331,6 +503,21 @@ begin
   end if;
   if char_length(v_content) > 600 then
     raise exception '太长了，600 字以内更容易被读完。';
+  end if;
+  -- 内容安全：黄赌毒、硬广告、联系方式。前端已经拦过一遍，
+  -- 这里是为了防止绕过前端直接调接口。
+  if public.moodbox_content_blocked(v_content) or public.moodbox_content_blocked(v_nick) then
+    raise exception '这段内容里有不适合出现在广场上的部分，换个说法再发吧。';
+  end if;
+
+  -- 每日配额：每人每天 3 条。没有 visitor 的调用方无从统计，这里放行
+  -- （前端一定会带；老客户端不带，也不能因此让它完全发不了）
+  if public.moodbox_visitor_hash(p_visitor) is not null then
+    if (select q.posts from public.moodbox_quota_used(p_visitor) q)
+         >= public.moodbox_daily_post_limit() then
+      raise exception '今天已经发满 % 条了。额度按自然日算，明天 0 点会重新给满 % 条 —— 现在可以先去看看别人的心事。',
+        public.moodbox_daily_post_limit(), public.moodbox_daily_post_limit();
+    end if;
   end if;
 
   v_id := 'post_' || replace(gen_random_uuid()::text, '-', '');
@@ -423,6 +610,19 @@ begin
     select 1 from public.square_posts where id = p_post_id and status = 'approved'
   ) then
     raise exception '这条帖子已经不在了。';
+  end if;
+
+  -- 内容安全与配额：回复同样不能夹带联系方式，
+  -- 也不能成为绕过发帖额度的灌水通道
+  if public.moodbox_content_blocked(v_content) or public.moodbox_content_blocked(v_nick) then
+    raise exception '这段内容里有不适合出现在广场上的部分，换个说法再发吧。';
+  end if;
+  if public.moodbox_visitor_hash(p_visitor) is not null then
+    if (select q.replies from public.moodbox_quota_used(p_visitor) q)
+         >= public.moodbox_daily_reply_limit() then
+      raise exception '今天已经回复满 % 条了。说得太多也累，明天 0 点之后再来吧。',
+        public.moodbox_daily_reply_limit();
+    end if;
   end if;
 
   insert into public.square_replies (id, post_id, nickname, content, needs_support, visitor_hash, region)

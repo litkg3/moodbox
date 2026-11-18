@@ -21,11 +21,12 @@ import { LoadingBar } from '@/components/ui/loading-bar';
 import { useToast } from '@/components/ui/toast';
 import { useAdmin } from '@/lib/admin';
 import { describeBackend } from '@/lib/backend';
-import { useSquare, squareStore } from '@/lib/content-stores';
+import { useSquare, squareStore, useQuotaUsage } from '@/lib/content-stores';
 import { scanForCrisis } from '@/lib/crisis';
 import { formatClock, formatRelativeDay } from '@/lib/date';
+import { quotaHint, quotaMessage, quotaState } from '@/lib/quota';
 import { MAX_REPLY_LENGTH, charLength } from '@/lib/square-repo';
-import { scanSensitive } from '@/lib/sensitive';
+import { describeSensitive, scanSensitive } from '@/lib/sensitive';
 import { resolveVisitor, type VisitorIdentity } from '@/lib/visitor';
 import type { SquarePost, SquareReply } from '@/types';
 import { cn } from '@/lib/utils';
@@ -90,7 +91,29 @@ export function SquareView() {
     void squareStore.reload();
   }, [isAdmin]);
 
-  const approved = useMemo(() => posts.filter((post) => post.status === 'approved'), [posts]);
+  // 发帖输入框里的实时检查：命中就让用户当场看到原因，而不是点了才被拒
+  const draftScan = useMemo(() => scanSensitive(draft.content), [draft.content]);
+
+  /**
+   * 今天的额度：每个访客每天最多 3 条帖子。
+   *
+   * 这里只是把「还能发几条」摆在按钮旁边，真正的拦截在 `requestPublish`
+   * 与后端（云端是数据库函数）里 —— 界面上的数字是提示，不是边界。
+   */
+  const usage = useQuotaUsage();
+  const postQuota = quotaState('post', usage);
+  const replyQuota = quotaState('reply', usage);
+
+  /**
+   * 广场列表只显示「已公开且没有命中内容安全规则」的帖子。
+   *
+   * 过滤放在渲染这一层，而不是发帖那一层：既有的旧帖、别人从别的设备发的，
+   * 或者规则将来加严，都会被这条兜住。判断是纯函数，放在 useMemo 里没有副作用。
+   */
+  const approved = useMemo(
+    () => posts.filter((post) => post.status === 'approved' && !scanSensitive(post.content).hit),
+    [posts],
+  );
 
   /* ---------------- 发布 ---------------- */
 
@@ -121,6 +144,19 @@ export function SquareView() {
   function requestPublish() {
     const content = draft.content.trim();
     if (!content) return;
+    // 额度先判：发满了就没必要再去解释内容问题，否则用户改完措辞
+    // 才发现今天根本发不出去
+    if (!postQuota.allowed) {
+      showToast(quotaMessage('post'), 'caution');
+      return;
+    }
+    // 顺序与回复一致：先挡不适内容（黄赌毒、广告、引战、联系方式），
+    // 再走自伤提醒 —— 后者是"我听见了"，不该被前者顶掉
+    const sensitive = scanSensitive(content);
+    if (sensitive.hit) {
+      showToast(describeSensitive(sensitive), 'caution');
+      return;
+    }
     if (scanForCrisis(content).flagged) {
       setPendingAction({ kind: 'post', content, nickname: draft.nickname.trim() });
       setCrisisOpen(true);
@@ -151,13 +187,15 @@ export function SquareView() {
   }
 
   function requestReply(postId: string, content: string) {
+    // 额度先判：每天最多 20 条回复
+    if (!replyQuota.allowed) {
+      showToast(quotaMessage('reply'), 'caution');
+      return;
+    }
     // 先挡敏感词，再走自伤提醒：前者是"换个说法"，后者是"我听见了"
     const sensitive = scanSensitive(content);
     if (sensitive.hit) {
-      showToast(
-        `这段话里有不适合出现在广场上的词（${sensitive.masked.join('、')}），换个说法再发吧。`,
-        'caution',
-      );
+      showToast(describeSensitive(sensitive), 'caution');
       return;
     }
     if (charLength(content) > MAX_REPLY_LENGTH) {
@@ -271,6 +309,11 @@ export function SquareView() {
             广场
           </h2>
           <span className="text-[11px] text-ink-ghost">{approved.length} 条</span>
+          {postQuota.used > 0 || replyQuota.used > 0 ? (
+            <span className="ml-auto text-[11px] text-ink-ghost" aria-live="polite">
+              {quotaHint('post', usage)}
+            </span>
+          ) : null}
         </div>
 
         {loading ? (
@@ -316,6 +359,8 @@ export function SquareView() {
                   onReply={(content) => requestReply(post.id, content)}
                   onDelete={() => setDeleteTarget(post)}
                   onDeleteReply={(replyId) => void handleDeleteReply(post.id, replyId)}
+                  replyAllowed={replyQuota.allowed}
+                  replyRemaining={replyQuota.remaining}
                 />
               </li>
             ))}
@@ -343,7 +388,7 @@ export function SquareView() {
                 variant="primary"
                 size="md"
                 onClick={requestPublish}
-                disabled={!draft.content.trim() || working}
+                disabled={!draft.content.trim() || working || draftScan.hit || !postQuota.allowed}
               >
                 <Send size={14} strokeWidth={1.7} />
                 {working ? '正在发送…' : '发出去'}
@@ -382,10 +427,29 @@ export function SquareView() {
               maxLength={800}
             />
           </label>
-          <p className="rounded-2xl border border-white/60 bg-white/40 px-4 py-3 text-[11.5px] leading-[1.9] text-ink-faint">
-            如果内容里出现了可能和伤害自己有关的表达，我们会在发送前先轻轻问一句。
-            那不是要拦你，只是不想装作没看见。
-          </p>
+          {/* 边写边查：命中就给一句具体的说明，并把「发出去」置灰 */}
+          {draftScan.hit ? (
+            <p
+              role="status"
+              className="rounded-2xl border border-[rgba(200,128,118,0.3)] bg-[rgba(247,226,220,0.6)] px-4 py-3 text-[11.5px] leading-[1.9] text-[#8a4a45]"
+            >
+              {describeSensitive(draftScan)} 改好之后就能发出去了。
+            </p>
+          ) : null}
+          {/* 额度用完时替换掉下面那句温馨提示：这才是此刻真正要知道的事 */}
+          {!postQuota.allowed ? (
+            <p
+              role="status"
+              className="rounded-2xl border border-[rgba(200,128,118,0.3)] bg-[rgba(247,226,220,0.6)] px-4 py-3 text-[11.5px] leading-[1.9] text-[#8a4a45]"
+            >
+              {quotaMessage('post')}
+            </p>
+          ) : (
+            <p className="rounded-2xl border border-white/60 bg-white/40 px-4 py-3 text-[11.5px] leading-[1.9] text-ink-faint">
+              如果内容里出现了可能和伤害自己有关的表达，我们会在发送前先轻轻问一句。
+              那不是要拦你，只是不想装作没看见。
+            </p>
+          )}
         </div>
       </Dialog>
 
@@ -426,6 +490,8 @@ function PostCard({
   onReply,
   onDelete,
   onDeleteReply,
+  replyAllowed,
+  replyRemaining,
 }: {
   post: SquarePost;
   isAdmin: boolean;
@@ -436,9 +502,17 @@ function PostCard({
   onReply: (content: string) => void;
   onDelete: () => void;
   onDeleteReply: (replyId: string) => void;
+  /** 今天还有没有回复额度；没有时把回复入口关掉，省得写完才被拒 */
+  replyAllowed: boolean;
+  replyRemaining: number;
 }) {
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyText, setReplyText] = useState('');
+  // 回复同样过滤：命中了就不出现在列表里
+  const visibleReplies = useMemo(
+    () => post.replies.filter((reply) => !scanSensitive(reply.content).hit),
+    [post.replies],
+  );
   const hugged = Boolean(post.hugged);
 
   // 边打字边检查：命中就提示并禁用发送，不用等按下按钮才被拦
@@ -528,7 +602,7 @@ function PostCard({
           className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(141,133,152,0.2)] px-3 py-1.5 text-[11.5px] text-ink-faint transition-colors hover:text-ink"
         >
           <MessageCircle size={13} strokeWidth={1.7} aria-hidden="true" />
-          {post.replies.length > 0 ? `${post.replies.length} 条回复` : '回复'}
+          {visibleReplies.length > 0 ? `${visibleReplies.length} 条回复` : '回复'}
         </button>
 
       </div>
@@ -561,10 +635,15 @@ function PostCard({
                   >
                     这段里有不适合出现在广场上的词（{replyScan.masked.join('、')}），换个说法再发吧。
                   </p>
+                ) : !replyAllowed ? (
+                  <p className="text-[11px] leading-relaxed text-[#8a4a45]" aria-live="polite">
+                    {quotaMessage('reply')}
+                  </p>
                 ) : (
                   <span aria-hidden="true" />
                 )}
-                <span className="ml-auto text-[11px] tabular-nums text-ink-ghost">
+                <span className="ml-auto shrink-0 text-[11px] tabular-nums text-ink-ghost">
+                  {replyRemaining > 0 ? `今天还剩 ${replyRemaining} 条 · ` : ''}
                   {replyLength} / {MAX_REPLY_LENGTH}
                 </span>
               </div>
@@ -573,7 +652,7 @@ function PostCard({
                   variant="primary"
                   size="sm"
                   onClick={submitReply}
-                  disabled={!replyText.trim() || blocked || working}
+                  disabled={!replyText.trim() || blocked || working || !replyAllowed}
                 >
                   <Send size={12} strokeWidth={1.8} />
                   发送
@@ -585,7 +664,7 @@ function PostCard({
       </AnimatePresence>
 
       <AnimatePresence initial={false}>
-        {post.replies.length > 0 ? (
+        {visibleReplies.length > 0 ? (
           <motion.ul
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -593,7 +672,7 @@ function PostCard({
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            {post.replies.map((reply) => (
+            {visibleReplies.map((reply) => (
               <ReplyItem
                 key={reply.id}
                 reply={reply}

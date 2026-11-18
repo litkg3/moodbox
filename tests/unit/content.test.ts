@@ -7,6 +7,7 @@ import {
   deleteOwnReply,
   deletePost,
   deleteReply,
+  getQuotaUsage,
   hugPost,
   listPosts,
   normalizeNickname,
@@ -196,5 +197,39 @@ describe('树洞广场', () => {
     await expect(deleteOwnReply(post.id, reply!.id, 'key-b')).rejects.toThrow(/不是你写的/);
     const cleared = await deleteOwnReply(post.id, reply!.id, 'key-a');
     expect(cleared.replies).toHaveLength(0);
+  });
+
+  it('每天最多发 3 条帖子：第 4 条被拒，别人不受影响', async () => {
+    for (let index = 0; index < 3; index += 1) {
+      await createPost({ content: `今天第 ${index + 1} 条。`, visitorId: 'key-quota' });
+    }
+    await expect(
+      createPost({ content: '第 4 条应该发不出去。', visitorId: 'key-quota' }),
+    ).rejects.toThrow(/今天已经发满 3 条/);
+
+    // 另一个访客的额度是独立的
+    await expect(
+      createPost({ content: '我是另一个人。', visitorId: 'key-other' }),
+    ).resolves.toBeTruthy();
+
+    // 统计与拦截用的是同一份数据
+    expect(await getQuotaUsage('key-quota')).toEqual({ posts: 3, replies: 0 });
+  });
+
+  it('每天最多 20 条回复：第 21 条被拒', async () => {
+    const post = await createPost({ content: '一条用来回复的帖子。', visitorId: 'key-author' });
+    for (let index = 0; index < 20; index += 1) {
+      await addReply(post.id, { content: `第 ${index + 1} 条回复。`, visitorId: 'key-chat' });
+    }
+    await expect(
+      addReply(post.id, { content: '第 21 条应该发不出去。', visitorId: 'key-chat' }),
+    ).rejects.toThrow(/今天已经回复满 20 条/);
+    expect(await getQuotaUsage('key-chat')).toEqual({ posts: 0, replies: 20 });
+  });
+
+  it('没有访客标识时不做配额限制（老调用方仍可用）', async () => {
+    for (let index = 0; index < 5; index += 1) {
+      await expect(createPost({ content: `匿名第 ${index + 1} 条。` })).resolves.toBeTruthy();
+    }
   });
 });
