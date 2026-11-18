@@ -253,8 +253,7 @@ export function SquareView() {
             树洞广场
           </h1>
           <p className="mt-3 max-w-[48ch] text-pretty text-[13.5px] leading-[1.9] text-ink-faint sm:text-sm">
-            匿名说一句，会有人抱抱你。发出去之前会经过一次审核 ——
-            不是要评判你写得好不好，只是不想让这里变成一个没人看着的地方。
+            当小球难以匹配你复杂的心情时，不妨来到树洞广场，欢迎你来倾诉，分享你的故事。
           </p>
           {/* 数据存在哪必须写在页面上，不能让人以为换台设备还能看到 */}
           {source ? (

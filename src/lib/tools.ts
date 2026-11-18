@@ -36,7 +36,7 @@ export const TOOL_ITEMS: readonly ToolItem[] = [
   { key: 'calendar', label: '情绪足迹', kind: 'route', href: '/calendar', hint: '一个月里，你都经历了什么' },
   { key: 'breathe', label: '呼吸放松', kind: 'route', href: '/breathe', hint: '跟着圆环，慢慢呼吸几十秒' },
   { key: 'quiz', label: '情绪测试', kind: 'route', href: '/quiz', hint: '六个问题，看看此刻的你' },
-  { key: 'square', label: '树洞广场', kind: 'route', href: '/square', hint: '匿名说一句，会有人抱抱你' },
+  { key: 'square', label: '树洞广场', kind: 'route', href: '/square', hint: '小球装不下的时候，来这里说说' },
   { key: 'about', label: '关于', kind: 'route', href: '/about', hint: '这个盒子为什么存在' },
   { key: 'clear', label: '清空数据', kind: 'action', hint: '删除这台设备上的全部记录' },
 ] as const;
