@@ -239,8 +239,13 @@ $$;
 -- ---------------------------------------------------------------------------
 
 -- 读者视角：只看 approved；带上正确的管理员口令时能看到全部（含待审核）
--- 第三个参数是访客自己的匿名 key，只用来算 mine，不会存也不会回传
+-- 第二个参数是访客自己的匿名 key，只用来算 mine，不会存也不会回传
+--
+-- 先删掉历史版本：Postgres 认「函数名 + 参数类型」为同一个函数，
+-- 老库里还留着 list(text) 这种少参数的版本时，直接 create or replace
+-- 会创出两个重载，前端按新签名调用可能撞上歧义（42725）。
 drop function if exists public.moodbox_square_list(text);
+drop function if exists public.moodbox_square_list(text, text);
 create or replace function public.moodbox_square_list(
   p_token   text default null,
   p_visitor text default null
@@ -264,6 +269,8 @@ $$;
 -- 发帖：status 在函数里写死为 pending，客户端无法跳过审核
 -- p_visitor / p_region：匿名指纹与归属地，前者只存哈希，后者只存城市级文字
 drop function if exists public.moodbox_square_create(text, text, boolean);
+drop function if exists public.moodbox_square_create(text, text, boolean, text);
+drop function if exists public.moodbox_square_create(text, text, boolean, text, text);
 create or replace function public.moodbox_square_create(
   p_content       text,
   p_nickname      text default null,
