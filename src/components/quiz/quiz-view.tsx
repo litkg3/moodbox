@@ -54,7 +54,7 @@ const QUESTIONS: readonly QuizQuestion[] = [
     options: [
       { text: '睡一觉，什么都不想', emotion: 'exhaustion' },
       { text: '找个人说说话', emotion: 'loneliness' },
-      { text: '一个人待着，谁也不理', emotion: 'emo' },
+      { text: '一个人待着，谁也不理', emotion: 'numbness' },
       { text: '出门走走，看看外面', emotion: 'joy' },
     ],
   },
@@ -63,7 +63,7 @@ const QUESTIONS: readonly QuizQuestion[] = [
     question: '最近一次真的笑出来，是什么时候？',
     options: [
       { text: '今天就有', emotion: 'joy' },
-      { text: '记不太清了', emotion: 'emo' },
+      { text: '记不太清了', emotion: 'lost' },
       { text: '笑过，但心里没跟上', emotion: 'sadness' },
       { text: '不想笑，笑不出来', emotion: 'pain' },
     ],
@@ -83,7 +83,7 @@ const QUESTIONS: readonly QuizQuestion[] = [
     question: '如果今晚可以丢掉一样东西，你想丢哪个？',
     options: [
       { text: '那种一直悬着的感觉', emotion: 'anxiety' },
-      { text: '脑子里翻来覆去的念头', emotion: 'worry' },
+      { text: '脑子里翻来覆去的念头', emotion: 'irritation' },
       { text: '身体里那股沉甸甸的累', emotion: 'exhaustion' },
       { text: '暂时不想丢什么', emotion: 'joy' },
     ],
@@ -104,10 +104,6 @@ const SUGGESTIONS: Record<EmotionId, Suggestion[]> = {
   loneliness: [
     { label: '树洞广场', href: '/square' },
     { label: '心事信箱', tool: 'letters' },
-  ],
-  emo: [
-    { label: '呼吸放松', href: '/breathe' },
-    { label: '树洞广场', href: '/square' },
   ],
   joy: [
     { label: '开心罐', tool: 'jar' },
@@ -133,10 +129,6 @@ const SUGGESTIONS: Record<EmotionId, Suggestion[]> = {
     { label: '呼吸放松', href: '/breathe' },
     { label: '心事信箱', tool: 'letters' },
   ],
-  worry: [
-    { label: '心事信箱', tool: 'letters' },
-    { label: '情绪周报', href: '/weekly' },
-  ],
   lost: [
     { label: '树洞广场', href: '/square' },
     { label: '情绪周报', href: '/weekly' },
@@ -160,8 +152,6 @@ const TIE_BREAK: readonly EmotionId[] = [
   'fear',
   'exhaustion',
   'numbness',
-  'emo',
-  'worry',
   'exam',
   'irritation',
   'joy',

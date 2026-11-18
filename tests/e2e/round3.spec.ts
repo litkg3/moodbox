@@ -133,7 +133,7 @@ test('捏爆情绪球：碎裂后自己飞回来，不需要手动召回', async
 
   const orbs = page.getByRole('button', { name: /：/ });
   const before = await orbs.count();
-  expect(before).toBe(14);
+  expect(before).toBe(12);
 
   await page.getByRole('button', { name: /^难过/ }).click({ force: true });
   const panel = page.getByRole('dialog', { name: /难过/ });

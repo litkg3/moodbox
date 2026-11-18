@@ -13,9 +13,37 @@ export function isEmotionId(value: unknown): value is EmotionId {
   return typeof value === 'string' && (EMOTION_IDS as readonly string[]).includes(value);
 }
 
+/**
+ * 已经下线的情绪 → 现在最接近的那一颗。
+ *
+ * 用户的记录是长期资产，删一颗球不该让那些心情凭空消失。
+ * 这里只在**读取/展示**时做映射，不改库里的原始记录：
+ * 万一以后又把球加回来，旧数据还是完整的。
+ */
+export const LEGACY_EMOTION_IDS: Readonly<Record<string, EmotionId>> = {
+  emo: 'numbness',
+  worry: 'anxiety',
+};
+
+/**
+ * 把任意 id（含已下线的）收敛成现存的情绪 id。
+ *
+ * 完全不认识的值回退到第一种情绪 —— 与 `getEmotion` 的策略保持一致，
+ * 宁可显示一颗「焦虑」，也不要让界面空着或崩掉。
+ */
+export function normalizeEmotionId(id: string): EmotionId {
+  if (isEmotionId(id)) return id;
+  return LEGACY_EMOTION_IDS[id] ?? EMOTIONS[0]!.id;
+}
+
 /** 读取情绪配置，未知 id 回退到第一种情绪，避免运行时报错。 */
 export function getEmotion(id: EmotionId): Emotion {
   return EMOTION_MAP[id] ?? EMOTIONS[0]!;
+}
+
+/** 按（可能是旧的）id 取情绪，展示历史记录时用这个。 */
+export function getEmotionLoose(id: string): Emotion {
+  return EMOTION_MAP[normalizeEmotionId(id)] ?? EMOTIONS[0]!;
 }
 
 /**

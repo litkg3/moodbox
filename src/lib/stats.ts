@@ -1,5 +1,6 @@
 import { endOfMonth, format, startOfMonth, subDays } from 'date-fns';
 import { toDateKey } from '@/lib/date';
+import { normalizeEmotionId } from '@/lib/emotions';
 import { EMOTION_IDS, type EmotionId, type EmotionLog, type MemoryRecord } from '@/types';
 
 export interface DaySummary {
@@ -61,7 +62,8 @@ export function buildDaySummary(
 
   const counts = new Map<EmotionId, number>();
   for (const log of dayLogs) {
-    counts.set(log.emotionId, (counts.get(log.emotionId) ?? 0) + 1);
+    const id = normalizeEmotionId(log.emotionId);
+    counts.set(id, (counts.get(id) ?? 0) + 1);
   }
   const emotions = [...counts.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -89,7 +91,10 @@ export function buildMonthStats(
 
   const counts = new Map<EmotionId, number>();
   for (const id of EMOTION_IDS) counts.set(id, 0);
-  for (const log of monthLogs) counts.set(log.emotionId, (counts.get(log.emotionId) ?? 0) + 1);
+  for (const log of monthLogs) {
+    const id = normalizeEmotionId(log.emotionId);
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
 
   const emotionCounts = [...counts.entries()]
     .map(([id, count]) => ({ id, count }))
@@ -102,7 +107,8 @@ export function buildMonthStats(
     const dayLogs = logs.filter((log) => log.date === dateKey);
     const dayCounts = new Map<EmotionId, number>();
     for (const log of dayLogs) {
-      dayCounts.set(log.emotionId, (dayCounts.get(log.emotionId) ?? 0) + 1);
+      const id = normalizeEmotionId(log.emotionId);
+      dayCounts.set(id, (dayCounts.get(id) ?? 0) + 1);
     }
     const top = [...dayCounts.entries()].sort((a, b) => b[1] - a[1])[0];
     return {

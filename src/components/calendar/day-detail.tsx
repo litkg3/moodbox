@@ -2,7 +2,7 @@
 
 import { Clock, Plus, Star, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { EMOTION_MAP } from '@/lib/emotions';
+import { getEmotionLoose } from '@/lib/emotions';
 import { formatClock, formatFullDate, formatRelativeDay, parseDateKey } from '@/lib/date';
 import type { EmotionLog, Memory } from '@/types';
 
@@ -59,8 +59,8 @@ export function DayDetail({
               <h3 className="text-[10.5px] uppercase tracking-[0.28em] text-ink-ghost">情绪</h3>
               <ul className="mt-3 flex flex-wrap gap-2">
                 {logs.map((log) => {
-                  const emotion = EMOTION_MAP[log.emotionId];
-                  if (!emotion) return null;
+                  // 旧记录里可能有已下线的情绪 id，统一映射到现存的那一颗
+                  const emotion = getEmotionLoose(log.emotionId);
                   return (
                     <li key={log.id}>
                       <span

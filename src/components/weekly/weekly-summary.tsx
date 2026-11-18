@@ -5,7 +5,7 @@ import { subDays } from 'date-fns';
 import { Sparkles } from 'lucide-react';
 import { useToolOverlay } from '@/components/layout/tool-overlay-provider';
 import { EMOTIONS } from '@/data/emotions';
-import { EMOTION_MAP } from '@/lib/emotions';
+import { EMOTION_MAP, normalizeEmotionId } from '@/lib/emotions';
 import { useMoodBox } from '@/hooks/use-moodbox';
 import { parseDateKey, toDateKey, todayKey } from '@/lib/date';
 import type { EmotionId } from '@/types';
@@ -49,7 +49,9 @@ export function WeeklySummary() {
 
     const counter = new Map<EmotionId, number>();
     for (const log of logs) {
-      counter.set(log.emotionId, (counter.get(log.emotionId) ?? 0) + 1);
+      // 已下线的球（EMO / 担心）按最接近的现存情绪计入，旧记录不会凭空消失
+      const id = normalizeEmotionId(log.emotionId);
+      counter.set(id, (counter.get(id) ?? 0) + 1);
     }
     const ranked = [...counter.entries()].sort((a, b) => b[1] - a[1]);
     const maxDay = Math.max(1, ...byDay.map((day) => day.count));

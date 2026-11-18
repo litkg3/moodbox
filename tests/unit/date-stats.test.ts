@@ -59,7 +59,7 @@ describe('日历聚合', () => {
     log('l2', 'joy', '2026-11-12', '2026-11-12T03:00:00.000Z'),
     log('l3', 'joy', '2026-11-12', '2026-11-12T05:00:00.000Z'),
     log('l4', 'exhaustion', '2026-11-10', '2026-11-10T12:00:00.000Z'),
-    log('l5', 'emo', '2026-10-31', '2026-10-31T12:00:00.000Z'),
+    log('l5', 'lost', '2026-10-31', '2026-10-31T12:00:00.000Z'),
   ];
 
   const memories: MemoryRecord[] = [
@@ -95,5 +95,37 @@ describe('日历聚合', () => {
     expect(stats.emotionCounts).toEqual([]);
     expect(stats.topEmotion).toBeNull();
     expect(stats.last7Days.every((day) => day.total === 0)).toBe(true);
+  });
+});
+
+/*
+ * 下线一颗球（EMO / 担心）之后，历史记录不能凭空消失。
+ * 统计层要把旧 id 归一到最接近的现存情绪，日历与周报才不会空出一格。
+ */
+describe('旧情绪 id 的兼容', () => {
+  it('EMO / 担心 会并入麻木 / 焦虑', async () => {
+    const { normalizeEmotionId } = await import('@/lib/emotions');
+    expect(normalizeEmotionId('emo')).toBe('numbness');
+    expect(normalizeEmotionId('worry')).toBe('anxiety');
+    expect(normalizeEmotionId('joy')).toBe('joy');
+    expect(normalizeEmotionId('whatever')).toBe('anxiety');
+  });
+
+  it('月度统计会合并旧 id，不再出现已下线的条目', () => {
+    const legacy = [
+      'emo',
+      'worry',
+      'numbness',
+      'anxiety',
+    ] as unknown as EmotionLog['emotionId'][];
+    const logs: EmotionLog[] = legacy.map((emotionId, index) =>
+      log(`l${index}`, emotionId, '2026-11-05', `2026-11-05T0${index}:00:00.000Z`),
+    );
+    const stats = buildMonthStats(logs, [], new Date(2026, 10, 12), new Date(2026, 10, 12));
+    const ids = stats.emotionCounts.map((item) => item.id);
+    expect(ids).not.toContain('emo');
+    expect(ids).not.toContain('worry');
+    expect(ids).toContain('numbness');
+    expect(ids).toContain('anxiety');
   });
 });

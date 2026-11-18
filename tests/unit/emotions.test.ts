@@ -4,8 +4,8 @@ import { EMOTION_IDS } from '@/types';
 import { DEFAULT_MIN_MESSAGES, MIN_MESSAGES_BY_EMOTION, pickMessage, validateEmotionLibrary } from '@/lib/emotions';
 
 describe('情绪内容库', () => {
-  it('覆盖全部 14 种情绪，且每种达到各自的最低文案条数', () => {
-    expect(EMOTIONS).toHaveLength(14);
+  it('覆盖全部情绪，且每种达到各自的最低文案条数', () => {
+    expect(EMOTIONS).toHaveLength(EMOTION_IDS.length);
     expect(EMOTIONS.map((emotion) => emotion.id).sort()).toEqual([...EMOTION_IDS].sort());
     for (const emotion of EMOTIONS) {
       const min = MIN_MESSAGES_BY_EMOTION[emotion.id] ?? DEFAULT_MIN_MESSAGES;
