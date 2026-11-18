@@ -107,7 +107,7 @@ const SUGGESTIONS: Record<EmotionId, Suggestion[]> = {
   ],
   joy: [
     { label: '开心罐', tool: 'jar' },
-    { label: '情绪周报', href: '/weekly' },
+    { label: '情绪周报', href: '/calendar' },
   ],
   pain: [
     { label: '树洞广场', href: '/square' },
@@ -115,7 +115,7 @@ const SUGGESTIONS: Record<EmotionId, Suggestion[]> = {
   ],
   exam: [
     { label: '呼吸放松', href: '/breathe' },
-    { label: '情绪周报', href: '/weekly' },
+    { label: '情绪周报', href: '/calendar' },
   ],
   irritation: [
     { label: '回主页捏爆一颗球', href: '/' },
@@ -127,7 +127,7 @@ const SUGGESTIONS: Record<EmotionId, Suggestion[]> = {
   ],
   lost: [
     { label: '树洞广场', href: '/square' },
-    { label: '情绪周报', href: '/weekly' },
+    { label: '情绪周报', href: '/calendar' },
   ],
   wronged: [
     { label: '心事信箱', tool: 'letters' },
