@@ -10,7 +10,6 @@ export const EMOTION_IDS = [
   'loneliness',
   'joy',
   'pain',
-  'fear',
   'exam',
   'irritation',
   'exhaustion',

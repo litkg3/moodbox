@@ -23,6 +23,7 @@ export function isEmotionId(value: unknown): value is EmotionId {
 export const LEGACY_EMOTION_IDS: Readonly<Record<string, EmotionId>> = {
   emo: 'numbness',
   worry: 'anxiety',
+  fear: 'anxiety',
 };
 
 /**

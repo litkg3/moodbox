@@ -75,7 +75,7 @@ const QUESTIONS: readonly QuizQuestion[] = [
       { text: '你已经做得很好了', emotion: 'exhaustion' },
       { text: '我在，你不用一个人', emotion: 'loneliness' },
       { text: '会过去的，我知道现在很难', emotion: 'sadness' },
-      { text: '别怕，真的没关系', emotion: 'fear' },
+      { text: '别怕，真的没关系', emotion: 'anxiety' },
     ],
   },
   {
@@ -113,10 +113,6 @@ const SUGGESTIONS: Record<EmotionId, Suggestion[]> = {
     { label: '树洞广场', href: '/square' },
     { label: '心事信箱', tool: 'letters' },
   ],
-  fear: [
-    { label: '呼吸放松', href: '/breathe' },
-    { label: '树洞广场', href: '/square' },
-  ],
   exam: [
     { label: '呼吸放松', href: '/breathe' },
     { label: '情绪周报', href: '/weekly' },
@@ -149,7 +145,6 @@ const TIE_BREAK: readonly EmotionId[] = [
   'sadness',
   'loneliness',
   'anxiety',
-  'fear',
   'exhaustion',
   'numbness',
   'exam',

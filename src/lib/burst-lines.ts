@@ -21,7 +21,6 @@ export const BURST_LINES: Record<EmotionId, (label: string) => string> = {
   sadness: (label) => `${label}被你捏爆了！负面情绪释放成功`,
   loneliness: (label) => `${label}被你捏爆了！负面情绪释放成功`,
   pain: (label) => `${label}被你捏爆了！负面情绪释放成功`,
-  fear: (label) => `${label}被你捏爆了！负面情绪释放成功`,
   irritation: (label) => `${label}被你捏爆了！负面情绪释放成功`,
   exhaustion: (label) => `${label}被你捏爆了！负面情绪释放成功`,
   lost: (label) => `${label}被你捏爆了！负面情绪释放成功`,

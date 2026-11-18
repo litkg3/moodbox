@@ -103,10 +103,11 @@ describe('日历聚合', () => {
  * 统计层要把旧 id 归一到最接近的现存情绪，日历与周报才不会空出一格。
  */
 describe('旧情绪 id 的兼容', () => {
-  it('EMO / 担心 会并入麻木 / 焦虑', async () => {
+  it('EMO / 担心 / 害怕 会并入麻木 / 焦虑', async () => {
     const { normalizeEmotionId } = await import('@/lib/emotions');
     expect(normalizeEmotionId('emo')).toBe('numbness');
     expect(normalizeEmotionId('worry')).toBe('anxiety');
+    expect(normalizeEmotionId('fear')).toBe('anxiety');
     expect(normalizeEmotionId('joy')).toBe('joy');
     expect(normalizeEmotionId('whatever')).toBe('anxiety');
   });
@@ -115,6 +116,7 @@ describe('旧情绪 id 的兼容', () => {
     const legacy = [
       'emo',
       'worry',
+      'fear',
       'numbness',
       'anxiety',
     ] as unknown as EmotionLog['emotionId'][];
