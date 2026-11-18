@@ -21,9 +21,11 @@ export const localBackend: ContentBackend = {
   createPost: squareRepo.createPost,
   setPostStatus: squareRepo.setPostStatus,
   deletePost: squareRepo.deletePost,
+  deleteOwnPost: squareRepo.deleteOwnPost,
   hugPost: squareRepo.hugPost,
   addReply: squareRepo.addReply,
   deleteReply: squareRepo.deleteReply,
+  deleteOwnReply: squareRepo.deleteOwnReply,
 
   listLetters: lettersRepo.listLetters,
   createLetter: lettersRepo.createLetter,

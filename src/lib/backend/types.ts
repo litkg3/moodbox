@@ -10,13 +10,22 @@ export interface StoryDraft {
 export interface PostDraft {
   content: string;
   nickname?: string;
+  /** 落空昵称时用的匿名代号（形如「匿名·K7Q2」） */
+  alias?: string;
   needsSupport?: boolean;
+  /** 访客稳定标识：用来判断「这条能不能由本人删」 */
+  visitorId?: string;
+  /** IP 归属地（城市级），只用于展示 */
+  region?: string | null;
 }
 
 export interface ReplyDraft {
   content: string;
   nickname?: string;
+  alias?: string;
   needsSupport?: boolean;
+  visitorId?: string;
+  region?: string | null;
 }
 
 /**
@@ -46,13 +55,17 @@ export interface ContentBackend {
   updateStory(id: string, draft: StoryDraft): Promise<HealingStory>;
   deleteStory(id: string): Promise<void>;
 
-  listPosts(): Promise<SquarePost[]>;
+  listPosts(viewerId?: string): Promise<SquarePost[]>;
   createPost(draft: PostDraft): Promise<SquarePost>;
   setPostStatus(id: string, status: PostStatus): Promise<SquarePost>;
   deletePost(id: string): Promise<void>;
+  /** 匿名游客删自己的帖子：云端会校验 visitor 与发布者是否一致 */
+  deleteOwnPost(id: string, visitorId: string): Promise<void>;
   hugPost(id: string): Promise<SquarePost>;
   addReply(postId: string, draft: ReplyDraft): Promise<SquarePost>;
   deleteReply(postId: string, replyId: string): Promise<SquarePost>;
+  /** 匿名游客删自己的回复 */
+  deleteOwnReply(postId: string, replyId: string, visitorId: string): Promise<SquarePost>;
 
   listLetters(): Promise<HeartLetter[]>;
   createLetter(content: string): Promise<HeartLetter>;

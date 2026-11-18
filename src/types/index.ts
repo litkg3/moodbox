@@ -208,6 +208,12 @@ export interface SquareReply {
   createdAt: string;
   /** 回复本身不做前置审核，但同样会跑一遍倾向识别，命中时在管理员视图里标出来 */
   needsSupport?: boolean;
+  /** 是不是当前访客自己写的：只有本人（或管理员）能看到删除按钮 */
+  mine?: boolean;
+  /** 发布时的 IP 归属地（城市级），拿不到就没有这一项 */
+  region?: string;
+  /** 本机模式下的发布者标识；云端不会下发，只在 IndexedDB 里留存 */
+  visitorId?: string;
 }
 
 /** 树洞广场的一条帖子 */
@@ -225,6 +231,12 @@ export interface SquarePost {
   needsSupport?: boolean;
   reviewedAt?: string;
   isDemo?: boolean;
+  /** 是不是当前访客自己写的：匿名游客只能删自己的帖子和回复 */
+  mine?: boolean;
+  /** 发布时的 IP 归属地（城市级），只到城市，不记录具体地址 */
+  region?: string;
+  /** 本机模式下的发布者标识；云端不会下发，只在 IndexedDB 里留存 */
+  visitorId?: string;
 }
 
 /** 心事信箱里的一封信 */

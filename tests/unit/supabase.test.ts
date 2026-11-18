@@ -52,7 +52,10 @@ describe('Supabase 后端 · 读', () => {
 
     const posts = await backend.listPosts();
 
-    expect(rpcMock).toHaveBeenCalledWith('moodbox_square_list', { p_token: null });
+    expect(rpcMock).toHaveBeenCalledWith('moodbox_square_list', {
+      p_token: null,
+      p_visitor: null,
+    });
     expect(posts).toHaveLength(1);
     expect(posts[0]).toMatchObject({
       id: 'post_abc',
@@ -71,11 +74,17 @@ describe('Supabase 后端 · 读', () => {
     const backend = createSupabaseBackend({ getToken: () => token });
 
     await backend.listPosts();
-    expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_list', { p_token: null });
+    expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_list', {
+      p_token: null,
+      p_visitor: null,
+    });
 
     token = 'moodbox2026';
-    await backend.listPosts();
-    expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_list', { p_token: 'moodbox2026' });
+    await backend.listPosts('visitor-key-123');
+    expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_list', {
+      p_token: 'moodbox2026',
+      p_visitor: 'visitor-key-123',
+    });
   });
 
   it('接口返回 null 时不会崩，给一个空数组', async () => {
@@ -106,6 +115,8 @@ describe('Supabase 后端 · 写', () => {
       p_content: '  今天还行  ',
       p_nickname: '匿名的人',
       p_needs_support: true,
+      p_visitor: null,
+      p_region: null,
     });
     const args = rpcMock.mock.calls[0]?.[1] as Record<string, unknown>;
     expect(args).not.toHaveProperty('p_status');
@@ -154,6 +165,45 @@ describe('Supabase 后端 · 写', () => {
     const post = await backend.hugPost('post_abc');
     expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_hug', { p_id: 'post_abc' });
     expect(post.hugs).toBe(4);
+  });
+
+  it('删除自己的帖子 / 回复走 delete_own，不携带管理员口令', async () => {
+    rpcMock.mockResolvedValue(ok(null));
+    const backend = createSupabaseBackend({ getToken: () => 'should-not-be-used' });
+
+    await backend.deleteOwnPost('post_abc', 'visitor-key');
+    expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_delete_own', {
+      p_id: 'post_abc',
+      p_visitor: 'visitor-key',
+    });
+
+    rpcMock.mockResolvedValue(ok(rawPost));
+    await backend.deleteOwnReply('post_abc', 'reply_1', 'visitor-key');
+    expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_delete_own_reply', {
+      p_post_id: 'post_abc',
+      p_reply_id: 'reply_1',
+      p_visitor: 'visitor-key',
+    });
+  });
+
+  it('mine / region 会被收敛成前端字段：数据库只下发布尔值，不下发指纹', async () => {
+    rpcMock.mockResolvedValue(
+      ok([
+        {
+          ...rawPost,
+          mine: true,
+          region: '广东·深圳',
+          replies: [{ ...rawPost.replies[0], mine: true, region: '广东·深圳' }],
+        },
+      ]),
+    );
+    const backend = createSupabaseBackend();
+    const posts = await backend.listPosts('visitor-key');
+
+    expect(posts[0]?.mine).toBe(true);
+    expect(posts[0]?.region).toBe('广东·深圳');
+    expect(posts[0]?.replies[0]?.mine).toBe(true);
+    expect(posts[0]?.replies[0]?.region).toBe('广东·深圳');
   });
 
   it('verifyAdmin 在服务端报错时返回 false，而不是抛异常', async () => {

@@ -15,6 +15,11 @@
 --    为什么这么设计：如果把「插入帖子」直接开放给 anon，客户端就能自己把
 --    status 写成 approved，审核形同不存在；如果把「更新」开放给 anon，
 --    任何人都能把别人的心事改掉。所以写操作一律收进函数里。
+--
+--    匿名身份：发帖/回复时前端会给一个匿名 key（由 IP 或本机随机值派生），
+--    这里只存它的 md5 指纹（visitor_hash），不存 IP 原文。列表接口只回
+--    `mine: true/false`，指纹不下发，所以「删自己的」这条规则在服务端成立。
+--    归属地（region）是城市级文字，由前端解析后带上，仅用于展示。
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -30,11 +35,19 @@ create table if not exists public.square_posts (
   hugs          integer     not null default 0 check (hugs >= 0),
   -- 命中自伤相关表达时置 true：不拦截发布，只是让管理员优先看到
   needs_support boolean     not null default false,
+  -- 发布者的匿名指纹（不存 IP 原文，只存哈希）与归属地文字
+  visitor_hash  text,
+  region        text,
   created_at    timestamptz not null default now(),
   reviewed_at   timestamptz
 );
 
+-- 老库升级：幂等补列
+alter table public.square_posts add column if not exists visitor_hash text;
+alter table public.square_posts add column if not exists region       text;
+
 comment on table public.square_posts is '树洞广场的帖子；所有读写都只能经 moodbox_* 函数';
+comment on column public.square_posts.visitor_hash is '发布者匿名指纹：只用于让本人删掉自己的帖子，不存 IP';
 
 create index if not exists square_posts_status_created_idx
   on public.square_posts (status, created_at desc);
@@ -46,10 +59,23 @@ create table if not exists public.square_replies (
   id            text        primary key,
   post_id       text        not null references public.square_posts (id) on delete cascade,
   nickname      text        not null default '匿名的人',
-  content       text        not null check (char_length(btrim(content)) between 1 and 400),
+  -- 回复最多 200 字（前端 maxLength、接口层、这里三处一致）
+  content       text        not null check (char_length(btrim(content)) between 1 and 200),
   needs_support boolean     not null default false,
+  visitor_hash  text,
+  region        text,
   created_at    timestamptz not null default now()
 );
+
+alter table public.square_replies add column if not exists visitor_hash text;
+alter table public.square_replies add column if not exists region       text;
+
+-- 老库的回复上限是 400，这里改成 200。
+-- 用 not valid 是为了不因为历史长回复导致整段脚本失败；新写入一律按 200 校验。
+alter table public.square_replies drop constraint if exists square_replies_content_check;
+alter table public.square_replies
+  add constraint square_replies_content_check
+  check (char_length(btrim(content)) between 1 and 200) not valid;
 
 create index if not exists square_replies_post_created_idx
   on public.square_replies (post_id, created_at);
@@ -110,6 +136,19 @@ as $$
   and length(coalesce(p_token, '')) >= 8;
 $$;
 
+-- 把客户端给的匿名标识收敛成一个固定长度的指纹。
+-- 存的是哈希，不是 key 原文，更不是 IP。
+create or replace function public.moodbox_visitor_hash(p_visitor text)
+returns text
+language sql
+immutable
+as $$
+  select case
+    when coalesce(btrim(p_visitor), '') = '' then null
+    else substr(md5(btrim(p_visitor) || ':moodbox-square'), 1, 16)
+  end;
+$$;
+
 -- 把一条帖子（含回复）拼成前端要的 jsonb
 create or replace function public.moodbox_post_json(p_id text)
 returns jsonb
@@ -125,8 +164,11 @@ as $$
     'status',       p.status,
     'hugs',         p.hugs,
     'needsSupport', p.needs_support,
+    'region',       p.region,
     'createdAt',    public.moodbox_iso(p.created_at),
     'reviewedAt',   public.moodbox_iso(p.reviewed_at),
+    -- 只在服务端内部流转：moodbox_mine() 用它算 mine，然后删掉
+    'visitorId',    p.visitor_hash,
     'replies', coalesce(
       (
         select jsonb_agg(
@@ -135,6 +177,8 @@ as $$
             'nickname',     r.nickname,
             'content',      r.content,
             'needsSupport', r.needs_support,
+            'region',       r.region,
+            'visitorId',    r.visitor_hash,
             'createdAt',    public.moodbox_iso(r.created_at)
           )
           order by r.created_at asc
@@ -149,12 +193,58 @@ as $$
   where p.id = p_id;
 $$;
 
+/*
+ * 给一条帖子（含回复）标上「是不是当前访客发的」，并抹掉 visitorId。
+ *
+ * 这样做的好处：匿名指纹**从不下发给浏览器**，别人就算抓包也拿不到
+ * 你的标识去冒充；而界面只需要 `mine: true/false` 就能决定显示不显示删除按钮。
+ */
+create or replace function public.moodbox_mine(p_post jsonb, p_visitor text)
+returns jsonb
+language sql
+immutable
+as $$
+  select jsonb_set(
+    jsonb_set(
+      p_post,
+      '{mine}',
+      to_jsonb(
+        coalesce(p_post ->> 'visitorId', '') <> ''
+        and p_post ->> 'visitorId' = coalesce(public.moodbox_visitor_hash(p_visitor), '')
+      )
+    ) - 'visitorId',
+    '{replies}',
+    coalesce(
+      (
+        select jsonb_agg(
+          (jsonb_set(
+            r,
+            '{mine}',
+            to_jsonb(
+              coalesce(r ->> 'visitorId', '') <> ''
+              and r ->> 'visitorId' = coalesce(public.moodbox_visitor_hash(p_visitor), '')
+            )
+          ) - 'visitorId')
+          order by r ->> 'createdAt'
+        )
+        from jsonb_array_elements(coalesce(p_post -> 'replies', '[]'::jsonb)) as r
+      ),
+      '[]'::jsonb
+    )
+  );
+$$;
+
 -- ---------------------------------------------------------------------------
 -- 6. 对外 RPC
 -- ---------------------------------------------------------------------------
 
 -- 读者视角：只看 approved；带上正确的管理员口令时能看到全部（含待审核）
-create or replace function public.moodbox_square_list(p_token text default null)
+-- 第三个参数是访客自己的匿名 key，只用来算 mine，不会存也不会回传
+drop function if exists public.moodbox_square_list(text);
+create or replace function public.moodbox_square_list(
+  p_token   text default null,
+  p_visitor text default null
+)
 returns jsonb
 language sql
 stable
@@ -162,7 +252,8 @@ security definer
 set search_path = public, pg_temp
 as $$
   select coalesce(
-    jsonb_agg(public.moodbox_post_json(p.id) order by p.created_at desc),
+    jsonb_agg(public.moodbox_mine(public.moodbox_post_json(p.id), p_visitor)
+              order by p.created_at desc),
     '[]'::jsonb
   )
   from public.square_posts p
@@ -171,10 +262,14 @@ as $$
 $$;
 
 -- 发帖：status 在函数里写死为 pending，客户端无法跳过审核
+-- p_visitor / p_region：匿名指纹与归属地，前者只存哈希，后者只存城市级文字
+drop function if exists public.moodbox_square_create(text, text, boolean);
 create or replace function public.moodbox_square_create(
   p_content       text,
   p_nickname      text default null,
-  p_needs_support boolean default false
+  p_needs_support boolean default false,
+  p_visitor       text default null,
+  p_region        text default null
 )
 returns jsonb
 language plpgsql
@@ -196,10 +291,18 @@ begin
 
   v_id := 'post_' || replace(gen_random_uuid()::text, '-', '');
 
-  insert into public.square_posts (id, nickname, content, status, needs_support)
-  values (v_id, left(coalesce(v_nick, '匿名的人'), 24), v_content, 'pending', coalesce(p_needs_support, false));
+  insert into public.square_posts (id, nickname, content, status, needs_support, visitor_hash, region)
+  values (
+    v_id,
+    left(coalesce(v_nick, '匿名的人'), 24),
+    v_content,
+    'pending',
+    coalesce(p_needs_support, false),
+    public.moodbox_visitor_hash(p_visitor),
+    left(btrim(coalesce(p_region, '')), 20)
+  );
 
-  return public.moodbox_post_json(v_id);
+  return public.moodbox_mine(public.moodbox_post_json(v_id), p_visitor);
 end;
 $$;
 
@@ -220,16 +323,20 @@ begin
     raise exception '这条帖子已经不在了。';
   end if;
 
-  return public.moodbox_post_json(p_id);
+  -- 不带 visitor：mine 一律 false，同时把 visitorId 抹掉，避免抱着抱着就把别人的指纹看走
+  return public.moodbox_mine(public.moodbox_post_json(p_id), null);
 end;
 $$;
 
--- 回复：只能回复已通过的帖子
+-- 回复：只能回复已通过的帖子；最多 200 字
+drop function if exists public.moodbox_square_reply(text, text, text, boolean);
 create or replace function public.moodbox_square_reply(
   p_post_id       text,
   p_content       text,
   p_nickname      text default null,
-  p_needs_support boolean default false
+  p_needs_support boolean default false,
+  p_visitor       text default null,
+  p_region        text default null
 )
 returns jsonb
 language plpgsql
@@ -244,8 +351,8 @@ begin
   if char_length(v_content) = 0 then
     raise exception '回复不能是空的。';
   end if;
-  if char_length(v_content) > 400 then
-    raise exception '回复太长了，400 字以内就好。';
+  if char_length(v_content) > 200 then
+    raise exception '回复最多 200 字，再精简一点吧。';
   end if;
   if not exists (
     select 1 from public.square_posts where id = p_post_id and status = 'approved'
@@ -253,16 +360,18 @@ begin
     raise exception '这条帖子已经不在了。';
   end if;
 
-  insert into public.square_replies (id, post_id, nickname, content, needs_support)
+  insert into public.square_replies (id, post_id, nickname, content, needs_support, visitor_hash, region)
   values (
     'reply_' || replace(gen_random_uuid()::text, '-', ''),
     p_post_id,
     left(coalesce(v_nick, '匿名的人'), 24),
     v_content,
-    coalesce(p_needs_support, false)
+    coalesce(p_needs_support, false),
+    public.moodbox_visitor_hash(p_visitor),
+    left(btrim(coalesce(p_region, '')), 20)
   );
 
-  return public.moodbox_post_json(p_post_id);
+  return public.moodbox_mine(public.moodbox_post_json(p_post_id), p_visitor);
 end;
 $$;
 
@@ -294,7 +403,7 @@ begin
     raise exception '这条帖子已经不在了。';
   end if;
 
-  return public.moodbox_post_json(p_id);
+  return public.moodbox_mine(public.moodbox_post_json(p_id), null);
 end;
 $$;
 
@@ -319,10 +428,12 @@ end;
 $$;
 
 -- 删回复：同样要口令
+drop function if exists public.moodbox_square_delete_reply(text, text, text);
 create or replace function public.moodbox_square_delete_reply(
   p_post_id  text,
   p_reply_id text,
-  p_token    text
+  p_token    text,
+  p_visitor  text default null
 )
 returns jsonb
 language plpgsql
@@ -336,7 +447,67 @@ begin
 
   delete from public.square_replies where id = p_reply_id and post_id = p_post_id;
 
-  return public.moodbox_post_json(p_post_id);
+  return public.moodbox_mine(public.moodbox_post_json(p_post_id), p_visitor);
+end;
+$$;
+
+/*
+ * 匿名访客删自己的帖子 / 回复。
+ *
+ * 不要求口令，但要求「发布时留下的指纹」与这次请求带来的匿名标识一致。
+ * 指纹只存在服务端，列表接口也只会回 `mine: true/false`，
+ * 所以别人拿不到你的指纹，也就删不掉你的东西。
+ */
+create or replace function public.moodbox_square_delete_own(p_id text, p_visitor text)
+returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_hash text := public.moodbox_visitor_hash(p_visitor);
+begin
+  if v_hash is null then
+    raise exception '没能确认这是你发的帖子。';
+  end if;
+
+  delete from public.square_posts
+   where id = p_id
+     and visitor_hash = v_hash;
+
+  if not found then
+    raise exception '这条帖子不是你发的，删不了。';
+  end if;
+end;
+$$;
+
+create or replace function public.moodbox_square_delete_own_reply(
+  p_post_id  text,
+  p_reply_id text,
+  p_visitor  text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_hash text := public.moodbox_visitor_hash(p_visitor);
+begin
+  if v_hash is null then
+    raise exception '没能确认这是你写的回复。';
+  end if;
+
+  delete from public.square_replies
+   where id = p_reply_id
+     and post_id = p_post_id
+     and visitor_hash = v_hash;
+
+  if not found then
+    raise exception '这条回复不是你写的，删不了。';
+  end if;
+
+  return public.moodbox_mine(public.moodbox_post_json(p_post_id), p_visitor);
 end;
 $$;
 
@@ -359,7 +530,7 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
-  select jsonb_build_object('ok', true, 'version', 1, 'at', public.moodbox_iso(now()));
+  select jsonb_build_object('ok', true, 'version', 2, 'at', public.moodbox_iso(now()));
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -368,16 +539,20 @@ $$;
 revoke all on function public.moodbox_iso(timestamptz)              from public;
 revoke all on function public.moodbox_is_admin(text)                 from public;
 revoke all on function public.moodbox_post_json(text)                from public;
+revoke all on function public.moodbox_visitor_hash(text)             from public;
+revoke all on function public.moodbox_mine(jsonb, text)              from public;
 
-grant execute on function public.moodbox_square_list(text)                      to anon, authenticated;
-grant execute on function public.moodbox_square_create(text, text, boolean)      to anon, authenticated;
-grant execute on function public.moodbox_square_hug(text)                        to anon, authenticated;
-grant execute on function public.moodbox_square_reply(text, text, text, boolean) to anon, authenticated;
-grant execute on function public.moodbox_square_review(text, text, text)         to anon, authenticated;
-grant execute on function public.moodbox_square_delete(text, text)               to anon, authenticated;
-grant execute on function public.moodbox_square_delete_reply(text, text, text)   to anon, authenticated;
-grant execute on function public.moodbox_admin_check(text)                       to anon, authenticated;
-grant execute on function public.moodbox_ping()                                  to anon, authenticated;
+grant execute on function public.moodbox_square_list(text, text)                                   to anon, authenticated;
+grant execute on function public.moodbox_square_create(text, text, boolean, text, text)            to anon, authenticated;
+grant execute on function public.moodbox_square_hug(text)                                          to anon, authenticated;
+grant execute on function public.moodbox_square_reply(text, text, text, boolean, text, text)       to anon, authenticated;
+grant execute on function public.moodbox_square_review(text, text, text)                           to anon, authenticated;
+grant execute on function public.moodbox_square_delete(text, text)                                 to anon, authenticated;
+grant execute on function public.moodbox_square_delete_own(text, text)                             to anon, authenticated;
+grant execute on function public.moodbox_square_delete_reply(text, text, text, text)               to anon, authenticated;
+grant execute on function public.moodbox_square_delete_own_reply(text, text, text)                 to anon, authenticated;
+grant execute on function public.moodbox_admin_check(text)                                         to anon, authenticated;
+grant execute on function public.moodbox_ping()                                                    to anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- 8. 设置管理员口令（改掉 'moodbox2026' 再执行）
@@ -388,7 +563,7 @@ values ('admin_token', 'moodbox2026')
 on conflict (key) do update set value = excluded.value;
 
 -- ---------------------------------------------------------------------------
--- 9. 自检：跑完这段应该看到 9 行函数、2 行 rellssecurity（true）
+-- 9. 自检：跑完这段应该看到 12 行 moodbox_* 函数、3 行 relrowsecurity（true）
 -- ---------------------------------------------------------------------------
 -- select routine_name from information_schema.routines
 --  where routine_schema = 'public' and routine_name like 'moodbox%' order by 1;

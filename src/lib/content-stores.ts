@@ -54,6 +54,10 @@ class ListStore<T> {
     return this.snapshot.items;
   }
 
+  protected get status(): ListStatus {
+    return this.snapshot.status;
+  }
+
   protected emit(next: Partial<ListSnapshot<T>>): void {
     this.snapshot = { ...this.snapshot, ...next };
     for (const listener of this.listeners) listener();
@@ -130,12 +134,31 @@ class StoriesStore extends ListStore<HealingStory> {
 
 /* ---------------- 树洞广场 ---------------- */
 
+/**
+ * 当前访客的标识。
+ *
+ * 放在模块顶层而不是实例字段上，是因为 `ListStore` 的构造参数里
+ * 还不能访问 `this`（要等 `super()` 返回）。身份本身是页面级的单例，
+ * 放在这里既简单也不会串。
+ */
+let squareViewerId: string | undefined;
+
 class SquareStore extends ListStore<SquarePost> {
   constructor() {
-    super(() => getContentBackend().listPosts(), {
+    super(() => getContentBackend().listPosts(squareViewerId), {
       // 接上 Supabase 后广场数据在云端，不需要本机 IndexedDB
       requiresLocalDb: getContentBackend().mode === 'local',
     });
+  }
+
+  /**
+   * 身份解析出来之后调一次：记下来，并在已经加载过的情况下重拉一次，
+   * 让「这条是不是我发的」立刻反映到界面上。
+   */
+  setViewer(visitorId: string): void {
+    if (squareViewerId === visitorId) return;
+    squareViewerId = visitorId;
+    if (this.status === 'ready') void this.refresh();
   }
 
   /** 管理员解锁 / 退出后要重新拉一次：待审核的帖子只有带令牌才看得到。 */
@@ -160,9 +183,18 @@ class SquareStore extends ListStore<SquarePost> {
     this.setItems(this.items.filter((item) => item.id !== id));
   }
 
+  /** 匿名游客删自己发的帖子 */
+  async removeOwn(id: string): Promise<void> {
+    await getContentBackend().deleteOwnPost(id, squareViewerId ?? '');
+    this.setItems(this.items.filter((item) => item.id !== id));
+  }
+
   async hug(id: string): Promise<void> {
     const next = await getContentBackend().hugPost(id);
-    this.setItems(this.items.map((item) => (item.id === id ? next : item)));
+    // 只取拥抱数：整条替换会把 mine（这条是不是我发的）一起冲掉
+    this.setItems(
+      this.items.map((item) => (item.id === id ? { ...item, hugs: next.hugs } : item)),
+    );
   }
 
   async reply(postId: string, draft: ReplyDraft): Promise<void> {
@@ -172,6 +204,12 @@ class SquareStore extends ListStore<SquarePost> {
 
   async removeReply(postId: string, replyId: string): Promise<void> {
     const next = await getContentBackend().deleteReply(postId, replyId);
+    this.setItems(this.items.map((item) => (item.id === postId ? next : item)));
+  }
+
+  /** 匿名游客删自己写的回复 */
+  async removeOwnReply(postId: string, replyId: string): Promise<void> {
+    const next = await getContentBackend().deleteOwnReply(postId, replyId, squareViewerId ?? '');
     this.setItems(this.items.map((item) => (item.id === postId ? next : item)));
   }
 

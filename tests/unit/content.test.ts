@@ -3,6 +3,8 @@ import { getDB } from '@/lib/db';
 import {
   addReply,
   createPost,
+  deleteOwnPost,
+  deleteOwnReply,
   deletePost,
   deleteReply,
   hugPost,
@@ -147,5 +149,48 @@ describe('树洞广场', () => {
     const post = await createPost({ content: '删了吧。' });
     await deletePost(post.id);
     expect(await listPosts()).toHaveLength(0);
+  });
+
+  it('匿名的帖子带 4 位后缀与归属地，且只有本人能删', async () => {
+    const mine = await createPost({
+      content: '我发的。',
+      alias: '匿名·K7Q2',
+      visitorId: 'key-a',
+      region: '广东·深圳',
+    });
+    const other = await createPost({ content: '别人发的。', visitorId: 'key-b' });
+
+    expect(mine.nickname).toBe('匿名·K7Q2');
+    expect(mine.region).toBe('广东·深圳');
+
+    const asA = await listPosts('key-a');
+    expect(asA.find((post) => post.id === mine.id)?.mine).toBe(true);
+    expect(asA.find((post) => post.id === other.id)?.mine).toBe(false);
+
+    await expect(deleteOwnPost(other.id, 'key-a')).rejects.toThrow(/不是你发的/);
+    await deleteOwnPost(mine.id, 'key-a');
+    expect((await listPosts('key-a')).some((post) => post.id === mine.id)).toBe(false);
+  });
+
+  it('回复最多 200 字；本人可以删掉自己的回复', async () => {
+    const post = await createPost({ content: '有人吗。', visitorId: 'key-a' });
+
+    await expect(
+      addReply(post.id, { content: '啊'.repeat(201), visitorId: 'key-a' }),
+    ).rejects.toThrow(/200/);
+
+    const withReply = await addReply(post.id, {
+      content: '我在。',
+      alias: '匿名·K7Q2',
+      visitorId: 'key-a',
+      region: '广东·深圳',
+    });
+    const reply = withReply.replies[0];
+    expect(reply?.mine).toBe(true);
+    expect(reply?.region).toBe('广东·深圳');
+
+    await expect(deleteOwnReply(post.id, reply!.id, 'key-b')).rejects.toThrow(/不是你写的/);
+    const cleared = await deleteOwnReply(post.id, reply!.id, 'key-a');
+    expect(cleared.replies).toHaveLength(0);
   });
 });

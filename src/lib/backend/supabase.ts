@@ -3,7 +3,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { localBackend } from '@/lib/backend/local';
 import type { ContentBackend, PostDraft, ReplyDraft } from '@/lib/backend/types';
-import { normalizeNickname } from '@/lib/square-repo';
+import { resolveAuthorName } from '@/lib/square-repo';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from '@/lib/supabase-config';
 import type { PostStatus, SquarePost, SquareReply } from '@/types';
 
@@ -43,6 +43,8 @@ function toReply(raw: unknown): SquareReply {
     content: String(row.content ?? ''),
     createdAt: normalizeIso(row.createdAt ?? row.created_at),
     needsSupport: Boolean(row.needsSupport ?? row.needs_support ?? false),
+    mine: Boolean(row.mine),
+    region: typeof row.region === 'string' && row.region ? row.region : undefined,
   };
 }
 
@@ -60,6 +62,8 @@ function toPost(raw: unknown): SquarePost {
     replies: Array.isArray(row.replies) ? row.replies.map(toReply) : [],
     needsSupport: Boolean(row.needsSupport ?? row.needs_support ?? false),
     reviewedAt: row.reviewedAt ? normalizeIso(row.reviewedAt) : undefined,
+    mine: Boolean(row.mine),
+    region: typeof row.region === 'string' && row.region ? row.region : undefined,
   };
 }
 
@@ -130,21 +134,28 @@ export function createSupabaseBackend(options: SupabaseBackendOptions = {}): Con
 
     /* ---------------- 广场：走 Supabase ---------------- */
 
-    async listPosts() {
-      const data = await rpc<unknown[]>('moodbox_square_list', { p_token: token() });
+    async listPosts(viewerId?: string) {
+      const data = await rpc<unknown[]>('moodbox_square_list', {
+        p_token: token(),
+        p_visitor: viewerId ?? null,
+      });
       return (Array.isArray(data) ? data : []).map(toPost);
     },
 
     async createPost(draft: PostDraft) {
       // 注意：`status` 不由客户端传。数据库函数里写死了 `pending`，
       // 所以就算有人改了前端代码，也没法跳过审核。
-      return toPost(
+      const created = toPost(
         await rpc('moodbox_square_create', {
           p_content: draft.content,
-          p_nickname: normalizeNickname(draft.nickname),
+          p_nickname: resolveAuthorName(draft.nickname, draft.alias),
           p_needs_support: draft.needsSupport ?? false,
+          p_visitor: draft.visitorId ?? null,
+          p_region: draft.region ?? null,
         }),
       );
+      // 刚发出去的那条一定是自己的，不必等下一次刷新
+      return { ...created, mine: true };
     },
 
     async setPostStatus(id: string, status: PostStatus) {
@@ -162,14 +173,22 @@ export function createSupabaseBackend(options: SupabaseBackendOptions = {}): Con
     },
 
     async addReply(postId: string, draft: ReplyDraft) {
-      return toPost(
+      const next = toPost(
         await rpc('moodbox_square_reply', {
           p_post_id: postId,
           p_content: draft.content,
-          p_nickname: normalizeNickname(draft.nickname),
+          p_nickname: resolveAuthorName(draft.nickname, draft.alias),
           p_needs_support: draft.needsSupport ?? false,
+          p_visitor: draft.visitorId ?? null,
+          p_region: draft.region ?? null,
         }),
       );
+      return {
+        ...next,
+        replies: next.replies.map((reply, index) =>
+          index === next.replies.length - 1 ? { ...reply, mine: true } : reply,
+        ),
+      };
     },
 
     async deleteReply(postId: string, replyId: string) {
@@ -178,6 +197,20 @@ export function createSupabaseBackend(options: SupabaseBackendOptions = {}): Con
           p_post_id: postId,
           p_reply_id: replyId,
           p_token: token(),
+        }),
+      );
+    },
+
+    async deleteOwnPost(id: string, visitorId: string) {
+      await rpc('moodbox_square_delete_own', { p_id: id, p_visitor: visitorId });
+    },
+
+    async deleteOwnReply(postId: string, replyId: string, visitorId: string) {
+      return toPost(
+        await rpc('moodbox_square_delete_own_reply', {
+          p_post_id: postId,
+          p_reply_id: replyId,
+          p_visitor: visitorId,
         }),
       );
     },

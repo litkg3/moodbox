@@ -145,13 +145,19 @@ square_posts  ← RLS 开启，anon 零策略 = 零权限
 
 | 动作 | 函数 | 谁可以做 |
 | --- | --- | --- |
-| 读列表 | `moodbox_square_list(p_token)` | 所有人，但只返回 `approved`；带对令牌才返回待审核的 |
-| 发帖 | `moodbox_square_create` | 所有人，`status` 在函数里写死为 `pending` |
+| 读列表 | `moodbox_square_list(p_token, p_visitor)` | 所有人，但只返回 `approved`；带对令牌才返回待审核的；`p_visitor` 只用来给每条记录打 `mine` |
+| 发帖 | `moodbox_square_create(..., p_visitor, p_region)` | 所有人，`status` 在函数里写死为 `pending` |
 | 抱一下 | `moodbox_square_hug` | 所有人，但只对 `approved` 生效 |
-| 回复 | `moodbox_square_reply` | 所有人，但只能回复 `approved` |
+| 回复 | `moodbox_square_reply(..., p_visitor, p_region)` | 所有人，但只能回复 `approved`；正文上限 200 字 |
 | 审核 | `moodbox_square_review(..., p_token)` | 口令必须等于 `moodbox_config.admin_token` |
 | 删帖 / 删回复 | `moodbox_square_delete*` | 同上 |
+| 删自己的帖 | `moodbox_square_delete_own(p_id, p_visitor)` | 所有人，但只认 `visitor_hash` 匹配的那一条，**不要求口令** |
+| 删自己的回复 | `moodbox_square_delete_own_reply(..., p_visitor)` | 同上 |
 | 校验口令 | `moodbox_admin_check(p_token)` | 所有人，只回 `true/false` |
+
+两个 `delete_own` 是访客自删的唯一入口：比对的是 `moodbox_visitor_hash(p_visitor)` 与行上存的 `visitor_hash`，
+不匹配直接报「这条帖子不是你发的」。返回给客户端的列表里 `visitorId` 一律被剥掉，只留 `mine` 布尔 ——
+**即使有人改前端把 `mine` 改成 `true`，服务端也不会认。**
 
 于是：**管理员那层从"界面遮罩"变成了真的权限边界。** 你可以在浏览器里手改 sessionStorage，界面会显示管理员按钮，但一点审核就会收到 `管理员口令不对`。
 

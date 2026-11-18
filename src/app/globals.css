@@ -555,6 +555,38 @@ html[data-theme='night'] .mb-panel {
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+/*
+ * 夜间模式会把「白」整体重映射成深紫灰（见上面的 --color-white）。
+ * 但深色卡片本身就是深底，里面的 `border-white/12`、`bg-white/10`
+ * 表达的是「比卡片更亮一点」，一旦被重映射就会彻底看不见 ——
+ * 卡片里那条叹气色的分隔线就是这么消失的。所以在卡片内部把白还回去。
+ */
+html[data-theme='night'] .mb-deep-card {
+  --color-white: #ffffff;
+}
+
+/* 深色卡片里的分隔线：两端淡出，两张主题下都看得见 */
+.mb-deep-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.22) 16%,
+    rgba(255, 255, 255, 0.22) 84%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+html[data-theme='night'] .mb-deep-divider {
+  background: linear-gradient(
+    90deg,
+    rgba(201, 180, 239, 0) 0%,
+    rgba(201, 180, 239, 0.45) 16%,
+    rgba(201, 180, 239, 0.45) 84%,
+    rgba(201, 180, 239, 0) 100%
+  );
+}
+
 /* 深色卡片里的次要文字 */
 .mb-deep-muted {
   color: #bdb4d4;

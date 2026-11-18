@@ -6,6 +6,7 @@ import {
   Check,
   Database,
   HeartHandshake,
+  MapPin,
   MessageCircle,
   MessagesSquare,
   PenLine,
@@ -26,6 +27,9 @@ import { describeBackend } from '@/lib/backend';
 import { useSquare, squareStore } from '@/lib/content-stores';
 import { scanForCrisis } from '@/lib/crisis';
 import { formatClock, formatRelativeDay } from '@/lib/date';
+import { MAX_REPLY_LENGTH, charLength } from '@/lib/square-repo';
+import { scanSensitive } from '@/lib/sensitive';
+import { resolveVisitor, type VisitorIdentity } from '@/lib/visitor';
 import type { SquarePost, SquareReply } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -48,6 +52,23 @@ export function SquareView() {
   useEffect(() => {
     const info = describeBackend();
     setSource({ label: info.label, detail: info.detail });
+  }, []);
+
+  /**
+   * 访客身份：决定「匿名·XXXX」这个后缀，以及能不能删自己发的东西。
+   * 解析可能要等一次归属地查询，所以拿到之后要通知 store 重算 mine。
+   */
+  const [visitor, setVisitor] = useState<VisitorIdentity | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void resolveVisitor().then((identity) => {
+      if (!alive) return;
+      setVisitor(identity);
+      squareStore.setViewer(identity.key);
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const [composeOpen, setComposeOpen] = useState(false);
@@ -83,6 +104,9 @@ export function SquareView() {
       await squareStore.publish({
         content,
         nickname,
+        alias: visitor?.alias,
+        visitorId: visitor?.key,
+        region: visitor?.region ?? null,
         needsSupport: scanForCrisis(content).flagged,
       });
       setComposeOpen(false);
@@ -114,6 +138,9 @@ export function SquareView() {
     try {
       await squareStore.reply(postId, {
         content,
+        alias: visitor?.alias,
+        visitorId: visitor?.key,
+        region: visitor?.region ?? null,
         needsSupport: scanForCrisis(content).flagged,
       });
       showToast('回复已经送达。');
@@ -128,6 +155,19 @@ export function SquareView() {
   }
 
   function requestReply(postId: string, content: string) {
+    // 先挡敏感词，再走自伤提醒：前者是"换个说法"，后者是"我听见了"
+    const sensitive = scanSensitive(content);
+    if (sensitive.hit) {
+      showToast(
+        `这段话里有不适合出现在广场上的词（${sensitive.masked.join('、')}），换个说法再发吧。`,
+        'caution',
+      );
+      return;
+    }
+    if (charLength(content) > MAX_REPLY_LENGTH) {
+      showToast(`回复最多 ${MAX_REPLY_LENGTH} 字，再精简一点吧。`, 'caution');
+      return;
+    }
     if (scanForCrisis(content).flagged) {
       setPendingAction({ kind: 'reply', postId, content, nickname: '' });
       setCrisisOpen(true);
@@ -162,12 +202,29 @@ export function SquareView() {
   async function confirmDelete() {
     if (!deleteTarget) return;
     try {
-      await squareStore.remove(deleteTarget.id);
+      // 管理员走管理删除；匿名游客只能删自己发的，接口层会再校验一次
+      if (isAdmin) await squareStore.remove(deleteTarget.id);
+      else await squareStore.removeOwn(deleteTarget.id);
       showToast('这条帖子已经删掉了。');
       setDeleteTarget(null);
     } catch (deleteError) {
       showToast(
         deleteError instanceof Error ? deleteError.message : '删除失败，请稍后再试。',
+        'caution',
+      );
+      setDeleteTarget(null);
+    }
+  }
+
+  /** 删一条回复：管理员能删任意一条，匿名游客只能删自己写的。 */
+  async function handleDeleteReply(postId: string, replyId: string) {
+    try {
+      if (isAdmin) await squareStore.removeReply(postId, replyId);
+      else await squareStore.removeOwnReply(postId, replyId);
+      showToast('这条回复已经删掉了。');
+    } catch (deleteError) {
+      showToast(
+        deleteError instanceof Error ? deleteError.message : '删除回复失败，请稍后再试。',
         'caution',
       );
     }
@@ -333,10 +390,12 @@ export function SquareView() {
                 <PostCard
                   post={post}
                   isAdmin={isAdmin}
+                  canDelete={isAdmin || Boolean(post.mine)}
                   working={working}
                   onHug={() => void handleHug(post.id)}
                   onReply={(content) => requestReply(post.id, content)}
                   onDelete={() => setDeleteTarget(post)}
+                  onDeleteReply={(replyId) => void handleDeleteReply(post.id, replyId)}
                 />
               </li>
             ))}
@@ -381,11 +440,17 @@ export function SquareView() {
               onChange={(event) =>
                 setDraft((prev) => ({ ...prev, nickname: event.target.value }))
               }
-              placeholder="匿名的人"
+              placeholder={visitor?.alias ?? '匿名的人'}
               className="mb-field mt-2"
               maxLength={16}
             />
           </label>
+          <p className="-mt-1 text-[11px] leading-[1.85] text-ink-ghost">
+            留空就用「{visitor?.alias ?? '匿名的人'}」这个名字。
+            {visitor?.region
+              ? `你的帖子旁会标「${visitor.region}」，这是按 IP 归属地取的，只到城市。`
+              : '你的帖子旁会标一个 IP 归属地，只到城市。'}
+          </p>
           <label className="block">
             <span className="text-[12px] text-ink-soft">说点什么</span>
             <textarea
@@ -419,7 +484,11 @@ export function SquareView() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={confirmDelete}
         title="删除这条帖子？"
-        description="删除后无法恢复，包括它收到的拥抱和回复。"
+        description={
+          isAdmin
+            ? '删除后无法恢复，包括它收到的拥抱和回复。'
+            : '这是你发的帖子，删除后无法恢复，包括它收到的拥抱和回复。'
+        }
         confirmLabel="删除"
       />
     </div>
@@ -431,26 +500,36 @@ export function SquareView() {
 function PostCard({
   post,
   isAdmin,
+  canDelete,
   working,
   onHug,
   onReply,
   onDelete,
+  onDeleteReply,
 }: {
   post: SquarePost;
   isAdmin: boolean;
+  /** 管理员，或这条帖子就是自己发的 */
+  canDelete: boolean;
   working: boolean;
   onHug: () => void;
   onReply: (content: string) => void;
   onDelete: () => void;
+  onDeleteReply: (replyId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [hugged, setHugged] = useState(false);
 
+  // 边打字边检查：命中就提示并禁用发送，不用等按下按钮才被拦
+  const replyScan = useMemo(() => scanSensitive(replyText), [replyText]);
+  const replyLength = charLength(replyText);
+  const blocked = replyScan.hit || replyLength > MAX_REPLY_LENGTH;
+
   function submitReply() {
     const content = replyText.trim();
-    if (!content) return;
+    if (!content || blocked) return;
     onReply(content);
     setReplyText('');
     setReplyOpen(false);
@@ -461,6 +540,15 @@ function PostCard({
     <article className="rounded-[22px] border border-white/70 bg-white/50 p-5 transition-colors duration-500 hover:bg-white/60 sm:p-6">
       <header className="flex flex-wrap items-center gap-2 text-[11px] text-ink-ghost">
         <span className="text-ink-faint">{post.nickname}</span>
+        {post.region ? (
+          <span
+            className="inline-flex items-center gap-1 rounded-full bg-[rgba(141,133,152,0.1)] px-1.5 py-[1px] text-[10.5px] text-ink-ghost"
+            title="按 IP 归属地显示，只到城市"
+          >
+            <MapPin size={10} strokeWidth={1.7} aria-hidden="true" />
+            {post.region}
+          </span>
+        ) : null}
         <span aria-hidden="true">·</span>
         <span>
           {formatRelativeDay(post.createdAt.slice(0, 10))} {formatClock(post.createdAt)}
@@ -470,7 +558,7 @@ function PostCard({
             示例
           </span>
         ) : null}
-        {isAdmin ? (
+        {canDelete ? (
           <button
             type="button"
             onClick={onDelete}
@@ -548,9 +636,26 @@ function PostCard({
                 onChange={(event) => setReplyText(event.target.value)}
                 placeholder="写一句就好，不必给建议。"
                 rows={3}
-                maxLength={400}
+                maxLength={MAX_REPLY_LENGTH}
+                aria-label="回复内容"
                 className="mb-field resize-y text-[12.5px] leading-[1.9]"
               />
+              <div className="mt-1.5 flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                <p
+                  className={cn(
+                    'text-[11px] leading-relaxed',
+                    replyScan.hit ? 'text-[#8a4a45]' : 'text-ink-ghost',
+                  )}
+                  aria-live="polite"
+                >
+                  {replyScan.hit
+                    ? `这段里有不适合出现在广场上的词（${replyScan.masked.join('、')}），换个说法再发吧。`
+                    : `最多 ${MAX_REPLY_LENGTH} 字，说一句就够。`}
+                </p>
+                <span className="ml-auto text-[11px] tabular-nums text-ink-ghost">
+                  {replyLength} / {MAX_REPLY_LENGTH}
+                </span>
+              </div>
               <div className="mt-2 flex items-center justify-end gap-2">
                 <Button variant="ghost" size="sm" onClick={() => setReplyOpen(false)}>
                   算了
@@ -559,7 +664,7 @@ function PostCard({
                   variant="primary"
                   size="sm"
                   onClick={submitReply}
-                  disabled={!replyText.trim() || working}
+                  disabled={!replyText.trim() || blocked || working}
                 >
                   <Send size={12} strokeWidth={1.8} />
                   发送
@@ -580,7 +685,12 @@ function PostCard({
             className="overflow-hidden"
           >
             {post.replies.map((reply) => (
-              <ReplyItem key={reply.id} reply={reply} postId={post.id} isAdmin={isAdmin} />
+              <ReplyItem
+                key={reply.id}
+                reply={reply}
+                canDelete={isAdmin || Boolean(reply.mine)}
+                onDelete={() => onDeleteReply(reply.id)}
+              />
             ))}
           </motion.ul>
         ) : null}
@@ -591,36 +701,29 @@ function PostCard({
 
 function ReplyItem({
   reply,
-  postId,
-  isAdmin,
+  canDelete,
+  onDelete,
 }: {
   reply: SquareReply;
-  postId: string;
-  isAdmin: boolean;
+  canDelete: boolean;
+  onDelete: () => void;
 }) {
-  const { showToast } = useToast();
-
-  async function handleDelete() {
-    try {
-      await squareStore.removeReply(postId, reply.id);
-    } catch (deleteError) {
-      showToast(
-        deleteError instanceof Error ? deleteError.message : '删除回复失败，请稍后再试。',
-        'caution',
-      );
-    }
-  }
-
   return (
     <li className="mt-3 border-l-2 border-[rgba(201,182,232,0.45)] pl-3.5">
-      <div className="flex items-center gap-2 text-[10.5px] text-ink-ghost">
+      <div className="flex flex-wrap items-center gap-2 text-[10.5px] text-ink-ghost">
         <span className="text-ink-faint">{reply.nickname}</span>
+        {reply.region ? (
+          <span className="inline-flex items-center gap-0.5 text-[10px] text-ink-ghost" title="按 IP 归属地显示，只到城市">
+            <MapPin size={9} strokeWidth={1.7} aria-hidden="true" />
+            {reply.region}
+          </span>
+        ) : null}
         <span aria-hidden="true">·</span>
         <span>{formatClock(reply.createdAt)}</span>
-        {isAdmin ? (
+        {canDelete ? (
           <button
             type="button"
-            onClick={() => void handleDelete()}
+            onClick={onDelete}
             aria-label="删除这条回复"
             className="ml-auto grid h-6 w-6 place-items-center rounded-full text-ink-ghost transition-colors hover:text-[#8a4a45]"
           >

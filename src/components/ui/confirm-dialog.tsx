@@ -60,11 +60,11 @@ export function ConfirmDialog({
         </div>
       }
     >
-      {children ?? (
-        <p className="text-[12.5px] leading-[1.95] text-ink-soft">
-          {description ?? '这个操作无法撤销。'}
-        </p>
-      )}
+      {/*
+        说明文案交给 Dialog 的 description 渲染一次就够了。
+        以前这里把 description 又当正文渲染了一遍，弹层里会出现两段一样的字。
+      */}
+      {children ?? null}
     </Dialog>
   );
 }

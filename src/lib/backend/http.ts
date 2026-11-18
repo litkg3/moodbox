@@ -104,17 +104,28 @@ export function createHttpBackend(options: HttpBackendOptions): ContentBackend {
       request(`/stories/${id}`, { method: 'PATCH', body: JSON.stringify(draft) }),
     deleteStory: (id) => request(`/stories/${id}`, { method: 'DELETE' }),
 
-    listPosts: () => request('/posts'),
+    listPosts: (viewerId?: string) =>
+      request(`/posts${viewerId ? `?viewer=${encodeURIComponent(viewerId)}` : ''}`),
     createPost: (draft: PostDraft) =>
       request('/posts', { method: 'POST', body: JSON.stringify(draft) }),
     setPostStatus: (id, status: PostStatus) =>
       request(`/posts/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
     deletePost: (id) => request(`/posts/${id}`, { method: 'DELETE' }),
+    deleteOwnPost: (id, visitorId) =>
+      request(`/posts/${id}`, {
+        method: 'DELETE',
+        headers: { 'X-Moodbox-Visitor': visitorId },
+      }),
     hugPost: (id) => request(`/posts/${id}/hugs`, { method: 'POST' }),
     addReply: (postId, draft: ReplyDraft) =>
       request(`/posts/${postId}/replies`, { method: 'POST', body: JSON.stringify(draft) }),
     deleteReply: (postId, replyId) =>
       request(`/posts/${postId}/replies/${replyId}`, { method: 'DELETE' }),
+    deleteOwnReply: (postId, replyId, visitorId) =>
+      request(`/posts/${postId}/replies/${replyId}`, {
+        method: 'DELETE',
+        headers: { 'X-Moodbox-Visitor': visitorId },
+      }),
 
     listLetters: () => request('/letters'),
     createLetter: (content: string) =>

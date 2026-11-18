@@ -222,7 +222,8 @@ function EmotionPanelContent({
       </div>
 
       {/* 分隔线：下半部分给心事信箱，让这块卡片也能直接写一封 */}
-      <div className="mt-6 border-t border-white/12 pt-5">
+      <div className="mt-6 pt-1">
+        <div aria-hidden="true" className="mb-deep-divider mb-5" />
         <div className="flex items-center justify-center gap-1.5 text-[11.5px] tracking-[0.06em] text-[#c9c0dd]">
           <Mail size={13} strokeWidth={1.6} aria-hidden="true" />
           心事信箱
