@@ -82,7 +82,7 @@ export function HomeExperience() {
   });
 
   return (
-    <main className="relative min-h-[100dvh] w-full overflow-hidden">
+    <main className="home-stage relative min-h-[100dvh] w-full overflow-hidden">
       <EmotionSky
         activeId={selectedEmotion?.id ?? null}
         bursts={bursts}
@@ -92,7 +92,7 @@ export function HomeExperience() {
       />
 
       <div className="pointer-events-none relative z-10 flex min-h-[100dvh] flex-col items-center justify-center px-5 pb-24 pt-[96px] lg:pb-28 lg:pt-[108px]">
-        <div className="flex w-full max-w-[440px] flex-col items-center text-center">
+        <div className="home-copy flex w-full max-w-[440px] flex-col items-center text-center">
           {/* 标题与寄语：刻意做轻，不跟球抢视线 */}
           <motion.h1
             {...fade(0.2)}

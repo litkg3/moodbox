@@ -1012,17 +1012,80 @@ html[data-theme='night'] .mb-btn-danger {
   .orb-desktop-only {
     display: none;
   }
+}
 
+@media (max-height: 519px) {
+  /*
+   * 横屏也是「矮屏」：桌面坐标会在左右两侧留白、中央文字压住球，
+   * 这里一并换成矮屏舞台（见文件后面 `.emotion-sky .orb-anchor` 那段）。
+   */
+  .orb-anchor {
+    left: var(--orb-x-s);
+    top: var(--orb-y-s);
+  }
+
+  /* 桌面端在窄高窗口下本来会隐藏「没有移动坐标」的球；矮屏已经全部有坐标了，不该再藏 */
+  .orb-desktop-only {
+    display: block;
+  }
 }
 
 /*
- * 天空被压矮时的降级（见 emotion-sky 里的 compact）：隐去外圈四颗，
- * 剩下的球按内圈坐标重新分布 —— 只把外圈的球挪到内侧，内圈的不动，
- * 避免一开键盘整片球都在跳。
+ * 矮屏舞台：手机横屏、分屏、或浏览器工具栏吃掉大半高度时，可视高度可能只剩
+ * 300–450px。这时候不能再按「竖屏那套百分比」摆放 —— 上下两排会撞在一起。
+ *
+ * 做法是把 14 颗球按「之字形」重排进 x 方向 4 列、y 方向 3–4 行：
+ * 中间那列稍微让开，给「让情绪有处安放」那两行字留出通道。
+ * 球也整体缩小一档，让 4 列排得下 —— 一定要窄于屏幕，否则左右两侧会被切边。
+ * 每一颗球都有独立的 x / y，全部落在 5%–95% 内，不会顶到页头和屏幕上沿。
  */
-@media (max-width: 1023px) {
-  .emotion-sky-compact .orb-compact-hide {
+@media (max-height: 519px) {
+  .emotion-sky {
+    min-height: 260px;
+  }
+
+  .emotion-sky {
+    --orb-base-s: clamp(44px, 6.4vh, 62px);
+  }
+
+  .emotion-sky .orb-anchor {
+    left: var(--orb-x-s);
+    top: var(--orb-y-s);
+    width: calc(var(--orb-base-s) * var(--orb-scale-s));
+    height: calc(var(--orb-base-s) * var(--orb-scale-s));
+  }
+}
+
+/*
+ * 矮屏舞台（手机横屏 / 分屏 / 工具栏很高）：可视高度往往只有 300–400px。
+ * 竖屏那套「上下各两排」的坐标会撞在一起，所以这里整体重排：
+ *
+ * - 球缩到 44–62px，排成左右两条竖列 + 上沿一排，中间整块留给文字；
+ * - 文案跟着收紧（寄语在矮屏收起，标题压成一行），否则文字本身就要占掉一半高度；
+ * - 「树洞广场」按钮留在中下部，球从两侧绕开它。
+ *
+ * 目标只有一个：**一颗都不少**，而且谁都不压谁。
+ */
+@media (max-height: 519px) {
+  .home-stage .home-copy h1 {
+    font-size: 15px;
+    line-height: 1.6;
+    letter-spacing: 0.1em;
+  }
+
+  .home-stage .home-copy h1 br {
     display: none;
+  }
+
+  .home-stage .home-copy p {
+    display: none;
+  }
+
+  .home-stage .home-copy a {
+    margin-top: 10px;
+    height: 32px;
+    font-size: 11.5px;
+    padding-inline: 14px;
   }
 }
 

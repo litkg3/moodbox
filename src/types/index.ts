@@ -67,6 +67,12 @@ export interface Emotion {
   placement: {
     desktop: OrbPlacement;
     mobile?: OrbPlacement;
+    /**
+     * 矮屏坐标：手机横屏、分屏、浏览器工具栏占满时，可视高度可能只剩 300–450px。
+     * 这时竖屏那套上下两排会撞在一起，需要重排成更扁的舞台。
+     * 缺省时退回 mobile（没有 mobile 就退回 desktop）。
+     */
+    short?: Pick<OrbPlacement, 'x' | 'y' | 'scale'>;
   };
   /** 至少 15 条温柔陪伴文案（不承诺疗效、不说教） */
   messages: readonly string[];

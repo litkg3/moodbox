@@ -32,8 +32,27 @@ describe('情绪内容库', () => {
     }
   });
 
-  it('痛苦情绪附带低打扰的现实支持提示', () => {
-    const pain = EMOTIONS.find((emotion) => emotion.id === 'pain');
+  /*
+   * 每一颗球都必须有「矮屏坐标」。
+   * 手机横屏、分屏时可视高度只剩 300 多 px，缺了这套坐标就只能退回竖屏那套，
+   * 上下两排会撞在一起 —— 用户看到的就是「球少了 / 球叠着」。
+   * 坐标同时要留边：球心离屏幕边缘太近，加上 20~30px 的漂浮位移就会被切掉。
+   */
+  it('每种情绪都有矮屏坐标，且留足边距', () => {
+    for (const emotion of EMOTIONS) {
+      const short = emotion.placement.short;
+      expect(short, `${emotion.label} 缺少矮屏坐标`).toBeTruthy();
+      if (!short) continue;
+      expect(short.x).toBeGreaterThanOrEqual(10);
+      expect(short.x).toBeLessThanOrEqual(90);
+      expect(short.y).toBeGreaterThanOrEqual(8);
+      expect(short.y).toBeLessThanOrEqual(92);
+      expect(short.scale).toBeGreaterThan(0.5);
+      expect(short.scale).toBeLessThanOrEqual(1.1);
+    }
+  });
+
+  it('痛苦情绪附带低打扰的现实支持提示', () => {    const pain = EMOTIONS.find((emotion) => emotion.id === 'pain');
     expect(pain?.supportNote).toBeTruthy();
     expect(pain?.supportNote).toContain('热线');
   });

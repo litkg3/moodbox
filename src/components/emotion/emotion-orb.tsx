@@ -16,8 +16,6 @@ export interface EmotionOrbProps {
   receded?: boolean;
   /** 正在被捏爆：播放碎裂动画，结束后由父级把它从天空里移除 */
   bursting?: boolean;
-  /** 画面被压矮时只展示内圈的球（见 emotion-sky 里的 compact 判定） */
-  compactHidden?: boolean;
   onSelect: (emotion: Emotion) => void;
   onBurstComplete?: (emotionId: Emotion['id']) => void;
 }
@@ -59,12 +57,12 @@ export function EmotionOrb({
   active = false,
   receded = false,
   bursting = false,
-  compactHidden = false,
   onSelect,
   onBurstComplete,
 }: EmotionOrbProps) {
   const desktop = emotion.placement.desktop;
   const mobile = emotion.placement.mobile;
+  const short = emotion.placement.short ?? mobile ?? desktop;
   const reduceMotion = useReducedMotion();
 
   const style: OrbStyleVars = useMemo(
@@ -75,6 +73,10 @@ export function EmotionOrb({
       '--orb-x-m': `${mobile?.x ?? desktop.x}%`,
       '--orb-y-m': `${mobile?.y ?? desktop.y}%`,
       '--orb-scale-m': mobile?.scale ?? desktop.scale,
+      // 矮屏（横屏 / 分屏）用第三套坐标；没有就退回移动端那套
+      '--orb-x-s': `${short.x}%`,
+      '--orb-y-s': `${short.y}%`,
+      '--orb-scale-s': short.scale,
       '--orb-duration': `${desktop.duration}s`,
       '--orb-delay': `${desktop.delay}s`,
       '--orb-drift-x': `${desktop.driftX}px`,
@@ -85,16 +87,12 @@ export function EmotionOrb({
       '--orb-glow': emotion.palette.glow,
       '--orb-ink': emotion.palette.ink,
     }),
-    [desktop, mobile, emotion.palette],
+    [desktop, mobile, short, emotion.palette],
   );
 
   return (
     <div
-      className={cn(
-        'orb-anchor pointer-events-none',
-        !mobile && 'orb-desktop-only',
-        compactHidden && 'orb-compact-hide',
-      )}
+      className={cn('orb-anchor pointer-events-none', !mobile && 'orb-desktop-only')}
       style={style}
     >
       <div className="orb-breath relative h-full w-full">

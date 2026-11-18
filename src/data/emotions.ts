@@ -25,6 +25,7 @@ export const EMOTIONS: readonly Emotion[] = [
     placement: {
       desktop: { x: 12, y: 25, scale: 1.0, duration: 19, delay: 0.2, driftX: 14, driftY: 20 },
       mobile: { x: 16, y: 20, scale: 0.8, duration: 22, delay: 0.3, driftX: 6, driftY: 9 },
+      short: { x: 14, y: 22, scale: 0.95 },
     },
     messages: [
       '当你真心渴望某样东西时，整个宇宙都会联合起来助你实现愿望。',
@@ -52,6 +53,7 @@ export const EMOTIONS: readonly Emotion[] = [
     placement: {
       desktop: { x: 13.5, y: 63, scale: 0.9, duration: 23, delay: 0.9, driftX: 12, driftY: 18 },
       mobile: { x: 50, y: 74, scale: 0.84, duration: 21, delay: 1.1, driftX: 5, driftY: 7 },
+      short: { x: 14, y: 80, scale: 0.92 },
     },
     messages: [
       '难过的时候不用急着变好。它可以陪你待一会儿。',
@@ -86,6 +88,7 @@ export const EMOTIONS: readonly Emotion[] = [
     placement: {
       desktop: { x: 23, y: 46, scale: 1.15, duration: 21, delay: 0.5, driftX: 16, driftY: 22 },
       mobile: { x: 11, y: 71, scale: 0.84, duration: 24, delay: 0.6, driftX: 4, driftY: 6 },
+      short: { x: 14, y: 51, scale: 0.9 },
     },
     messages: [
       '也许此刻没有人刚好理解你的心情，但你的感受依然值得被认真对待。',
@@ -120,6 +123,7 @@ export const EMOTIONS: readonly Emotion[] = [
     placement: {
       desktop: { x: 75.5, y: 46, scale: 0.95, duration: 24, delay: 1.4, driftX: 13, driftY: 19 },
       mobile: { x: 8, y: 93, scale: 0.7, duration: 25, delay: 1.4, driftX: 3, driftY: 5 },
+      short: { x: 33, y: 10, scale: 0.82 },
     },
     messages: [
       '情绪低落的时候，世界会显得很吵，而你很安静。这也没关系。',
@@ -154,6 +158,7 @@ export const EMOTIONS: readonly Emotion[] = [
     placement: {
       desktop: { x: 50, y: 15, scale: 1.2, duration: 17, delay: 0, driftX: 18, driftY: 16 },
       mobile: { x: 74, y: 14, scale: 1.0, duration: 18, delay: 0, driftX: 6, driftY: 7 },
+      short: { x: 50, y: 9, scale: 0.9 },
     },
     messages: [
       '真好呀，希望今天这份小小的快乐，能在你的记忆里停留得久一点。',
@@ -188,6 +193,7 @@ export const EMOTIONS: readonly Emotion[] = [
     placement: {
       desktop: { x: 88, y: 24, scale: 1.1, duration: 22, delay: 0.7, driftX: 12, driftY: 17 },
       mobile: { x: 82, y: 68, scale: 0.82, duration: 23, delay: 0.8, driftX: 5, driftY: 7 },
+      short: { x: 67, y: 10, scale: 0.85 },
     },
     supportNote:
       '如果你此刻有伤害自己的念头，请立刻联系你信任的人，或拨打当地心理援助 / 紧急求助热线。你不需要一个人扛着。',
@@ -224,6 +230,7 @@ export const EMOTIONS: readonly Emotion[] = [
     placement: {
       desktop: { x: 5.5, y: 43, scale: 0.86, duration: 20, delay: 1.1, driftX: 10, driftY: 16 },
       mobile: { x: 10, y: 50, scale: 0.74, duration: 20, delay: 1.1, driftX: 4, driftY: 6 },
+      short: { x: 86, y: 22, scale: 0.95 },
     },
     messages: [
       '害怕的时候，身体比脑子先知道。它只是想保护你。',
@@ -258,6 +265,7 @@ export const EMOTIONS: readonly Emotion[] = [
     placement: {
       desktop: { x: 77, y: 74, scale: 1.0, duration: 18, delay: 1.3, driftX: 15, driftY: 18 },
       mobile: { x: 22, y: 79, scale: 0.8, duration: 22, delay: 1.3, driftX: 4, driftY: 6 },
+      short: { x: 86, y: 80, scale: 0.92 },
     },
     messages: [
       '考试很重要，但它不是衡量你全部价值的标准。你已经在努力了，也别忘了照顾自己。',
@@ -292,6 +300,7 @@ export const EMOTIONS: readonly Emotion[] = [
     placement: {
       desktop: { x: 89, y: 60, scale: 0.92, duration: 16, delay: 0.4, driftX: 11, driftY: 15 },
       mobile: { x: 86, y: 40, scale: 0.66, duration: 17, delay: 0.4, driftX: 3, driftY: 5 },
+      short: { x: 86, y: 51, scale: 0.9 },
     },
     messages: [
       '烦躁的时候，说明你已经忍了很久了。',
@@ -326,6 +335,7 @@ export const EMOTIONS: readonly Emotion[] = [
     placement: {
       desktop: { x: 27, y: 77, scale: 1.0, duration: 25, delay: 0.6, driftX: 13, driftY: 14 },
       mobile: { x: 74, y: 79, scale: 0.8, duration: 26, delay: 0.5, driftX: 4, driftY: 6 },
+      short: { x: 24, y: 86, scale: 0.78 },
     },
     messages: [
       '如果今天真的很累，就允许自己休息一会儿吧。生活不是一场不能停下来的比赛。',
@@ -360,6 +370,7 @@ export const EMOTIONS: readonly Emotion[] = [
     placement: {
       desktop: { x: 69, y: 16, scale: 0.88, duration: 21, delay: 0.8, driftX: 12, driftY: 14 },
       mobile: { x: 34, y: 90, scale: 0.78, duration: 21, delay: 0.8, driftX: 4, driftY: 6 },
+      short: { x: 76, y: 86, scale: 0.78 },
     },
     messages: [
       '你在担心的人或事，一定对你很重要。',
@@ -394,6 +405,7 @@ export const EMOTIONS: readonly Emotion[] = [
     placement: {
       desktop: { x: 41, y: 86, scale: 0.92, duration: 22, delay: 1.0, driftX: 12, driftY: 16 },
       mobile: { x: 12, y: 60, scale: 0.78, duration: 24, delay: 1.0, driftX: 4, driftY: 7 },
+      short: { x: 50, y: 84, scale: 0.8 },
     },
     messages: [
       '不知道要去哪里，这件事本身就很消耗人。你可以先停在这儿。',
@@ -428,6 +440,7 @@ export const EMOTIONS: readonly Emotion[] = [
     placement: {
       desktop: { x: 62, y: 85, scale: 0.88, duration: 24, delay: 0.3, driftX: 10, driftY: 15 },
       mobile: { x: 84, y: 32, scale: 0.76, duration: 23, delay: 0.4, driftX: 4, driftY: 6 },
+      short: { x: 33, y: 68, scale: 0.78 },
     },
     messages: [
       '明明是别人的问题，难受的却是你。这确实很不公平。',
@@ -463,6 +476,7 @@ export const EMOTIONS: readonly Emotion[] = [
       // 桌面端沿用原来那一颗的位置（右侧偏上），接住小屏那套坐标不动
       desktop: { x: 93, y: 38, scale: 0.86, duration: 20, delay: 1.2, driftX: 9, driftY: 13 },
       mobile: { x: 42, y: 12, scale: 0.74, duration: 21, delay: 1.2, driftX: 4, driftY: 6 },
+      short: { x: 67, y: 68, scale: 0.78 },
     },
     messages: [
       '不是不难过，是暂时感觉不到了。这也是一种反应。',
