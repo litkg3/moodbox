@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Check,
   Database,
   HeartHandshake,
   MapPin,
@@ -11,9 +10,7 @@ import {
   MessagesSquare,
   PenLine,
   Send,
-  ShieldAlert,
   Trash2,
-  X,
 } from 'lucide-react';
 import { AdminBar } from '@/components/admin/admin-bar';
 import { CrisisNoticeDialog } from '@/components/square/crisis-notice-dialog';
@@ -94,7 +91,6 @@ export function SquareView() {
   }, [isAdmin]);
 
   const approved = useMemo(() => posts.filter((post) => post.status === 'approved'), [posts]);
-  const pending = useMemo(() => posts.filter((post) => post.status === 'pending'), [posts]);
 
   /* ---------------- 发布 ---------------- */
 
@@ -111,7 +107,7 @@ export function SquareView() {
       });
       setComposeOpen(false);
       setDraft({ content: '', nickname: '' });
-      showToast('发出去了。它会先经过一次审核，然后出现在广场上。');
+      showToast('发出去了，广场上已经能看到。');
     } catch (publishError) {
       showToast(
         publishError instanceof Error ? publishError.message : '没能发出去，请稍后再试。',
@@ -187,18 +183,6 @@ export function SquareView() {
 
   /* ---------------- 管理 ---------------- */
 
-  async function review(postId: string, next: 'approved' | 'rejected') {
-    try {
-      await squareStore.review(postId, next);
-      showToast(next === 'approved' ? '已经放到广场上了。' : '这条先不放出去了。');
-    } catch (reviewError) {
-      showToast(
-        reviewError instanceof Error ? reviewError.message : '操作失败，请稍后再试。',
-        'caution',
-      );
-    }
-  }
-
   async function confirmDelete() {
     if (!deleteTarget) return;
     try {
@@ -268,7 +252,7 @@ export function SquareView() {
                 <span className="text-ink-faint">{source.label}</span>
               </span>
               {/* 管理员入口与「已接入 Supabase」同一行展示 */}
-              <AdminBar ability="可以审核待发布的内容，删除不合适的帖子" buttonOnly />
+              <AdminBar ability="可以删除不合适的帖子" buttonOnly />
               <p className="w-full pl-[18px]">{source.detail}</p>
             </div>
           ) : null}
@@ -279,70 +263,7 @@ export function SquareView() {
         </Button>
       </header>
 
-      <AdminBar ability="可以审核待发布的内容，删除不合适的帖子" hideEntry className="mb-7" />
-
-      {isAdmin ? (
-        <section aria-labelledby="pending-title" className="mb-9">
-          <div className="mb-3 flex items-baseline gap-3">
-            <h2 id="pending-title" className="text-[13px] tracking-[0.1em] text-ink">
-              待审核
-            </h2>
-            <span className="text-[11px] text-ink-ghost">{pending.length} 条</span>
-          </div>
-
-          {pending.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-[rgba(141,133,152,0.24)] px-4 py-5 text-center text-[12px] text-ink-ghost">
-              没有待审核的内容。这里是空的，说明大家现在都还好。
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {pending.map((post) => (
-                <li
-                  key={post.id}
-                  className="rounded-2xl border border-[rgba(201,182,232,0.5)] bg-[rgba(201,182,232,0.1)] p-4"
-                >
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-ghost">
-                    <span>{post.nickname}</span>
-                    <span>·</span>
-                    <span>
-                      {formatRelativeDay(post.createdAt.slice(0, 10))} {formatClock(post.createdAt)}
-                    </span>
-                    {post.needsSupport ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[rgba(247,222,217,0.7)] px-2 py-0.5 text-[#8a4a45]">
-                        <ShieldAlert size={10} strokeWidth={1.8} aria-hidden="true" />
-                        包含需要留意的表达
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <p className="mt-2 whitespace-pre-line text-pretty text-[13px] leading-[1.95] text-ink-soft">
-                    {post.content}
-                  </p>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <Button variant="primary" size="sm" onClick={() => void review(post.id, 'approved')}>
-                      <Check size={13} strokeWidth={1.8} />
-                      放到广场
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => void review(post.id, 'rejected')}>
-                      <X size={13} strokeWidth={1.8} />
-                      不放出去
-                    </Button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget(post)}
-                      className="ml-auto inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11.5px] text-[#8a4a45] transition-colors hover:bg-[rgba(247,222,217,0.5)]"
-                    >
-                      <Trash2 size={12} strokeWidth={1.7} aria-hidden="true" />
-                      删除
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ) : null}
+      <AdminBar ability="可以删除不合适的帖子" hideEntry />
 
       <section aria-labelledby="square-title">
         <div className="mb-3 flex items-baseline gap-3">
@@ -407,7 +328,7 @@ export function SquareView() {
         open={composeOpen}
         onClose={() => setComposeOpen(false)}
         title="写一条"
-        description="不会公开你的身份，也不需要登录。发出后需要经过一次审核。"
+        description="不会公开你的身份，也不需要登录。发出后会立刻出现在广场上。"
         width="md"
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -447,8 +368,8 @@ export function SquareView() {
           <p className="-mt-1 text-[11px] leading-[1.85] text-ink-ghost">
             留空就用「{visitor?.alias ?? '匿名的人'}」这个名字。
             {visitor?.region
-              ? `你的帖子旁会标「${visitor.region}」，这是按 IP 归属地取的，只到城市。`
-              : '你的帖子旁会标一个 IP 归属地，只到城市。'}
+              ? `你的帖子旁会标「${visitor.region}」，这是按 IP 估算的省份，仅供参考。`
+              : '你的帖子旁会标一个按 IP 估算的省份，仅供参考。'}
           </p>
           <label className="block">
             <span className="text-[12px] text-ink-soft">说点什么</span>
@@ -540,7 +461,7 @@ function PostCard({
         {post.region ? (
           <span
             className="inline-flex items-center gap-1 rounded-full bg-[rgba(141,133,152,0.1)] px-1.5 py-[1px] text-[10.5px] text-ink-ghost"
-            title="按 IP 归属地显示，只到城市"
+            title="按 IP 估算，只到省份；手机流量或加速器可能让这里不准，仅供参考"
           >
             <MapPin size={10} strokeWidth={1.7} aria-hidden="true" />
             {post.region}
@@ -701,7 +622,7 @@ function ReplyItem({
       <div className="flex flex-wrap items-center gap-2 text-[10.5px] text-ink-ghost">
         <span className="text-ink-faint">{reply.nickname}</span>
         {reply.region ? (
-          <span className="inline-flex items-center gap-0.5 text-[10px] text-ink-ghost" title="按 IP 归属地显示，只到城市">
+          <span className="inline-flex items-center gap-0.5 text-[10px] text-ink-ghost" title="按 IP 估算，只到省份；手机流量或加速器可能让这里不准，仅供参考">
             <MapPin size={9} strokeWidth={1.7} aria-hidden="true" />
             {reply.region}
           </span>

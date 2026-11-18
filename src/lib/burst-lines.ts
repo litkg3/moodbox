@@ -16,6 +16,9 @@ export const BURST_LINES: Record<EmotionId, (label: string) => string> = {
   // 备考：不判它是好是坏，直接送祝愿
   exam: (label) => `${label}被你捏爆啦，祝你考试顺利，得偿所愿！`,
 
+  // 分别：不是要「释放」掉谁，而是把告别放轻一点
+  parting: () => '分别球被你捏爆啦，相遇无悔，从容道别！',
+
   // 以下情绪同属「负向」，说同一句话；单列是为了将来要改某一种时不必动组件
   anxiety: (label) => `${label}被你捏爆了！负面情绪释放成功`,
   sadness: (label) => `${label}被你捏爆了！负面情绪释放成功`,

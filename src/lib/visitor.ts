@@ -11,7 +11,7 @@
  * - `suffix`：从同一个种子里取 4 位字母数字，用作「匿名·K7Q2」的后缀。
  *   同一个 IP 在同一段时间里拿到的后缀是一致的，别人能认出「这是同一个人」，
  *   但无法反推出 IP；
- * - `region`：IP 归属地，只到城市（如「广东·深圳」），用于在帖子旁边标一个位置。
+ * - `region`：IP 归属地，只到省份（如「广东」），用于在帖子旁边标一个位置。
  *
  * 如果取不到 IP（断网、被拦截、脚本环境），就退回一个存在本机随机种子上，
  * 后缀依然是稳定的，只是 `region` 为空 —— 功能不因此失效。
@@ -120,15 +120,22 @@ function shortenPlace(name: string): string {
   return name.replace(/(维吾尔自治区|壮族自治区|回族自治区|特别行政区|自治区|省|市)$/u, '') || name;
 }
 
+/**
+ * 只保留到「省」一级。
+ *
+ * 各家 IP 库对城市的判定经常差几十上百公里（尤其是手机流量、企业专线、
+ * 或者被代理/加速器绕过的线路），写上城市的反而让人一眼看出"这不对"。
+ * 省一级的准确率高得多，也够表达"同一个地方的人"这层意思。
+ */
 function buildRegion(country?: unknown, province?: unknown, city?: unknown): string | null {
+  void city;
   const countryName = typeof country === 'string' ? country.trim() : '';
   const provinceName = typeof province === 'string' ? shortenPlace(province.trim()) : '';
-  const cityName = typeof city === 'string' ? shortenPlace(city.trim()) : '';
 
-  // 国内只显示「省·市」，去掉「中国」两个字：这一栏是给"同城的人"看的
+  // 国内只显示省份，去掉「中国」两个字：这一栏是给"同乡的人"看的
   const parts = countryName === '中国' || countryName === 'China'
-    ? [provinceName, cityName]
-    : [countryName, provinceName];
+    ? [provinceName]
+    : [countryName];
 
   const cleaned = Array.from(new Set(parts.filter((part) => part && part !== '未知'))).join('·');
   return cleaned ? cleaned.slice(0, 20) : null;

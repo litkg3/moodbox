@@ -130,11 +130,11 @@ function EmotionPanelContent({
         />
         <h2
           id="emotion-panel-title"
-          className="mt-4 font-display text-[20px] font-normal tracking-[0.16em] text-[#fff] sm:text-[22px]"
+          className="mb-deep-strong mt-4 font-display text-[20px] font-normal tracking-[0.16em] sm:text-[22px]"
         >
           {emotion.label}
         </h2>
-        <p className="mt-1 text-[9.5px] uppercase tracking-[0.34em] text-[#948bab]">
+        <p className="mb-deep-faint mt-1 text-[9.5px] uppercase tracking-[0.34em]">
           {emotion.latin}
         </p>
       </div>
@@ -148,7 +148,7 @@ function EmotionPanelContent({
             animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             exit={reduce ? { opacity: 0 } : { opacity: 0, y: -8, filter: 'blur(3px)' }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-            className="text-balance text-center font-display text-[16.5px] font-light leading-[2.05] tracking-[0.03em] text-[#fff] sm:text-[17.5px]"
+            className="mb-deep-strong text-balance text-center font-display text-[16.5px] font-light leading-[2.05] tracking-[0.03em] sm:text-[17.5px]"
             aria-live="polite"
           >
             {entry.message}
@@ -163,7 +163,7 @@ function EmotionPanelContent({
       <button
         type="button"
         onClick={() => onBurst(emotion)}
-        className="group mx-auto mt-3 flex h-11 items-center justify-center gap-2 rounded-full border border-[rgba(226,168,150,0.35)] bg-[rgba(226,168,150,0.16)] px-7 text-[13px] tracking-[0.06em] text-[#f6d8cd] transition-colors hover:bg-[rgba(226,168,150,0.26)] active:scale-[0.99]"
+        className="mb-burst-btn group mx-auto mt-3 flex h-11 items-center justify-center gap-2 rounded-full px-7 text-[13px] tracking-[0.06em] transition-colors active:scale-[0.99]"
         title="把这颗球捏碎，让这股劲儿散掉"
       >
         <Wind
@@ -210,7 +210,7 @@ function EmotionPanelContent({
           onClick={recordMoment}
           disabled={recorded || recording}
           aria-live="polite"
-          className="inline-flex items-center gap-1.5 rounded-full text-[11.5px] tracking-[0.05em] text-[#bdb4d4] transition-colors hover:text-[#fff] disabled:cursor-default disabled:text-[#a99cc8]"
+          className="mb-deep-muted inline-flex items-center gap-1.5 rounded-full text-[11.5px] tracking-[0.05em] transition-opacity hover:opacity-75 disabled:cursor-default disabled:opacity-45"
         >
           {recorded ? (
             <Check size={13} strokeWidth={1.8} />
@@ -224,11 +224,11 @@ function EmotionPanelContent({
       {/* 分隔线：下半部分给心事信箱，让这块卡片也能直接写一封 */}
       <div className="mt-6 pt-1">
         <div aria-hidden="true" className="mb-deep-divider mb-5" />
-        <div className="flex items-center justify-center gap-1.5 text-[11.5px] tracking-[0.06em] text-[#c9c0dd]">
+        <div className="mb-deep-muted flex items-center justify-center gap-1.5 text-[11.5px] tracking-[0.06em]">
           <Mail size={13} strokeWidth={1.6} aria-hidden="true" />
           心事信箱
         </div>
-        <p className="mt-1.5 text-center text-[11px] leading-relaxed text-[#a99cc8]">
+        <p className="mb-deep-faint mt-1.5 text-center text-[11px] leading-relaxed">
           不想说给别人听的话，写在这里，封起来交给它保管。
         </p>
 
@@ -252,21 +252,21 @@ function EmotionPanelContent({
             {letterBusy ? '收好中…' : '收好这条心事'}
           </button>
         </div>
-        <p className="mt-2 text-right text-[10.5px] text-[#8e83aa]">
+        <p className="mb-deep-faint mt-2 text-right text-[10.5px]">
           {letterDraft.length} / 800
         </p>
       </div>
 
       {/* 允许情绪存在，也承认有些情绪需要人帮忙 */}
       {emotion.supportNote ? (
-        <div className="mt-5 flex gap-3 rounded-2xl border border-[rgba(226,168,150,0.2)] bg-[rgba(226,168,150,0.1)] px-4 py-3.5">
+        <div className="mb-support-note mt-5 flex gap-3 rounded-2xl px-4 py-3.5">
           <HeartHandshake
             size={15}
             strokeWidth={1.5}
-            className="mt-[3px] shrink-0 text-[#e0b4a6]"
+            className="mb-deep-muted mt-[3px] shrink-0"
             aria-hidden="true"
           />
-          <p className="text-[11.5px] leading-[1.85] text-[#e2c4bb]">{emotion.supportNote}</p>
+          <p className="mb-deep-muted text-[11.5px] leading-[1.85]">{emotion.supportNote}</p>
         </div>
       ) : null}
     </div>

@@ -33,14 +33,14 @@ export function StoryPanel({ onBack }: StoryPanelProps) {
 
   return (
     <div className="flex flex-col">
-      <p className="text-center text-[10px] uppercase tracking-[0.4em] text-[#9b93b4]">
+      <p className="mb-deep-faint text-center text-[10px] uppercase tracking-[0.4em]">
         A short story
       </p>
 
       {loading ? (
         <div className="mt-6 space-y-3">
           {[0, 1, 2].map((row) => (
-            <div key={row} className="h-3 animate-pulse rounded-full bg-white/10" />
+            <div key={row} className="mb-deep-skeleton h-3 animate-pulse rounded-full" />
           ))}
         </div>
       ) : story ? (
@@ -63,22 +63,22 @@ export function StoryPanel({ onBack }: StoryPanelProps) {
             </span>
           </div>
 
-          <h3 className="mt-3 text-center font-display text-[18px] font-normal tracking-[0.06em] text-[#fff] sm:text-[19px]">
+          <h3 className="mb-deep-strong mt-3 text-center font-display text-[18px] font-normal tracking-[0.06em] sm:text-[19px]">
             {story.title}
           </h3>
 
           <div className="mb-scroll-x mt-4 max-h-[36vh] overflow-y-auto overscroll-contain pr-1">
-            <p className="whitespace-pre-wrap text-left text-[13px] leading-[2.05] text-[#ded8ec]">
+            <p className="mb-deep-body whitespace-pre-wrap text-left text-[13px] leading-[2.05]">
               {story.content}
             </p>
           </div>
 
-          <p className="mt-3 text-center text-[10.5px] tracking-[0.08em] text-[#8d85a6]">
+          <p className="mb-deep-faint mt-3 text-center text-[10.5px] tracking-[0.08em]">
             {story.author}
           </p>
         </motion.div>
       ) : (
-        <p className="mt-8 text-center text-[13px] leading-[1.9] text-[#bdb4d4]">
+        <p className="mb-deep-muted mt-8 text-center text-[13px] leading-[1.9]">
           故事都还在路上。先回到刚才那句话吧。
         </p>
       )}

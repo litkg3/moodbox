@@ -16,6 +16,7 @@ export const EMOTION_IDS = [
   'lost',
   'wronged',
   'numbness',
+  'parting',
 ] as const;
 
 export type EmotionId = (typeof EMOTION_IDS)[number];
@@ -241,7 +242,7 @@ export interface SquarePost {
    * 所以这里为 true 时按钮会禁用，而不是让用户白点。
    */
   hugged?: boolean;
-  /** 发布时的 IP 归属地（城市级），只到城市，不记录具体地址 */
+  /** 发布时的 IP 归属地（省份级），只到省份，不记录具体地址 */
   region?: string;
   /** 本机模式下的发布者标识；云端不会下发，只在 IndexedDB 里留存 */
   visitorId?: string;

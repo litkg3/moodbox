@@ -35,7 +35,7 @@ export function AdminBar({
   className,
   buttonOnly = false,
   hideEntry = false,
-  guestNote = '发帖需要在审核后展示。',
+  guestNote = '口令只用来删除不合适的帖子。',
 }: AdminBarProps) {
   const { isAdmin, unlock, lock, serverVerified } = useAdmin();
   const [open, setOpen] = useState(false);

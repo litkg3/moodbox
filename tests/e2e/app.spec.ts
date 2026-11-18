@@ -42,7 +42,7 @@ test('首页展示品牌、寄语、树洞入口与全部情绪球', async ({ pa
 
   const orbs = page.getByRole('button', { name: /：/ });
   await expect(orbs.first()).toBeVisible();
-  expect(await orbs.count()).toBe(11);
+  expect(await orbs.count()).toBe(12);
 
   // 原来那个「我不开心了」换成了树洞广场
   await expect(page.getByRole('link', { name: '树洞广场' }).first()).toBeVisible();

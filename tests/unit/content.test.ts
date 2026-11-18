@@ -93,10 +93,10 @@ describe('治愈故事集', () => {
 });
 
 describe('树洞广场', () => {
-  it('新帖一律进入待审核，不会直接公开', async () => {
+  it('新帖发出即公开（不再有先审后发）', async () => {
     const post = await createPost({ content: '今天有点撑不住。' });
 
-    expect(post.status).toBe('pending');
+    expect(post.status).toBe('approved');
     expect(post.hugs).toBe(0);
     expect(post.replies).toEqual([]);
     expect(post.nickname).toBe('匿名的人');

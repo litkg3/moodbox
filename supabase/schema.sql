@@ -301,7 +301,9 @@ as $$
      or public.moodbox_is_admin(p_token);
 $$;
 
--- 发帖：status 在函数里写死为 pending，客户端无法跳过审核
+-- 发帖：发出即公开（status 直接写 approved）。
+-- 之前的「先审后发」已经取消：广场是给人倾诉的地方，等审反而劝退。
+-- 管理员仍可以事后删除，见 moodbox_square_delete。
 -- p_visitor / p_region：匿名指纹与归属地，前者只存哈希，后者只存城市级文字
 drop function if exists public.moodbox_square_create(text, text, boolean);
 drop function if exists public.moodbox_square_create(text, text, boolean, text);
@@ -338,7 +340,7 @@ begin
     v_id,
     left(coalesce(v_nick, '匿名的人'), 24),
     v_content,
-    'pending',
+    'approved',
     coalesce(p_needs_support, false),
     public.moodbox_visitor_hash(p_visitor),
     left(btrim(coalesce(p_region, '')), 20)
@@ -593,9 +595,9 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
-  -- version 3：加入 square_hugs 表与按访客去重的拥抱，
-  -- 前端可以拿它判断库是不是最新（旧版本是 1 / 2）
-  select jsonb_build_object('ok', true, 'version', 3, 'at', public.moodbox_iso(now()));
+  -- version 4：发帖改为「发出即公开」（取消先审后发）
+  -- 前端可以拿它判断库是不是最新（旧版本是 1 / 2 / 3）
+  select jsonb_build_object('ok', true, 'version', 4, 'at', public.moodbox_iso(now()));
 $$;
 
 -- ---------------------------------------------------------------------------

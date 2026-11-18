@@ -16,7 +16,7 @@ import type { ContentBackend, PostDraft, ReplyDraft, StoryDraft } from '@/lib/ba
  *   DELETE /stories/:id              → 204
  *
  *   GET    /posts                    → SquarePost[]（管理员可见 pending）
- *   POST   /posts                    → SquarePost（服务端应强制 status=pending）
+ *   POST   /posts                    → SquarePost（发出即公开，服务端直接落 approved）
  *   PATCH  /posts/:id                → SquarePost（body: { status }）
  *   DELETE /posts/:id                → 204
  *   POST   /posts/:id/hugs           → SquarePost

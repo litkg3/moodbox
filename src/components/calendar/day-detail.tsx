@@ -75,7 +75,7 @@ export function DayDetail({
                         {emotion.label}
                         <span className="inline-flex items-center gap-1 text-[10px] opacity-60">
                           <Clock size={9} strokeWidth={1.8} />
-                          {formatClock(log.createdAt).replace('上午', '早').replace('下午', '晚')}
+                          {formatClock(log.createdAt)}
                         </span>
                         <button
                           type="button"

@@ -541,18 +541,90 @@ html[data-theme='night'] .mb-panel {
  * 它在两种主题下都是深的 —— 所以卡片内部的文字统一用浅色，
  * 不要再用 text-ink 这类跟随主题的 token。
  */
+/*
+ * 卡片本身跟随主题：
+ * - 夜里保持深紫（这块一直是深的，用户也习惯了）；
+ * - 白天换成一层暖白玻璃，和首页的日间底色同一套语言，
+ *   不再出现「天亮着、卡片却是夜里那张」的割裂感。
+ * 不透明度两边都留了一点通透（0.88 左右），
+ * 能看见背后的光晕，又不至于让正文糊掉。
+ */
 .mb-deep-card {
   background: linear-gradient(
     168deg,
-    rgba(63, 56, 92, 0.93) 0%,
-    rgba(45, 40, 68, 0.94) 56%,
-    rgba(34, 30, 52, 0.95) 100%
+    rgba(255, 252, 249, 0.9) 0%,
+    rgba(250, 245, 250, 0.89) 54%,
+    rgba(244, 240, 250, 0.88) 100%
   );
-  border: 1px solid rgba(255, 255, 255, 0.13);
+  border: 1px solid rgba(172, 158, 202, 0.28);
+  color: #3a3350;
+  box-shadow:
+    0 34px 90px -56px rgba(70, 56, 108, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(22px) saturate(1.06);
+  -webkit-backdrop-filter: blur(22px) saturate(1.06);
+}
+
+html[data-theme='night'] .mb-deep-card {
+  background: linear-gradient(
+    168deg,
+    rgba(63, 56, 92, 0.91) 0%,
+    rgba(45, 40, 68, 0.92) 56%,
+    rgba(34, 30, 52, 0.93) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.13);
   color: #f5f2fc;
   box-shadow:
     0 34px 90px -56px rgba(0, 0, 0, 0.92),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* 卡片里的正文：白日是墨色，夜里是柔和的近白 */
+.mb-deep-body {
+  color: #4a4263;
+}
+
+html[data-theme='night'] .mb-deep-body {
+  color: #ded8ec;
+}
+
+/* 卡片里的骨架屏：白日是浅紫，夜里是薄白玻璃 */
+.mb-deep-skeleton {
+  background: rgba(124, 104, 168, 0.12);
+}
+
+html[data-theme='night'] .mb-deep-skeleton {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* 「捏爆它」按钮：白日是暖橙的浅底，夜里提亮一点保证在深底上看得清 */
+.mb-burst-btn {
+  border: 1px solid rgba(214, 136, 114, 0.38);
+  background: rgba(232, 158, 134, 0.16);
+  color: #a3554a;
+}
+
+.mb-burst-btn:hover {
+  background: rgba(232, 158, 134, 0.26);
+}
+
+html[data-theme='night'] .mb-burst-btn {
+  border-color: rgba(226, 168, 150, 0.35);
+  background: rgba(226, 168, 150, 0.16);
+  color: #f6d8cd;
+}
+
+html[data-theme='night'] .mb-burst-btn:hover {
+  background: rgba(226, 168, 150, 0.26);
+}
+
+/* 卡片里的正文与标题：白日用墨色，夜里用近白 */
+.mb-deep-strong {
+  color: #372f4e;
+}
+
+html[data-theme='night'] .mb-deep-strong {
+  color: #ffffff;
 }
 
 /*
@@ -565,9 +637,19 @@ html[data-theme='night'] .mb-deep-card {
   --color-white: #ffffff;
 }
 
-/* 深色卡片里的分隔线：两端淡出，两张主题下都看得见 */
+/* 卡片里的分隔线：两端淡出，两张主题下都看得见（白日是淡紫，夜里是白） */
 .mb-deep-divider {
   height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(124, 104, 168, 0) 0%,
+    rgba(124, 104, 168, 0.24) 16%,
+    rgba(124, 104, 168, 0.24) 84%,
+    rgba(124, 104, 168, 0) 100%
+  );
+}
+
+html[data-theme='night'] .mb-deep-divider {
   background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0%,
@@ -589,21 +671,40 @@ html[data-theme='night'] .mb-deep-divider {
 
 /* 深色卡片里的次要文字 */
 .mb-deep-muted {
-  color: #bdb4d4;
+  color: #6b6183;
 }
 
 .mb-deep-faint {
+  color: #8b82a1;
+}
+
+html[data-theme='night'] .mb-deep-muted {
+  color: #bdb4d4;
+}
+
+html[data-theme='night'] .mb-deep-faint {
   color: #948bab;
 }
 
 /* 深色卡片里的次级按钮：一层薄薄的白玻璃，不用主题的按钮皮肤 */
 .mb-deep-btn {
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(124, 104, 168, 0.22);
+  background: rgba(255, 255, 255, 0.62);
+  color: #4a4166;
+}
+
+.mb-deep-btn:hover {
+  background: rgba(255, 255, 255, 0.86);
+  color: #2f2846;
+}
+
+html[data-theme='night'] .mb-deep-btn {
+  border-color: rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.08);
   color: #e9e3f7;
 }
 
-.mb-deep-btn:hover {
+html[data-theme='night'] .mb-deep-btn:hover {
   background: rgba(255, 255, 255, 0.15);
   color: #fff;
 }
@@ -621,17 +722,33 @@ html[data-theme='night'] .mb-deep-divider {
 
 /* 深色卡片里的输入框（情绪面板里的心事信箱） */
 .mb-deep-field {
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.07);
-  color: #f5f2fc;
+  border: 1px solid rgba(124, 104, 168, 0.26);
+  background: rgba(255, 255, 255, 0.66);
+  color: #3a3350;
   transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
 }
 
 .mb-deep-field::placeholder {
-  color: #948bab;
+  color: #9a91ad;
 }
 
 .mb-deep-field:focus {
+  border-color: rgba(140, 116, 200, 0.5);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 3px rgba(140, 116, 200, 0.16);
+}
+
+html[data-theme='night'] .mb-deep-field {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.07);
+  color: #f5f2fc;
+}
+
+html[data-theme='night'] .mb-deep-field::placeholder {
+  color: #948bab;
+}
+
+html[data-theme='night'] .mb-deep-field:focus {
   border-color: rgba(201, 180, 239, 0.5);
   background: rgba(255, 255, 255, 0.1);
   box-shadow: 0 0 0 3px rgba(140, 116, 200, 0.22);
@@ -708,8 +825,8 @@ html[data-theme='night'] .mb-loading-bar {
 
 /* 痛苦类情绪的支持提示：低饱和暖调，夜间调暗 */
 .mb-support-note {
-  border: 1px solid rgba(158, 95, 92, 0.16);
-  background: rgba(247, 231, 228, 0.55);
+  border: 1px solid rgba(200, 128, 118, 0.22);
+  background: rgba(247, 226, 220, 0.55);
 }
 
 html[data-theme='night'] .mb-support-note {

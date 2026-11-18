@@ -59,10 +59,23 @@ export function formatRelativeDay(key: string): string {
 }
 
 /** 记录时间：晚上 21:14 */
+/**
+ * 24 小时制的时间，例如 23:07。
+ *
+ * 不补前导零（9:05 而不是 09:05）—— 论坛类的时间戳读起来更轻，
+ * 也不用再区分「上午/下午」。
+ */
 export function formatClock(iso: string): string {
   const date = new Date(iso);
   if (!isValid(date)) return '';
-  return format(date, "a hh:mm", { locale: zhCN }).replace('AM', '上午').replace('PM', '下午');
+  return format(date, 'H:mm', { locale: zhCN });
+}
+
+/** 带日期的 24 小时制时间，用于回复等需要精确到分钟的场景。 */
+export function formatClockWithDay(iso: string): string {
+  const date = new Date(iso);
+  if (!isValid(date)) return '';
+  return format(date, 'M月d日 H:mm', { locale: zhCN });
 }
 
 export const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'] as const;
