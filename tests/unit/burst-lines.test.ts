@@ -19,8 +19,12 @@ describe('捏爆文案', () => {
 
   it('负向情绪说「被你捏爆了！负面情绪释放成功」，并带上球的名字', () => {
     expect(burstLine('anxiety', '焦虑')).toBe('焦虑被你捏爆了！负面情绪释放成功');
-    expect(burstLine('exam', '备考')).toBe('备考被你捏爆了！负面情绪释放成功');
     expect(burstLine('wronged', '委屈')).toBe('委屈被你捏爆了！负面情绪释放成功');
+  });
+
+  it('备考改成送祝愿，不再说「负面情绪释放成功」', () => {
+    expect(burstLine('exam', '备考')).toBe('备考被你捏爆啦，祝你考试顺利，得偿所愿！');
+    expect(burstLine('exam', '备考')).not.toContain('负面');
   });
 
   it('开心不说「释放成功」，改成好心情会传染；麻木按负向处理', () => {
