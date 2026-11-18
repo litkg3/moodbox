@@ -143,9 +143,9 @@ test('捏爆情绪球：碎裂后自己飞回来，不需要手动召回', async
   // 碎裂动画结束后球离开天空
   await expect(orbs).toHaveCount(before - 1, { timeout: 15_000 });
 
-  // 六秒后自己回来，且全程没有「让它们回来」这类手动按钮
+  // 两秒后自己回来，且全程没有「让它们回来」这类手动按钮
   await expect(page.getByRole('button', { name: /让它们回来/ })).toHaveCount(0);
-  await expect(orbs).toHaveCount(before, { timeout: 20_000 });
+  await expect(orbs).toHaveCount(before, { timeout: 6_000 });
 });
 
 /* ---------------- 开心罐 ---------------- */

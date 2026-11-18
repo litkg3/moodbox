@@ -9,12 +9,13 @@ import { EmotionSky } from '@/components/emotion/emotion-sky';
 import { useToast } from '@/components/ui/toast';
 import { HOME_BLESSING_LINES, SLOGAN } from '@/data/emotions';
 import { useMoodBox } from '@/hooks/use-moodbox';
+import { burstLine } from '@/lib/burst-lines';
 import { getEmotion } from '@/lib/emotions';
 import { moodBoxStore } from '@/lib/moodbox-store';
 import type { Emotion, EmotionId } from '@/types';
 
-/** 球碎掉之后，过多久自己飘回来。 */
-const RETURN_DELAY_MS = 6000;
+/** 球碎掉之后，过多久自己飘回来。用户要求：两秒。 */
+const RETURN_DELAY_MS = 2000;
 
 /**
  * 首页：一片漂浮着情绪球的天空。
@@ -60,7 +61,7 @@ export function HomeExperience() {
       void moodBoxStore
         .burst(emotionId)
         .then(() => {
-          showToast(`「${label}」被你捏爆了，那股劲儿，散掉一点了吗？`);
+          showToast(burstLine(emotionId, label));
           const timer = window.setTimeout(() => {
             timers.current.delete(emotionId);
             void moodBoxStore.restoreBurst(emotionId);
