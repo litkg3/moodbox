@@ -46,6 +46,8 @@ export const DEFAULT_MIN_MESSAGES = 15;
 export const MIN_MESSAGES_BY_EMOTION: Partial<Record<EmotionId, number>> = {
   // 焦虑：文案已按需求整体替换为一组短句，共 8 条。
   anxiety: 8,
+  // 备考：文案已按需求整体替换为一组独立的鼓励短句，共 14 条。
+  exam: 14,
 };
 
 /** 所有情绪球是否达到各自的最低文案条数（供单元测试与内容自检使用）。 */
