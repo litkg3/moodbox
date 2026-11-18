@@ -7,6 +7,7 @@ import {
   deleteReply,
   hugPost,
   listPosts,
+  normalizeNickname,
   setPostStatus,
 } from '@/lib/square-repo';
 import { createStory, deleteStory, listStories, updateStory } from '@/lib/stories-repo';
@@ -97,6 +98,16 @@ describe('树洞广场', () => {
     expect(post.hugs).toBe(0);
     expect(post.replies).toEqual([]);
     expect(post.nickname).toBe('匿名的人');
+  });
+
+  it('昵称最多 16 个字，接口层也会截断', async () => {
+    const post = await createPost({
+      content: '昵称测试',
+      nickname: '一二三四五六七八九十一二三四五六七八',
+    });
+    expect(post.nickname).toHaveLength(16);
+    expect(normalizeNickname('  ')).toBe('匿名的人');
+    expect(normalizeNickname('  短名  ')).toBe('短名');
   });
 
   it('管理员审核通过后状态变为 approved，并记录审核时间', async () => {

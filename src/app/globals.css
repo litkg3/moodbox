@@ -587,6 +587,93 @@ html[data-theme='night'] .mb-panel {
   filter: brightness(1.05);
 }
 
+/* 深色卡片里的输入框（情绪面板里的心事信箱） */
+.mb-deep-field {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.07);
+  color: #f5f2fc;
+  transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.mb-deep-field::placeholder {
+  color: #948bab;
+}
+
+.mb-deep-field:focus {
+  border-color: rgba(201, 180, 239, 0.5);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(140, 116, 200, 0.22);
+}
+
+html[data-theme='night'] .mb-deep-field {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* 列表加载进度条：与卡片同一套毛玻璃语言 */
+.mb-loading-card {
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.45);
+  padding: 1rem 1.25rem 1.15rem;
+  backdrop-filter: blur(14px) saturate(1.05);
+  -webkit-backdrop-filter: blur(14px) saturate(1.05);
+}
+
+html[data-theme='night'] .mb-loading-card {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mb-loading-bar {
+  background: linear-gradient(90deg, rgba(201, 182, 232, 0.25), #8e76b8, rgba(201, 182, 232, 0.25));
+}
+
+html[data-theme='night'] .mb-loading-bar {
+  background: linear-gradient(90deg, rgba(201, 180, 239, 0.2), #c9b4ef, rgba(201, 180, 239, 0.2));
+}
+
+.mb-loading-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.mb-loading-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-lavender-deep);
+  opacity: 0.35;
+  animation: mb-dot 1.2s ease-in-out infinite;
+}
+
+.mb-loading-dots i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.mb-loading-dots i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes mb-dot {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mb-loading-dots i {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
 /* 痛苦类情绪的支持提示：低饱和暖调，夜间调暗 */
 .mb-support-note {
   border: 1px solid rgba(158, 95, 92, 0.16);

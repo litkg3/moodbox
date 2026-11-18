@@ -5,7 +5,7 @@ import { Lock, LockOpen, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
-import { DEMO_ADMIN_PASSCODE, useAdmin } from '@/lib/admin';
+import { useAdmin } from '@/lib/admin';
 import { cn } from '@/lib/utils';
 
 interface AdminBarProps {
@@ -129,37 +129,14 @@ export function AdminBar({
           onKeyDown={(event) => {
             if (event.key === 'Enter') void handleUnlock();
           }}
-          placeholder="输入口令"
-          className="mb-field mt-2"
-          autoComplete="off"
-        />
-      </label>
-      {error ? <p className="mt-2 text-[12px] text-[#9a6660]">{error}</p> : null}
-
-      <div className="mt-4 rounded-2xl border border-[rgba(141,133,152,0.18)] bg-[rgba(255,255,255,0.4)] px-4 py-3">
-        {serverVerified ? (
-          <p className="text-[11.5px] leading-[1.85] text-ink-faint">
-            口令存在 Supabase 的{' '}
-            <code className="rounded bg-[rgba(141,133,152,0.14)] px-1.5 py-0.5 text-ink">
-              moodbox_config
-            </code>{' '}
-            表里，浏览器读不到它。审核、删帖、删回复都会带着口令发给数据库函数，
-            校验不过就真的改不动 —— 这一层是有效防线，不是界面装饰。
-          </p>
-        ) : (
-          <p className="text-[11.5px] leading-[1.85] text-ink-faint">
-            当前演示口令是{' '}
-            <code className="rounded bg-[rgba(141,133,152,0.14)] px-1.5 py-0.5 text-ink">
-              {DEMO_ADMIN_PASSCODE}
-            </code>
-            ，写在 <code>src/lib/admin.ts</code> 里。
-            <br />
-            需要说明的是：这个校验发生在前端，任何人都能绕过。接上 Supabase 之后
-            （见 <code>SUPABASE.md</code>），口令会改成服务端校验，那时才是一条真实的边界。
-          </p>
-        )}
-      </div>
-    </Dialog>
+              placeholder="输入口令"
+              className="mb-field mt-2"
+              autoComplete="off"
+              maxLength={64}
+            />
+          </label>
+          {error ? <p className="mt-2 text-[12px] text-[#9a6660]">{error}</p> : null}
+        </Dialog>
   );
 
   // 只放入口按钮：页面需要把入口摆在某一行的后面时用它

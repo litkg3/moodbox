@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { BookOpen, BookmarkPlus, Check, HeartHandshake, Sparkles, Sun, Wind } from 'lucide-react';
+import { BookOpen, BookmarkPlus, Check, HeartHandshake, Mail, Sparkles, Sun, Wind } from 'lucide-react';
 import { StoryPanel } from '@/components/stories/story-panel';
 import { GlassSheet } from '@/components/ui/glass-sheet';
 import { useToast } from '@/components/ui/toast';
 import { pickMessage } from '@/lib/emotions';
+import { lettersStore } from '@/lib/content-stores';
 import { moodBoxStore } from '@/lib/moodbox-store';
 import type { Emotion } from '@/types';
 
@@ -65,11 +66,29 @@ function EmotionPanelContent({
   const [recorded, setRecorded] = useState(false);
   const [recording, setRecording] = useState(false);
   const [reading, setReading] = useState(false);
+  const [letterDraft, setLetterDraft] = useState('');
+  const [letterBusy, setLetterBusy] = useState(false);
   const reduce = useReducedMotion();
   const { showToast } = useToast();
 
   function warmUp() {
     setEntry((prev) => pickMessage(emotion.messages, prev.recent));
+  }
+
+  /** 面板里写完的心事，直接封存进心事信箱（与信箱卡片是同一份数据）。 */
+  async function keepLetter() {
+    const text = letterDraft.trim();
+    if (!text || letterBusy) return;
+    setLetterBusy(true);
+    try {
+      await lettersStore.write(text);
+      setLetterDraft('');
+      showToast('收好了。它现在只属于这封信。');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '没能收好，请稍后再试。', 'caution');
+    } finally {
+      setLetterBusy(false);
+    }
   }
 
   async function recordMoment() {
@@ -118,9 +137,6 @@ function EmotionPanelContent({
         <p className="mt-1 text-[9.5px] uppercase tracking-[0.34em] text-[#948bab]">
           {emotion.latin}
         </p>
-        <p className="mt-2 text-[11.5px] leading-relaxed tracking-[0.04em] text-[#bdb4d4]">
-          {emotion.whisper}
-        </p>
       </div>
 
       {/* 主体那句话：白色、居中、慢慢换 */}
@@ -140,7 +156,26 @@ function EmotionPanelContent({
         </AnimatePresence>
       </div>
 
-      {/* 三个按钮，居中排一排（窄屏换行也保持居中） */}
+      {/*
+        「捏爆它」紧跟安慰语、居中、做得显眼：
+        它是最直接的释放动作，不该缩在两个小字旁边。
+      */}
+      <button
+        type="button"
+        onClick={() => onBurst(emotion)}
+        className="group mx-auto mt-3 flex h-11 items-center justify-center gap-2 rounded-full border border-[rgba(226,168,150,0.35)] bg-[rgba(226,168,150,0.16)] px-7 text-[13px] tracking-[0.06em] text-[#f6d8cd] transition-colors hover:bg-[rgba(226,168,150,0.26)] active:scale-[0.99]"
+        title="把这颗球捏碎，让这股劲儿散掉"
+      >
+        <Wind
+          size={15}
+          strokeWidth={1.7}
+          aria-hidden="true"
+          className="transition-transform duration-500 group-hover:-rotate-12"
+        />
+        捏爆它，释放情绪
+      </button>
+
+      {/* 三个主按钮，居中排一排（窄屏换行也保持居中） */}
       <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">
         <button
           type="button"
@@ -168,8 +203,8 @@ function EmotionPanelContent({
         </button>
       </div>
 
-      {/* 次要动作：记录 / 捏爆 */}
-      <div className="mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 border-t border-white/10 pt-5">
+      {/* 次要动作：记录此刻的情绪 */}
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
         <button
           type="button"
           onClick={recordMoment}
@@ -184,25 +219,41 @@ function EmotionPanelContent({
           )}
           {recorded ? '已收进今天的情绪里' : recording ? '正在记录…' : '记录此刻的情绪'}
         </button>
+      </div>
 
-        {/*
-          「捏爆它」不是删除：球碎掉之后过几秒会自己飘回来。
-          所以它只是当下的一次释放，不需要「恢复」按钮。
-        */}
-        <button
-          type="button"
-          onClick={() => onBurst(emotion)}
-          className="group inline-flex items-center gap-1.5 rounded-full border border-[rgba(226,168,150,0.28)] bg-[rgba(226,168,150,0.12)] px-3 py-1.5 text-[11.5px] tracking-[0.04em] text-[#f0c8bc] transition-colors hover:bg-[rgba(226,168,150,0.2)]"
-          title="把这颗球捏碎，让这股劲儿散掉"
-        >
-          <Wind
-            size={12}
-            strokeWidth={1.7}
-            aria-hidden="true"
-            className="transition-transform duration-500 group-hover:-rotate-12"
+      {/* 分隔线：下半部分给心事信箱，让这块卡片也能直接写一封 */}
+      <div className="mt-6 border-t border-white/12 pt-5">
+        <div className="flex items-center justify-center gap-1.5 text-[11.5px] tracking-[0.06em] text-[#c9c0dd]">
+          <Mail size={13} strokeWidth={1.6} aria-hidden="true" />
+          心事信箱
+        </div>
+        <p className="mt-1.5 text-center text-[11px] leading-relaxed text-[#a99cc8]">
+          不想说给别人听的话，写在这里，封起来交给它保管。
+        </p>
+
+        <div className="relative mt-3">
+          <textarea
+            value={letterDraft}
+            onChange={(event) => setLetterDraft(event.target.value)}
+            placeholder="此刻的心里话…"
+            rows={3}
+            maxLength={800}
+            aria-label="心事内容"
+            className="mb-deep-field w-full resize-none rounded-2xl px-4 pb-11 pt-3 text-[12.5px] leading-[1.9] outline-none"
           />
-          捏爆它
-        </button>
+          <button
+            type="button"
+            onClick={() => void keepLetter()}
+            disabled={!letterDraft.trim() || letterBusy}
+            className="mb-deep-btn-primary absolute bottom-2.5 right-2.5 inline-flex h-8 items-center gap-1 rounded-full px-3.5 text-[11.5px] tracking-[0.04em] transition-all duration-300 disabled:cursor-default disabled:opacity-45"
+          >
+            <Check size={12} strokeWidth={1.9} aria-hidden="true" />
+            {letterBusy ? '收好中…' : '收好这条心事'}
+          </button>
+        </div>
+        <p className="mt-2 text-right text-[10.5px] text-[#8e83aa]">
+          {letterDraft.length} / 800
+        </p>
       </div>
 
       {/* 允许情绪存在，也承认有些情绪需要人帮忙 */}

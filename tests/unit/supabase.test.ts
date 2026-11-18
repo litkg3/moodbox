@@ -99,15 +99,27 @@ describe('Supabase 后端 · 写', () => {
     rpcMock.mockResolvedValue(ok({ ...rawPost, status: 'pending' }));
     const backend = createSupabaseBackend();
 
+    // 客户端先把昵称收敛到 16 字以内、空值回落「匿名的人」，数据库函数里也会再截一次
     await backend.createPost({ content: '  今天还行  ', nickname: '  ', needsSupport: true });
 
     expect(rpcMock).toHaveBeenCalledWith('moodbox_square_create', {
       p_content: '  今天还行  ',
-      p_nickname: null,
+      p_nickname: '匿名的人',
       p_needs_support: true,
     });
     const args = rpcMock.mock.calls[0]?.[1] as Record<string, unknown>;
     expect(args).not.toHaveProperty('p_status');
+  });
+
+  it('昵称超过 16 个字会被截断后再发给数据库', async () => {
+    rpcMock.mockResolvedValue(ok({ ...rawPost, status: 'pending' }));
+    const backend = createSupabaseBackend();
+
+    await backend.createPost({ content: '昵称超长', nickname: '一二三四五六七八九十一二三四五六' });
+
+    const args = rpcMock.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(args.p_nickname).toBe('一二三四五六七八九十一二三四五六');
+    expect(String(args.p_nickname)).toHaveLength(16);
   });
 
   it('审核 / 删帖 / 删回复都会带上令牌', async () => {

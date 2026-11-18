@@ -9,6 +9,16 @@ export interface PostDraft {
   needsSupport?: boolean;
 }
 
+/** 树洞广场昵称上限：16 个字（与表单 maxLength 对齐，接口层再兜一道）。 */
+export const MAX_NICKNAME_LENGTH = 16;
+export const DEFAULT_NICKNAME = '匿名的人';
+
+/** 统一的昵称收敛：去空格 → 截断到 16 字 → 空值回落到「匿名的人」。 */
+export function normalizeNickname(nickname?: string | null): string {
+  const trimmed = (nickname ?? '').trim().slice(0, MAX_NICKNAME_LENGTH);
+  return trimmed || DEFAULT_NICKNAME;
+}
+
 function sortPosts(posts: SquarePost[]): SquarePost[] {
   return [...posts].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
@@ -37,7 +47,7 @@ export async function createPost(draft: PostDraft): Promise<SquarePost> {
   const post: SquarePost = {
     id: createId('post'),
     content: draft.content.trim(),
-    nickname: draft.nickname?.trim() || '匿名的人',
+    nickname: normalizeNickname(draft.nickname),
     createdAt: new Date().toISOString(),
     status: 'pending',
     hugs: 0,
@@ -99,7 +109,7 @@ export async function addReply(
     if (!existing) throw new Error('这条帖子已经不在了。');
     const reply: SquareReply = {
       id: createId('reply'),
-      nickname: draft.nickname?.trim() || '匿名的人',
+      nickname: normalizeNickname(draft.nickname),
       content: draft.content.trim(),
       createdAt: new Date().toISOString(),
       needsSupport: draft.needsSupport ?? false,

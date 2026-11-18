@@ -184,7 +184,8 @@ as $$
 declare
   v_id      text;
   v_content text := btrim(coalesce(p_content, ''));
-  v_nick    text := nullif(btrim(coalesce(p_nickname, '')), '');
+  -- 昵称最多 16 个字，超出的部分截断（与前端 maxLength 对齐）
+  v_nick    text := nullif(left(btrim(coalesce(p_nickname, '')), 16), '');
 begin
   if char_length(v_content) = 0 then
     raise exception '写点什么再发出去吧。';
@@ -237,7 +238,8 @@ set search_path = public, pg_temp
 as $$
 declare
   v_content text := btrim(coalesce(p_content, ''));
-  v_nick    text := nullif(btrim(coalesce(p_nickname, '')), '');
+  -- 昵称最多 16 个字，超出的部分截断（与前端 maxLength 对齐）
+  v_nick    text := nullif(left(btrim(coalesce(p_nickname, '')), 16), '');
 begin
   if char_length(v_content) = 0 then
     raise exception '回复不能是空的。';

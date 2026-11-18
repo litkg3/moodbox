@@ -19,6 +19,7 @@ import { CrisisNoticeDialog } from '@/components/square/crisis-notice-dialog';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Dialog } from '@/components/ui/dialog';
+import { LoadingBar } from '@/components/ui/loading-bar';
 import { useToast } from '@/components/ui/toast';
 import { useAdmin } from '@/lib/admin';
 import { describeBackend } from '@/lib/backend';
@@ -297,6 +298,8 @@ export function SquareView() {
 
         {loading ? (
           <div className="space-y-3">
+            {/* 进度条放在列表位置，与下面的占位卡片是同一套卡片语言 */}
+            <LoadingBar label="正在把广场上的话搬过来…" />
             {[0, 1, 2].map((index) => (
               <div
                 key={index}

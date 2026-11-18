@@ -3,6 +3,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { localBackend } from '@/lib/backend/local';
 import type { ContentBackend, PostDraft, ReplyDraft } from '@/lib/backend/types';
+import { normalizeNickname } from '@/lib/square-repo';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from '@/lib/supabase-config';
 import type { PostStatus, SquarePost, SquareReply } from '@/types';
 
@@ -140,7 +141,7 @@ export function createSupabaseBackend(options: SupabaseBackendOptions = {}): Con
       return toPost(
         await rpc('moodbox_square_create', {
           p_content: draft.content,
-          p_nickname: draft.nickname?.trim() || null,
+          p_nickname: normalizeNickname(draft.nickname),
           p_needs_support: draft.needsSupport ?? false,
         }),
       );
@@ -165,7 +166,7 @@ export function createSupabaseBackend(options: SupabaseBackendOptions = {}): Con
         await rpc('moodbox_square_reply', {
           p_post_id: postId,
           p_content: draft.content,
-          p_nickname: draft.nickname?.trim() || null,
+          p_nickname: normalizeNickname(draft.nickname),
           p_needs_support: draft.needsSupport ?? false,
         }),
       );
