@@ -63,6 +63,7 @@ function toPost(raw: unknown): SquarePost {
     needsSupport: Boolean(row.needsSupport ?? row.needs_support ?? false),
     reviewedAt: row.reviewedAt ? normalizeIso(row.reviewedAt) : undefined,
     mine: Boolean(row.mine),
+    hugged: Boolean(row.hugged),
     region: typeof row.region === 'string' && row.region ? row.region : undefined,
   };
 }
@@ -168,8 +169,19 @@ export function createSupabaseBackend(options: SupabaseBackendOptions = {}): Con
       await rpc('moodbox_square_delete', { p_id: id, p_token: token() });
     },
 
-    async hugPost(id: string) {
-      return toPost(await rpc('moodbox_square_hug', { p_id: id }));
+    async hugPost(id: string, visitorId?: string) {
+      try {
+        return toPost(await rpc('moodbox_square_hug', { p_id: id, p_visitor: visitorId ?? null }));
+      } catch (error) {
+        /*
+         * 数据库还没更新到带 p_visitor 的版本时（PGRST202 = 找不到这个签名），
+         * 退回到老的单参数调用，至少让人能抱上 —— 只是这时候服务端没法去重。
+         * 界面侧还有一层本机记录兜底，不会因为这一步就让人反复刷拥抱数。
+         */
+        const code = (error as { code?: string } | null)?.code ?? '';
+        if (code !== 'PGRST202') throw error;
+        return toPost(await rpc('moodbox_square_hug', { p_id: id }));
+      }
     },
 
     async addReply(postId: string, draft: ReplyDraft) {

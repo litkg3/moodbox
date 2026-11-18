@@ -239,6 +239,11 @@ export interface SquarePost {
   isDemo?: boolean;
   /** 是不是当前访客自己写的：匿名游客只能删自己的帖子和回复 */
   mine?: boolean;
+  /**
+   * 当前访客是不是已经抱过这条。一个 IP 对同一条只能抱一次，
+   * 所以这里为 true 时按钮会禁用，而不是让用户白点。
+   */
+  hugged?: boolean;
   /** 发布时的 IP 归属地（城市级），只到城市，不记录具体地址 */
   region?: string;
   /** 本机模式下的发布者标识；云端不会下发，只在 IndexedDB 里留存 */

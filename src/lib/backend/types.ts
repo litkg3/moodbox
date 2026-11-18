@@ -61,7 +61,9 @@ export interface ContentBackend {
   deletePost(id: string): Promise<void>;
   /** 匿名游客删自己的帖子：云端会校验 visitor 与发布者是否一致 */
   deleteOwnPost(id: string, visitorId: string): Promise<void>;
-  hugPost(id: string): Promise<SquarePost>;
+  /** 抱一下。
+   * 传 visitorId 时同一条只能抱一次（云端按指纹去重）；不传就退化成单纯 +1。 */
+  hugPost(id: string, visitorId?: string): Promise<SquarePost>;
   addReply(postId: string, draft: ReplyDraft): Promise<SquarePost>;
   deleteReply(postId: string, replyId: string): Promise<SquarePost>;
   /** 匿名游客删自己的回复 */

@@ -159,10 +159,23 @@ describe('Supabase 后端 · 写', () => {
     });
   });
 
-  it('拥抱不需要令牌', async () => {
-    rpcMock.mockResolvedValue(ok({ ...rawPost, hugs: 4 }));
+  it('拥抱不需要令牌，但会带上访客标识用于去重', async () => {
+    rpcMock.mockResolvedValue(ok({ ...rawPost, hugs: 4, hugged: true }));
     const backend = createSupabaseBackend();
-    const post = await backend.hugPost('post_abc');
+    const post = await backend.hugPost('post_abc', 'visitor_key');
+    expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_hug', {
+      p_id: 'post_abc',
+      p_visitor: 'visitor_key',
+    });
+    expect(post.hugs).toBe(4);
+    expect(post.hugged).toBe(true);
+  });
+
+  it('库里还没更新到带 p_visitor 的拥抱函数时，退回单参数调用', async () => {
+    const missing = Object.assign(new Error('Could not find the function'), { code: 'PGRST202' });
+    rpcMock.mockRejectedValueOnce(missing).mockResolvedValueOnce(ok({ ...rawPost, hugs: 4 }));
+    const backend = createSupabaseBackend();
+    const post = await backend.hugPost('post_abc', 'visitor_key');
     expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_hug', { p_id: 'post_abc' });
     expect(post.hugs).toBe(4);
   });

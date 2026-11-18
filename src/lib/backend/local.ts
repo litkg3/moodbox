@@ -22,7 +22,8 @@ export const localBackend: ContentBackend = {
   setPostStatus: squareRepo.setPostStatus,
   deletePost: squareRepo.deletePost,
   deleteOwnPost: squareRepo.deleteOwnPost,
-  hugPost: squareRepo.hugPost,
+  // 本机模式下一个设备就是一个访客，仓储层自己记得有没有抱过
+  hugPost: (id) => squareRepo.hugPost(id),
   addReply: squareRepo.addReply,
   deleteReply: squareRepo.deleteReply,
   deleteOwnReply: squareRepo.deleteOwnReply,

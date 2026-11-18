@@ -81,6 +81,22 @@ create index if not exists square_replies_post_created_idx
   on public.square_replies (post_id, created_at);
 
 -- ---------------------------------------------------------------------------
+-- 2.1 拥抱记录：一个访客对同一条只能抱一次
+--     主键 (post_id, visitor_hash) 就是去重规则本身 —— 重复插入会被 on conflict 挡掉，
+--     所以「一个 IP 只能抱一次」不靠前端自觉。同样只存哈希，不存 IP。
+-- ---------------------------------------------------------------------------
+create table if not exists public.square_hugs (
+  post_id      text        not null references public.square_posts (id) on delete cascade,
+  visitor_hash text        not null,
+  created_at   timestamptz not null default now(),
+  primary key (post_id, visitor_hash)
+);
+
+create index if not exists square_hugs_post_idx on public.square_hugs (post_id);
+
+comment on table public.square_hugs is '拥抱记录：同一访客对同一条帖子只能抱一次（主键去重）';
+
+-- ---------------------------------------------------------------------------
 -- 3. 私有配置：管理员口令存在这里
 --    这张表同样开了 RLS 且没有策略，anon 读不到；只有 definer 函数能查。
 -- ---------------------------------------------------------------------------
@@ -94,11 +110,13 @@ create table if not exists public.moodbox_config (
 -- ---------------------------------------------------------------------------
 alter table public.square_posts    enable row level security;
 alter table public.square_replies  enable row level security;
+alter table public.square_hugs     enable row level security;
 alter table public.moodbox_config  enable row level security;
 
 -- 兜底：即使有人在 Dashboard 里手滑加了策略，也不给 anon 表级权限
 revoke all on public.square_posts   from anon, authenticated;
 revoke all on public.square_replies from anon, authenticated;
+revoke all on public.square_hugs    from anon, authenticated;
 revoke all on public.moodbox_config from anon, authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -163,6 +181,8 @@ as $$
     'content',      p.content,
     'status',       p.status,
     'hugs',         p.hugs,
+    -- 具体值由 moodbox_mine() 按访客重新算，这里先给个安全的默认
+    'hugged',       false,
     'needsSupport', p.needs_support,
     'region',       p.region,
     'createdAt',    public.moodbox_iso(p.created_at),
@@ -202,15 +222,30 @@ $$;
 create or replace function public.moodbox_mine(p_post jsonb, p_visitor text)
 returns jsonb
 language sql
-immutable
+stable
+security definer
+set search_path = public, pg_temp
 as $$
   select jsonb_set(
     jsonb_set(
-      p_post,
-      '{mine}',
+      jsonb_set(
+        p_post,
+        '{mine}',
+        to_jsonb(
+          coalesce(p_post ->> 'visitorId', '') <> ''
+          and p_post ->> 'visitorId' = coalesce(public.moodbox_visitor_hash(p_visitor), '')
+        )
+      ),
+      -- 这个访客抱过没有：查拥抱记录表，同样只回布尔，不回任何指纹
+      '{hugged}',
       to_jsonb(
-        coalesce(p_post ->> 'visitorId', '') <> ''
-        and p_post ->> 'visitorId' = coalesce(public.moodbox_visitor_hash(p_visitor), '')
+        coalesce(public.moodbox_visitor_hash(p_visitor), '') <> ''
+        and exists (
+          select 1
+            from public.square_hugs h
+           where h.post_id = p_post ->> 'id'
+             and h.visitor_hash = public.moodbox_visitor_hash(p_visitor)
+        )
       )
     ) - 'visitorId',
     '{replies}',
@@ -313,25 +348,46 @@ begin
 end;
 $$;
 
--- 抱一下：只能给已通过的帖子加，且每次 +1
-create or replace function public.moodbox_square_hug(p_id text)
+/*
+ * 抱一下：只能给已通过的帖子加。
+ *
+ * 一个访客对同一条只能抱一次 —— 去重靠 square_hugs 的主键，不靠前端。
+ * 重复抱不会报错，只是不再累加（幂等），返回值里 hugged = true，
+ * 界面据此把按钮变成「已抱」并禁用。
+ */
+drop function if exists public.moodbox_square_hug(text);
+create or replace function public.moodbox_square_hug(p_id text, p_visitor text default null)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
+declare
+  v_hash    text := public.moodbox_visitor_hash(p_visitor);
+  v_inserted boolean := false;
 begin
-  update public.square_posts
-     set hugs = hugs + 1
-   where id = p_id
-     and status = 'approved';
-
-  if not found then
+  if not exists (
+    select 1 from public.square_posts where id = p_id and status = 'approved'
+  ) then
     raise exception '这条帖子已经不在了。';
   end if;
 
-  -- 不带 visitor：mine 一律 false，同时把 visitorId 抹掉，避免抱着抱着就把别人的指纹看走
-  return public.moodbox_mine(public.moodbox_post_json(p_id), null);
+  if v_hash is null then
+    -- 老客户端没带 visitor：只能老实 +1，服务端无从去重
+    update public.square_posts set hugs = hugs + 1 where id = p_id;
+  else
+    insert into public.square_hugs (post_id, visitor_hash)
+    values (p_id, v_hash)
+    on conflict (post_id, visitor_hash) do nothing;
+
+    v_inserted := found;
+
+    if v_inserted then
+      update public.square_posts set hugs = hugs + 1 where id = p_id;
+    end if;
+  end if;
+
+  return public.moodbox_mine(public.moodbox_post_json(p_id), p_visitor);
 end;
 $$;
 
@@ -537,7 +593,9 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
-  select jsonb_build_object('ok', true, 'version', 2, 'at', public.moodbox_iso(now()));
+  -- version 3：加入 square_hugs 表与按访客去重的拥抱，
+  -- 前端可以拿它判断库是不是最新（旧版本是 1 / 2）
+  select jsonb_build_object('ok', true, 'version', 3, 'at', public.moodbox_iso(now()));
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -551,7 +609,7 @@ revoke all on function public.moodbox_mine(jsonb, text)              from public
 
 grant execute on function public.moodbox_square_list(text, text)                                   to anon, authenticated;
 grant execute on function public.moodbox_square_create(text, text, boolean, text, text)            to anon, authenticated;
-grant execute on function public.moodbox_square_hug(text)                                          to anon, authenticated;
+grant execute on function public.moodbox_square_hug(text, text)                                    to anon, authenticated;
 grant execute on function public.moodbox_square_reply(text, text, text, boolean, text, text)       to anon, authenticated;
 grant execute on function public.moodbox_square_review(text, text, text)                           to anon, authenticated;
 grant execute on function public.moodbox_square_delete(text, text)                                 to anon, authenticated;
@@ -570,10 +628,10 @@ values ('admin_token', 'moodbox2026')
 on conflict (key) do update set value = excluded.value;
 
 -- ---------------------------------------------------------------------------
--- 9. 自检：跑完这段应该看到 12 行 moodbox_* 函数、3 行 relrowsecurity（true）
+-- 9. 自检：跑完这段应该看到 16 行 moodbox_* 函数、4 行 relrowsecurity（true）
 -- ---------------------------------------------------------------------------
 -- select routine_name from information_schema.routines
 --  where routine_schema = 'public' and routine_name like 'moodbox%' order by 1;
 --
 -- select relname, relrowsecurity from pg_class
---  where relname in ('square_posts', 'square_replies', 'moodbox_config');
+--  where relname in ('square_posts', 'square_replies', 'square_hugs', 'moodbox_config');

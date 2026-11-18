@@ -116,7 +116,11 @@ export function createHttpBackend(options: HttpBackendOptions): ContentBackend {
         method: 'DELETE',
         headers: { 'X-Moodbox-Visitor': visitorId },
       }),
-    hugPost: (id) => request(`/posts/${id}/hugs`, { method: 'POST' }),
+    hugPost: (id, visitorId) =>
+      request(`/posts/${id}/hugs`, {
+        method: 'POST',
+        headers: visitorId ? { 'X-Moodbox-Visitor': visitorId } : undefined,
+      }),
     addReply: (postId, draft: ReplyDraft) =>
       request(`/posts/${postId}/replies`, { method: 'POST', body: JSON.stringify(draft) }),
     deleteReply: (postId, replyId) =>

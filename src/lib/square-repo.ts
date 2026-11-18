@@ -123,13 +123,19 @@ export async function deletePost(id: string): Promise<void> {
   }
 }
 
-/** 抱一下。同一条帖子在本地可以重复抱 —— 这里不做去重，只诚实地累加。 */
+/**
+ * 抱一下。
+ *
+ * 一个访客对同一条只能抱一次 —— 本机模式下这台设备就是一个访客，
+ * 所以直接在帖子上记 `hugged`，第二次点不再累加（幂等返回原样）。
+ */
 export async function hugPost(id: string): Promise<SquarePost> {
   try {
     const db = await getDB();
     const existing = await db.get('posts', id);
     if (!existing) throw new Error('这条帖子已经不在了。');
-    const next: SquarePost = { ...existing, hugs: existing.hugs + 1 };
+    if (existing.hugged) return existing;
+    const next: SquarePost = { ...existing, hugs: existing.hugs + 1, hugged: true };
     await db.put('posts', next);
     return next;
   } catch (error) {

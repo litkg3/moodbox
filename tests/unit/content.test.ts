@@ -120,11 +120,15 @@ describe('树洞广场', () => {
     expect(approved.reviewedAt).toBeTruthy();
   });
 
-  it('拥抱是累加的', async () => {
+  it('拥抱只算一次：同一个访客重复抱不会累加', async () => {
     const post = await createPost({ content: '抱抱我。' });
-    await hugPost(post.id);
+    const first = await hugPost(post.id);
+    expect(first.hugs).toBe(1);
+    expect(first.hugged).toBe(true);
+
     const twice = await hugPost(post.id);
-    expect(twice.hugs).toBe(2);
+    expect(twice.hugs).toBe(1);
+    expect(twice.hugged).toBe(true);
   });
 
   it('回复可以追加，也可以单独删掉一条', async () => {

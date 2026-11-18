@@ -516,10 +516,9 @@ function PostCard({
   onDelete: () => void;
   onDeleteReply: (replyId: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyText, setReplyText] = useState('');
-  const [hugged, setHugged] = useState(false);
+  const hugged = Boolean(post.hugged);
 
   // 边打字边检查：命中就提示并禁用发送，不用等按下按钮才被拦
   const replyScan = useMemo(() => scanSensitive(replyText), [replyText]);
@@ -532,7 +531,6 @@ function PostCard({
     onReply(content);
     setReplyText('');
     setReplyOpen(false);
-    setExpanded(true);
   }
 
   return (
@@ -574,17 +572,23 @@ function PostCard({
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
+        {/*
+          一个 IP 对同一条只能抱一次：抱过之后按钮变成「已抱」，并禁用。
+          `post.hugged` 是服务端算的（按匿名指纹去重），不是本地点一下就算 ——
+          刷新、换标签页都不会重新变成可抱。
+        */}
         <button
           type="button"
-          onClick={() => {
-            onHug();
-            setHugged(true);
-          }}
-          aria-label={`抱抱这条心事，目前 ${post.hugs} 个拥抱`}
+          onClick={onHug}
+          disabled={hugged}
+          aria-label={
+            hugged ? `你已经抱过这条心事了，共 ${post.hugs} 个拥抱` : `抱抱这条心事，目前 ${post.hugs} 个拥抱`
+          }
+          title={hugged ? '一个 IP 对同一条只能抱一次' : undefined}
           className={cn(
             'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11.5px] transition-all duration-400',
             hugged
-              ? 'border-[rgba(201,182,232,0.6)] bg-[rgba(201,182,232,0.22)] text-ink'
+              ? 'cursor-default border-[rgba(201,182,232,0.6)] bg-[rgba(201,182,232,0.22)] text-ink'
               : 'border-[rgba(141,133,152,0.2)] text-ink-faint hover:border-[rgba(201,182,232,0.5)] hover:text-ink',
           )}
         >
@@ -594,30 +598,18 @@ function PostCard({
             aria-hidden="true"
             className={cn('transition-transform duration-400', hugged && 'scale-110')}
           />
-          {post.hugs > 0 ? post.hugs : '抱抱'}
+          {hugged ? `已抱 · ${post.hugs}` : post.hugs > 0 ? post.hugs : '抱抱'}
         </button>
 
         <button
           type="button"
-          onClick={() => {
-            setReplyOpen((prev) => !prev);
-            setExpanded(true);
-          }}
+          onClick={() => setReplyOpen((prev) => !prev)}
           className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(141,133,152,0.2)] px-3 py-1.5 text-[11.5px] text-ink-faint transition-colors hover:text-ink"
         >
           <MessageCircle size={13} strokeWidth={1.7} aria-hidden="true" />
           {post.replies.length > 0 ? `${post.replies.length} 条回复` : '回复'}
         </button>
 
-        {post.replies.length > 0 ? (
-          <button
-            type="button"
-            onClick={() => setExpanded((prev) => !prev)}
-            className="text-[11.5px] text-ink-ghost transition-colors hover:text-ink-faint"
-          >
-            {expanded ? '收起' : '展开看看'}
-          </button>
-        ) : null}
       </div>
 
       <AnimatePresence initial={false}>
@@ -640,25 +632,22 @@ function PostCard({
                 className="mb-field resize-y text-[12.5px] leading-[1.9]"
               />
               <div className="mt-1.5 flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-                <p
-                  className={cn(
-                    'text-[11px] leading-relaxed',
-                    replyScan.hit ? 'text-[#8a4a45]' : 'text-ink-ghost',
-                  )}
-                  aria-live="polite"
-                >
-                  {replyScan.hit
-                    ? `这段里有不适合出现在广场上的词（${replyScan.masked.join('、')}），换个说法再发吧。`
-                    : `最多 ${MAX_REPLY_LENGTH} 字，说一句就够。`}
-                </p>
+                {/* 只在命中敏感词时才出现一行提示；平时的字数交给右下角的计数器 */}
+                {replyScan.hit ? (
+                  <p
+                    className="text-[11px] leading-relaxed text-[#8a4a45]"
+                    aria-live="polite"
+                  >
+                    这段里有不适合出现在广场上的词（{replyScan.masked.join('、')}），换个说法再发吧。
+                  </p>
+                ) : (
+                  <span aria-hidden="true" />
+                )}
                 <span className="ml-auto text-[11px] tabular-nums text-ink-ghost">
                   {replyLength} / {MAX_REPLY_LENGTH}
                 </span>
               </div>
-              <div className="mt-2 flex items-center justify-end gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setReplyOpen(false)}>
-                  算了
-                </Button>
+              <div className="mt-2 flex items-center justify-end">
                 <Button
                   variant="primary"
                   size="sm"
@@ -675,7 +664,7 @@ function PostCard({
       </AnimatePresence>
 
       <AnimatePresence initial={false}>
-        {expanded && post.replies.length > 0 ? (
+        {post.replies.length > 0 ? (
           <motion.ul
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}

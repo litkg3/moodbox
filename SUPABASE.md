@@ -147,7 +147,7 @@ square_posts  ← RLS 开启，anon 零策略 = 零权限
 | --- | --- | --- |
 | 读列表 | `moodbox_square_list(p_token, p_visitor)` | 所有人，但只返回 `approved`；带对令牌才返回待审核的；`p_visitor` 只用来给每条记录打 `mine` |
 | 发帖 | `moodbox_square_create(..., p_visitor, p_region)` | 所有人，`status` 在函数里写死为 `pending` |
-| 抱一下 | `moodbox_square_hug` | 所有人，但只对 `approved` 生效 |
+| 抱一下 | `moodbox_square_hug(p_id, p_visitor)` | 所有人，但只对 `approved` 生效；同一访客对同一条只算一次（`square_hugs` 主键去重） |
 | 回复 | `moodbox_square_reply(..., p_visitor, p_region)` | 所有人，但只能回复 `approved`；正文上限 200 字 |
 | 审核 | `moodbox_square_review(..., p_token)` | 口令必须等于 `moodbox_config.admin_token` |
 | 删帖 / 删回复 | `moodbox_square_delete*` | 同上 |

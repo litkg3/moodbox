@@ -190,10 +190,12 @@ class SquareStore extends ListStore<SquarePost> {
   }
 
   async hug(id: string): Promise<void> {
-    const next = await getContentBackend().hugPost(id);
-    // 只取拥抱数：整条替换会把 mine（这条是不是我发的）一起冲掉
+    const next = await getContentBackend().hugPost(id, squareViewerId);
+    // 只取拥抱数与「我抱过没有」：整条替换会把 mine（这条是不是我发的）一起冲掉
     this.setItems(
-      this.items.map((item) => (item.id === id ? { ...item, hugs: next.hugs } : item)),
+      this.items.map((item) =>
+        item.id === id ? { ...item, hugs: next.hugs, hugged: next.hugged } : item,
+      ),
     );
   }
 
