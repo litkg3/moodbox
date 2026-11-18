@@ -12,19 +12,19 @@ import { THEME_COLORS, THEME_INIT_SCRIPT } from '@/lib/theme';
 
 export const metadata: Metadata = {
   title: {
-    default: '情绪盒子 MoodBox · 让情绪有处安放，让快乐有迹可循',
-    template: '%s · 情绪盒子 MoodBox',
+    default: '情绪盒子 Mood Box · 面向青年群体的轻量情绪陪伴服务平台',
+    template: '%s · 情绪盒子 Mood Box',
   },
   description:
     '情绪盒子是一个安静的数字情绪空间：捏一颗漂浮的情绪球，得到一段温柔的陪伴；把生活里的开心小事收藏起来，在低落时重新遇见它们。所有记录仅保存在你的浏览器本地。',
-  applicationName: 'MoodBox',
+  applicationName: 'Mood Box',
   authors: [{ name: 'MoodBox' }],
   keywords: ['情绪记录', '情绪管理', '快乐记忆', '情绪日历', '治愈系网站', 'MoodBox'],
   icons: {
     icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
   },
   openGraph: {
-    title: '情绪盒子 MoodBox',
+    title: '情绪盒子 Mood Box · 面向青年群体的轻量情绪陪伴服务平台',
     description: '让情绪有处安放，让快乐有迹可循。',
     type: 'website',
     locale: 'zh_CN',

@@ -3,7 +3,7 @@ import { createHttpBackend } from '@/lib/backend/http';
 import { localBackend } from '@/lib/backend/local';
 import { createSupabaseBackend } from '@/lib/backend/supabase';
 import type { ContentBackend } from '@/lib/backend/types';
-import { isLocalModeForced, isSupabaseConfigured, SUPABASE_URL } from '@/lib/supabase-config';
+import { isLocalModeForced, isSupabaseConfigured } from '@/lib/supabase-config';
 
 export type { ContentBackend, PostDraft, ReplyDraft, StoryDraft } from '@/lib/backend/types';
 export { BackendNotConfiguredError, BackendRequestError } from '@/lib/backend/http';
@@ -57,11 +57,10 @@ export function describeBackend(): {
   const backend = getContentBackend();
 
   if (backend.mode === 'supabase') {
-    const project = SUPABASE_URL.match(/^https:\/\/([^.]+)\./)?.[1] ?? 'supabase';
     return {
       mode: 'supabase',
       label: '树洞广场已接入 Supabase',
-      detail: `帖子存在云端项目 ${project}；心事信箱与开心罐仍然只在这台设备上。`,
+      detail: '心事信箱与开心罐仍然只在这台设备上。',
     };
   }
 

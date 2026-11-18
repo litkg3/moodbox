@@ -9,6 +9,7 @@ import { EmotionSky } from '@/components/emotion/emotion-sky';
 import { useToast } from '@/components/ui/toast';
 import { HOME_BLESSING_LINES, SLOGAN } from '@/data/emotions';
 import { useMoodBox } from '@/hooks/use-moodbox';
+import { getEmotion } from '@/lib/emotions';
 import { moodBoxStore } from '@/lib/moodbox-store';
 import type { Emotion, EmotionId } from '@/types';
 
@@ -55,10 +56,11 @@ export function HomeExperience() {
   const handleBurstComplete = useCallback(
     (emotionId: EmotionId) => {
       setBurstingId(null);
+      const label = getEmotion(emotionId).label;
       void moodBoxStore
         .burst(emotionId)
         .then(() => {
-          showToast('散了。它过一会儿会自己飘回来。');
+          showToast(`「${label}」被你捏爆了，那股劲儿，散掉一点了吗？`);
           const timer = window.setTimeout(() => {
             timers.current.delete(emotionId);
             void moodBoxStore.restoreBurst(emotionId);

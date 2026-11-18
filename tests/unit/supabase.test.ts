@@ -170,7 +170,8 @@ describe('后端选择：环境变量决定走哪条路', () => {
     expect(cloudMod.getContentBackend().mode).toBe('supabase');
     const described = cloudMod.describeBackend();
     expect(described.label).toMatch(/Supabase/);
-    expect(described.detail).toContain('demo-project');
+    // 界面不再展示项目 ref，只说明"信箱与开心罐仍在本机"
+    expect(described.detail).toBe('心事信箱与开心罐仍然只在这台设备上。');
 
     vi.unstubAllEnvs();
     vi.resetModules();

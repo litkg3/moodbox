@@ -200,19 +200,20 @@ export function SquareView() {
           </p>
           {/* 数据存在哪必须写在页面上，不能让人以为换台设备还能看到 */}
           {source ? (
-            <p className="mt-4 inline-flex items-start gap-1.5 text-[11.5px] leading-relaxed text-ink-ghost">
-              <Database
-                size={12}
-                strokeWidth={1.6}
-                className="mt-[3px] shrink-0"
-                aria-hidden="true"
-              />
-              <span>
+            <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11.5px] leading-relaxed text-ink-ghost">
+              <span className="inline-flex items-start gap-1.5">
+                <Database
+                  size={12}
+                  strokeWidth={1.6}
+                  className="mt-[3px] shrink-0"
+                  aria-hidden="true"
+                />
                 <span className="text-ink-faint">{source.label}</span>
-                {' · '}
-                {source.detail}
               </span>
-            </p>
+              {/* 管理员入口与「已接入 Supabase」同一行展示 */}
+              <AdminBar ability="可以审核待发布的内容，删除不合适的帖子" buttonOnly />
+              <p className="w-full pl-[18px]">{source.detail}</p>
+            </div>
           ) : null}
         </div>
         <Button variant="primary" size="md" onClick={() => setComposeOpen(true)} className="shrink-0">
@@ -221,7 +222,7 @@ export function SquareView() {
         </Button>
       </header>
 
-      <AdminBar ability="可以审核待发布的内容，删除不合适的帖子" className="mb-7" />
+      <AdminBar ability="可以审核待发布的内容，删除不合适的帖子" hideEntry className="mb-7" />
 
       {isAdmin ? (
         <section aria-labelledby="pending-title" className="mb-9">

@@ -61,8 +61,30 @@ export function systemPrefersDark(): boolean {
   }
 }
 
-export function resolveTheme(preference: ThemePreference, prefersDark: boolean): ThemeMode {
-  if (preference === 'auto') return prefersDark ? 'night' : 'day';
+/**
+ * 自动夜间时段：22:00 —— 次日 05:00。
+ *
+ * 到了这个时段，即使手机/系统仍是浅色模式，界面也切到星空。
+ * 只影响「跟随系统」这一档偏好，用户手动选定的白日/星空不会被它覆盖。
+ */
+export const NIGHT_START_HOUR = 22;
+export const NIGHT_END_HOUR = 5;
+
+export function isNightHour(at: Date = new Date()): boolean {
+  const hour = at.getHours();
+  return hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR;
+}
+
+export function resolveTheme(
+  preference: ThemePreference,
+  prefersDark: boolean,
+  at: Date = new Date(),
+): ThemeMode {
+  if (preference === 'auto') {
+    // 夜间时段优先：不依赖系统是否开了深色
+    if (isNightHour(at)) return 'night';
+    return prefersDark ? 'night' : 'day';
+  }
   return preference;
 }
 
@@ -80,4 +102,4 @@ export function applyTheme(theme: ThemeMode): void {
  * 首帧前执行的内联脚本。放在 <head> 里，先于任何样式绘制，
  * 因此不会出现白底闪一下再切到星空的情况。
  */
-export const THEME_INIT_SCRIPT = `(function(){try{var k='${THEME_STORAGE_KEY}';var p=localStorage.getItem(k);if(p!=='day'&&p!=='night'){p=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'night':'day';}document.documentElement.dataset.theme=p;}catch(e){document.documentElement.dataset.theme='day';}})();`;
+export const THEME_INIT_SCRIPT = `(function(){try{var k='${THEME_STORAGE_KEY}';var p=localStorage.getItem(k);if(p!=='day'&&p!=='night'){var h=(new Date()).getHours();var n=(h>=${NIGHT_START_HOUR}||h<${NIGHT_END_HOUR});if(n){p='night';}else{p=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'night':'day';}}document.documentElement.dataset.theme=p;}catch(e){document.documentElement.dataset.theme='day';}})();`;

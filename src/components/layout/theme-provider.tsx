@@ -41,11 +41,25 @@ const ThemeContext = createContext<ThemeController | null>(null);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [preference, setPreferenceState] = useState<ThemePreference>('auto');
   const [prefersDark, setPrefersDark] = useState(false);
+  // 每分钟走一次，用来在 22:00 / 05:00 两个整点自动切主题
+  const [now, setNow] = useState(() => new Date());
 
   // 挂载后读取真实偏好（首帧由内联脚本处理，这里只是把状态对齐）
   useEffect(() => {
     setPreferenceState(readThemePreference());
     setPrefersDark(systemPrefersDark());
+    setNow(new Date());
+  }, []);
+
+  // 跨过夜间时段的边界时，页面要自己换过去，不能等用户手动点
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    const timer = window.setInterval(tick, 60_000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+    };
   }, []);
 
   // 监听系统主题变化：只有在「跟随系统」时才真正影响页面
@@ -57,7 +71,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => query.removeEventListener('change', onChange);
   }, []);
 
-  const theme = resolveTheme(preference, prefersDark);
+  const theme = resolveTheme(preference, prefersDark, now);
 
   useEffect(() => {
     applyTheme(theme);

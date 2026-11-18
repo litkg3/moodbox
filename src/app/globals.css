@@ -427,6 +427,20 @@ html[data-theme='night'] .mb-surface-solid {
   transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
 }
 
+/*
+ * iOS Safari 在聚焦输入框时，如果字号小于 16px 会自动把整个页面放大
+ * （用户切出输入法后页面仍停留在放大状态，看起来像「界面被拽大了」）。
+ * 移动端把表单控件字号固定到 16px，从根上避免这次自动缩放。
+ */
+@media (max-width: 1023px) {
+  .mb-field,
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 .mb-field::placeholder {
   color: var(--color-ink-ghost);
 }
@@ -513,13 +527,13 @@ html[data-theme='night'] .mb-day-selected {
 
 /* 整块面板（弹层 / 抽屉）：比玻璃更实，承载正文 */
 .mb-panel {
-  background: linear-gradient(168deg, rgba(255, 253, 250, 0.985) 0%, rgba(250, 246, 247, 0.975) 100%);
+  background: linear-gradient(168deg, rgba(255, 253, 250, 0.935) 0%, rgba(250, 246, 247, 0.925) 100%);
   backdrop-filter: blur(22px) saturate(1.08);
   -webkit-backdrop-filter: blur(22px) saturate(1.08);
 }
 
 html[data-theme='night'] .mb-panel {
-  background: linear-gradient(168deg, rgba(26, 23, 45, 0.99) 0%, rgba(18, 16, 33, 0.985) 100%);
+  background: linear-gradient(168deg, rgba(26, 23, 45, 0.94) 0%, rgba(18, 16, 33, 0.93) 100%);
 }
 
 /*
@@ -530,9 +544,9 @@ html[data-theme='night'] .mb-panel {
 .mb-deep-card {
   background: linear-gradient(
     168deg,
-    rgba(63, 56, 92, 0.985) 0%,
-    rgba(45, 40, 68, 0.995) 56%,
-    rgba(34, 30, 52, 1) 100%
+    rgba(63, 56, 92, 0.93) 0%,
+    rgba(45, 40, 68, 0.94) 56%,
+    rgba(34, 30, 52, 0.95) 100%
   );
   border: 1px solid rgba(255, 255, 255, 0.13);
   color: #f5f2fc;
