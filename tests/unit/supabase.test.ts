@@ -172,12 +172,32 @@ describe('Supabase 后端 · 写', () => {
   });
 
   it('库里还没更新到带 p_visitor 的拥抱函数时，退回单参数调用', async () => {
-    const missing = Object.assign(new Error('Could not find the function'), { code: 'PGRST202' });
-    rpcMock.mockRejectedValueOnce(missing).mockResolvedValueOnce(ok({ ...rawPost, hugs: 4 }));
+    const missing = { code: 'PGRST202', message: 'Could not find the function public.moodbox_square_hug' };
+    rpcMock
+      .mockResolvedValueOnce({ data: null, error: missing })
+      .mockResolvedValueOnce(ok({ ...rawPost, hugs: 4 }));
     const backend = createSupabaseBackend();
     const post = await backend.hugPost('post_abc', 'visitor_key');
     expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_hug', { p_id: 'post_abc' });
     expect(post.hugs).toBe(4);
+  });
+
+  it('函数旧到连单参数签名都没有时，提示去重新执行 schema，而不是静默失败', async () => {
+    // 和真 client 一致：以 { data: null, error } 的形式把错误还回来
+    rpcMock.mockResolvedValue({
+      data: null,
+      error: { code: 'PGRST202', message: 'Could not find the function public.moodbox_square_hug' },
+    });
+    const backend = createSupabaseBackend();
+    await expect(backend.hugPost('post_abc', 'visitor_key')).rejects.toThrow(/重新执行一次/);
+    expect(rpcMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('拥抱遇到网络 / 业务错误时直接抛出，不会误降级成单参数调用', async () => {
+    rpcMock.mockResolvedValue({ data: null, error: { message: 'Failed to fetch' } });
+    const backend = createSupabaseBackend();
+    await expect(backend.hugPost('post_abc', 'visitor_key')).rejects.toThrow(/连不上/);
+    expect(rpcMock).toHaveBeenCalledTimes(1);
   });
 
   it('删除自己的帖子 / 回复走 delete_own，不携带管理员口令', async () => {

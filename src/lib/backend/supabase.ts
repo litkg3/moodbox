@@ -69,18 +69,60 @@ function toPost(raw: unknown): SquarePost {
 }
 
 /**
+ * 把 PostgREST 返回的错误体收敛成纯数据（`{ code, text }`）。
+ *
+ * 真实错误可能是普通对象，也可能是被包过的 `Error` 实例，字段位置并不统一，
+ * 所以统一走 `pickText` 逐个取，别的地方只认这个结果。
+ */
+function errorParts(error: unknown): { code: string; text: string } {
+  if (!error) return { code: '', text: '' };
+  const source = error as Record<string, unknown>;
+  return {
+    code: pickText(source, 'code'),
+    text: [pickText(source, 'message'), pickText(source, 'details'), pickText(source, 'hint')]
+      .filter(Boolean)
+      .join(' '),
+  };
+}
+
+/** 从错误对象里取一个字符串字段；没有或不是字符串都当空。 */
+function pickText(source: Record<string, unknown>, key: string): string {
+  if (!(key in source)) return '';
+  const value = source[key];
+  return typeof value === 'string' ? value : '';
+}
+
+/** PostgREST 找不到"这个签名的函数"时给这个码；旧库少一个参数就会报它。 */
+const FUNCTION_NOT_FOUND = 'PGRST202';
+
+/** 这个错误是不是"函数没有这个签名"（而不是网络 / 权限 / 业务异常）。 */
+export function isFunctionMissing(error: unknown): boolean {
+  const { code, text } = errorParts(error);
+  if (code === FUNCTION_NOT_FOUND) return true;
+  return /could not find the function/i.test(text);
+}
+
+/** 这个错误是不是网络层面的（断网、域名解析不了、项目被暂停）。 */
+export function isNetworkError(error: unknown): boolean {
+  const { text } = errorParts(error);
+  return /failed to fetch|networkerror|network request failed|fetch failed|err_name_not_resolved|load failed/i.test(
+    text,
+  );
+}
+
+/**
  * 把 PostgREST / Postgres 的错误翻译成能看懂的中文。
  *
  * 接数据库最容易踩的坑就是"配错了却只看到 Not Found"，
  * 所以这里把几种典型情况单独识别出来，直接告诉用户该去做什么。
  */
 export function translateSupabaseError(error: unknown): Error {
-  const raw = error as { message?: string; details?: string; code?: string; hint?: string } | null;
-  const message = [raw?.message, raw?.details, raw?.hint].filter(Boolean).join(' ');
-  const code = raw?.code ?? '';
+  const { code, text: message } = errorParts(error);
 
-  if (code === 'PGRST202' || /could not find the function|function .* does not exist/i.test(message)) {
-    return new Error('Supabase 里还没创建 moodbox_* 函数，请先在 SQL Editor 执行 supabase/schema.sql。');
+  if (isFunctionMissing(error)) {
+    return new Error(
+      'Supabase 里还没创建 moodbox_* 函数（或版本偏旧）。请在 SQL Editor 里把 supabase/schema.sql 整段重新执行一次，执行完以后刷新页面。',
+    );
   }
   if (code === '42P01' || /relation .* does not exist/i.test(message)) {
     return new Error('Supabase 里还没有 square_posts / square_replies 表，请先执行 supabase/schema.sql。');
@@ -91,7 +133,7 @@ export function translateSupabaseError(error: unknown): Error {
   if (/invalid api key|jwt|apikey/i.test(message)) {
     return new Error('Supabase 的 anon key 不对，请检查 NEXT_PUBLIC_SUPABASE_ANON_KEY。');
   }
-  if (/failed to fetch|network|fetch failed|err_name_not_resolved/i.test(message)) {
+  if (isNetworkError(error) || /^failed to fetch$/i.test(message)) {
     return new Error('连不上 Supabase，请检查网络，以及项目是否因为长期不用被暂停了。');
   }
   // 自定义函数里 raise exception 的文案本来就是给人看的，直接透传
@@ -126,8 +168,46 @@ export function createSupabaseBackend(options: SupabaseBackendOptions = {}): Con
 
   async function rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
     const { data, error } = await getClient().rpc(fn, args);
-    if (error) throw translateSupabaseError(error);
+    if (error) {
+      throw translateSupabaseError(error);
+    }
     return data as T;
+  }
+
+  /** 原样把错误抛出去（rpc 会把错误翻译成中文，降级判断要看原始 code）。 */
+  async function rawRpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
+    const { data, error } = await getClient().rpc(fn, args);
+    if (error) throw error;
+    return data as T;
+  }
+
+  /**
+   * 可选参数的 RPC：库里的函数可能还没有这个参数（比如旧版 schema 的拥抱函数）。
+   *
+   * 客户端没法可靠地"先查库有几个签名"（那要走 pg_catalog，anon 未必有权限），
+   * 所以按参数多少从新到旧逐个试，但只有「函数签名不存在」才降级。
+   *
+   * ⚠️ 这里的错误必须**原样**传下去，不能先用 `translateSupabaseError` 包一层：
+   * 翻译会丢掉 `code`，降级判断就再也认不出 PGRST202 了（这个坑踩过）。
+   * 网络错误也要先排除 —— 断网时 fetch 报的是 `TypeError: Failed to fetch`，
+   * 名字里就带 "fetch"，很容易被误判成 PostgREST 的报错。
+   */
+  async function rpcFallback<T>(attempts: Array<() => Promise<T>>): Promise<T> {
+    let missing: unknown = null;
+    for (const attempt of attempts) {
+      try {
+        return await attempt();
+      } catch (error) {
+        if (!isFunctionMissing(error) || isNetworkError(error)) {
+          throw translateSupabaseError(error);
+        }
+        missing = error;
+      }
+    }
+    // 所有签名都找不到：确实没建好（或版本差太多），交给翻译说清楚
+    throw translateSupabaseError(
+      missing ?? { code: 'PGRST202', message: 'Could not find the function (unknown)' },
+    );
   }
 
   return {
@@ -170,18 +250,16 @@ export function createSupabaseBackend(options: SupabaseBackendOptions = {}): Con
     },
 
     async hugPost(id: string, visitorId?: string) {
-      try {
-        return toPost(await rpc('moodbox_square_hug', { p_id: id, p_visitor: visitorId ?? null }));
-      } catch (error) {
-        /*
-         * 数据库还没更新到带 p_visitor 的版本时（PGRST202 = 找不到这个签名），
-         * 退回到老的单参数调用，至少让人能抱上 —— 只是这时候服务端没法去重。
-         * 界面侧还有一层本机记录兜底，不会因为这一步就让人反复刷拥抱数。
-         */
-        const code = (error as { code?: string } | null)?.code ?? '';
-        if (code !== 'PGRST202') throw error;
-        return toPost(await rpc('moodbox_square_hug', { p_id: id }));
-      }
+      /*
+       * 带 p_visitor 的签名是「一个 IP 只能抱一次」的前提；
+       * 库还是旧版（只有 p_id）时就退回单参数调用，先让人抱上，
+       * 只是这时候服务端没法去重。两种情况都只吞「函数签名不存在」。
+       */
+      const post = await rpcFallback([
+        () => rawRpc<unknown>('moodbox_square_hug', { p_id: id, p_visitor: visitorId ?? null }),
+        () => rawRpc<unknown>('moodbox_square_hug', { p_id: id }),
+      ]);
+      return toPost(post);
     },
 
     async addReply(postId: string, draft: ReplyDraft) {
