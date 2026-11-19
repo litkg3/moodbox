@@ -73,8 +73,8 @@ export const DEFAULT_MIN_MESSAGES = 15;
 
 /** 情绪 → 该情绪允许的最少文案条数（未列出的情绪按 DEFAULT_MIN_MESSAGES 校验）。 */
 export const MIN_MESSAGES_BY_EMOTION: Partial<Record<EmotionId, number>> = {
-  // 焦虑：文案已按需求整体换成《明朝那些事儿》的结尾感悟，共 10 条。
-  anxiety: 10,
+  // 焦虑：面板短句保持原来那组 8 条（故事另放在 emotion.story 里，不占这个额度）。
+  anxiety: 8,
   // 备考：文案已按需求整体替换为一组独立的鼓励短句，共 14 条。
   exam: 14,
   // 孤独：文案已按需求整体替换为一组关于「独处」的短句，共 7 条。

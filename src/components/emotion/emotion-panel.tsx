@@ -112,7 +112,7 @@ function EmotionPanelContent({
         <h2 id="emotion-panel-title" className="sr-only">
           {emotion.label}
         </h2>
-        <StoryPanel onBack={() => setReading(false)} />
+        <StoryPanel emotion={emotion} onBack={() => setReading(false)} />
       </>
     );
   }

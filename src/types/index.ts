@@ -74,8 +74,26 @@ export interface Emotion {
   };
   /** 至少 15 条温柔陪伴文案（不承诺疗效、不说教） */
   messages: readonly string[];
+  /**
+   * 这颗球专属的一篇故事。
+   *
+   * 有它时，面板里的「看个小故事」优先展示这一篇，而不是从故事集里随机抽
+   * —— 有些话只适合某个情绪看，混进通用故事里就散了。
+   * 没有时不显示「换一篇」（只有一篇，换也还是它）。
+   */
+  story?: EmotionStory;
   /** 强烈痛苦类情绪额外附带的低打扰现实支持提示 */
   supportNote?: string;
+}
+
+/** 情绪球的专属故事：结构与故事集一致，但不进数据库、不可被管理员删改。 */
+export interface EmotionStory {
+  title: string;
+  /** 整段正文，保留原有换行（面板按 pre-wrap 渲染） */
+  content: string;
+  theme: StoryTheme;
+  /** 署名，缺省显示「情绪盒子」 */
+  author?: string;
 }
 
 /** 快乐记忆的心情标签 */

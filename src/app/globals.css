@@ -1553,6 +1553,21 @@ html[data-theme='night'] .mb-dock-item[data-active='true'] {
 }
 
 /*
+ * 还有内容没看完时的底部渐隐。
+ *
+ * 故事正文的滚动条是藏起来的（上面那两条），好处是不打扰阅读，
+ * 坏处是「下面还有」完全看不出来 —— 读者会以为文章到这一行就结束了，
+ * 恰好错过结尾。这里用 mask 让最后两行淡出，等于替滚动条说话。
+ *
+ * 用 mask 而不是盖一层渐变：卡片底色日夜不同，写死颜色迟早对不上；
+ * mask 只吃透明度，与背景无关。滚动到底部时由脚本摘掉这个类。
+ */
+.mb-fade-bottom {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent 100%);
+}
+
+/*
  * 只在某个主题下出现的元素。
  * 用 CSS 而不是 React 条件渲染，是为了让首帧（内联脚本已写好 data-theme）
  * 立刻显示正确的图标，同时避免水合前后内容不一致。

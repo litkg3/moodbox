@@ -14,15 +14,30 @@ describe('情绪内容库', () => {
     expect(validateEmotionLibrary()).toEqual({ ok: true, problems: [] });
   });
 
-  it('焦虑球的文案为《明朝那些事儿》结尾那段感悟', () => {
+  it('焦虑球的面板短句保持原来那组（共 8 条）', () => {
     const anxiety = EMOTIONS.find((emotion) => emotion.id === 'anxiety');
-    expect(anxiety?.messages).toHaveLength(10);
-    // 三处标志性的话：良知与理想、用喜欢的方式度过一生、不过尔尔
-    expect(anxiety?.messages[1]).toContain('一个叫良知，另一个叫理想');
-    expect(anxiety?.messages[3]).toBe('这件事情就是，用你喜欢的方式度过一生。');
-    expect(anxiety?.messages[8]).toBe('人生海海，山山而川，不过尔尔。');
-    // 以前那组文案要真的删干净，不能只是被追加在后面
-    expect(anxiety?.messages.join('')).not.toContain('宇宙都会联合起来');
+    expect(anxiety?.messages).toHaveLength(8);
+    expect(anxiety?.messages[0]).toBe('当你真心渴望某样东西时，整个宇宙都会联合起来助你实现愿望。');
+  });
+
+  it('焦虑球带一篇「看个小故事」专属故事，整段不拆', () => {
+    const anxiety = EMOTIONS.find((emotion) => emotion.id === 'anxiety');
+    const story = anxiety?.story;
+    expect(story).toBeTruthy();
+    expect(story?.title).toBe('用你喜欢的方式度过一生');
+    // 整段：四个层次都要在同一段正文里，不能拆成 messages 那样的短句
+    expect(story?.content).toContain('一个叫良知，另一个叫理想');
+    expect(story?.content).toContain('用你喜欢的方式度过一生');
+    expect(story?.content).toContain('梅须逊雪三分白，雪却输梅一段香');
+    expect(story?.content).toContain('人生海海，山山而川，不过尔尔');
+    // 保留分段（面板按 pre-wrap 渲染，换行就是呼吸）
+    expect(story?.content.split('\n\n').length).toBeGreaterThanOrEqual(5);
+    expect(story?.content.length).toBeGreaterThan(250);
+  });
+
+  it('只有焦虑球带专属故事，别的球仍然从故事集里抽', () => {
+    const withStory = EMOTIONS.filter((emotion) => emotion.story);
+    expect(withStory.map((emotion) => emotion.id)).toEqual(['anxiety']);
   });
 
   it('文案不重复，且都带有配色与坐标', () => {
