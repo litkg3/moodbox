@@ -2,7 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { BookOpen, BookmarkPlus, Check, HeartHandshake, Mail, Sparkles, Sun, Wind } from 'lucide-react';
+import Link from 'next/link';
+import {
+  ArrowUpRight,
+  BookOpen,
+  BookmarkPlus,
+  Check,
+  HeartHandshake,
+  Mail,
+  Sparkles,
+  Sun,
+  Wind,
+} from 'lucide-react';
 import { StoryPanel } from '@/components/stories/story-panel';
 import { GlassSheet } from '@/components/ui/glass-sheet';
 import { useToast } from '@/components/ui/toast';
@@ -140,7 +151,11 @@ function EmotionPanelContent({
       </div>
 
       {/* 主体那句话：白色、居中、慢慢换 */}
-      <div className="mt-7 flex min-h-[132px] items-center justify-center">
+      {/*
+        矮屏（手机横屏、分屏）文案区收窄：那点高度要留给下面的按钮，
+        否则「去呼吸放松」和「捏爆它」会一起挤在卡片底边，得先滑一下才看得全。
+      */}
+      <div className="mt-6 flex min-h-[86px] items-center justify-center [@media(min-height:700px)]:mt-7 [@media(min-height:700px)]:min-h-[132px]">
         <AnimatePresence mode="wait" initial={false}>
           <motion.p
             key={entry.message}
@@ -155,6 +170,26 @@ function EmotionPanelContent({
           </motion.p>
         </AnimatePresence>
       </div>
+
+      {/*
+        文案里提到的功能，紧跟在文案下面给一个直达按钮。
+        挂在句子的正下方而不是按钮排里：它是对这句话的补充，
+        跟「看个小故事」「我感觉好一点了」不是一类动作。
+      */}
+      {emotion.action ? (
+        <div className="mt-2 flex justify-center">
+          <Link
+            href={emotion.action.href}
+            prefetch={false}
+            onClick={onClose}
+            title={emotion.action.hint}
+            className="mb-deep-btn inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[12px] tracking-[0.04em] transition-colors"
+          >
+            {emotion.action.label}
+            <ArrowUpRight size={13} strokeWidth={1.8} aria-hidden="true" />
+          </Link>
+        </div>
+      ) : null}
 
       {/*
         「捏爆它」紧跟安慰语、居中、做得显眼：

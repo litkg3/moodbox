@@ -137,6 +137,23 @@ describe('情绪内容库', () => {
     expect(irritation?.messages.join('')).not.toContain('你现在很想摔东西吧');
   });
 
+  /*
+   * 「直达入口」只配给真正需要的那颗球。
+   *
+   * 烦躁球文案里提到了呼吸放松，配了一个 /breathe 按钮；
+   * 别的球没有 action，面板也就不该凭空多出一枚按钮。
+   */
+  it('只有烦躁球带直达入口，指向呼吸放松页', () => {
+    const withAction = EMOTIONS.filter((emotion) => emotion.action);
+    expect(withAction.map((emotion) => emotion.id)).toEqual(['irritation']);
+    const irritation = EMOTIONS.find((emotion) => emotion.id === 'irritation');
+    expect(irritation?.action).toEqual({
+      label: '去呼吸放松',
+      href: '/breathe',
+      hint: '跟着圆环，慢慢呼吸几十秒',
+    });
+  });
+
   it('文案不重复，且都带有配色与坐标', () => {
     for (const emotion of EMOTIONS) {
       expect(new Set(emotion.messages).size).toBe(emotion.messages.length);

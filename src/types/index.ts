@@ -82,8 +82,25 @@ export interface Emotion {
    * 没有时不显示「换一篇」（只有一篇，换也还是它）。
    */
   story?: EmotionStory;
+  /**
+   * 面板主文案下方的一个直达入口（可选）。
+   *
+   * 文案里说「试试某功能」时，光靠一句话让人自己去页头找入口，多半就找丢了。
+   * 这里配一个按钮，点了直接过去。只在需要的时候给某颗球配，别的球不受影响。
+   */
+  action?: EmotionAction;
   /** 强烈痛苦类情绪额外附带的低打扰现实支持提示 */
   supportNote?: string;
+}
+
+/** 情绪面板里的一枚直达按钮：文案 + 站内地址。 */
+export interface EmotionAction {
+  /** 按钮文字，如「去呼吸放松」 */
+  label: string;
+  /** 站内路径，必须是本站在的页面 */
+  href: string;
+  /** 补充说明，用于 title 与读屏 */
+  hint?: string;
 }
 
 /** 情绪球的专属故事：结构与故事集一致，但不进数据库、不可被管理员删改。 */
