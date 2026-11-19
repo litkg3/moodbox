@@ -54,7 +54,7 @@ export function SiteHeader() {
           aria-label="情绪盒子 MoodBox 首页"
         >
           {/* 卡通盒子站标：hover 时轻轻抬一下，像盒盖被顶起来一点 */}
-          <MoodBoxMark className="h-8 w-8 shrink-0 drop-shadow-[0_5px_12px_rgba(142,118,184,0.35)] transition-transform duration-700 group-hover:-translate-y-[1px] group-hover:scale-[1.06]" />
+          <MoodBoxMark className="h-10 w-10 shrink-0 drop-shadow-[0_5px_12px_rgba(142,118,184,0.35)] transition-transform duration-700 group-hover:-translate-y-[1px] group-hover:scale-[1.06]" />
           <span className="flex flex-col leading-none">
             <span className="font-display text-[14px] font-normal tracking-[0.26em] text-ink">
               情绪盒子

@@ -1,39 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- 与页头站标同一只粉色小盒：等轴测的盒身 + 口朝上 + 后面掀起的盖板 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- 与页头站标同一只粉盒：长方体（长 72 / 宽 44 / 高 40），等轴测，盖子半掀 -->
   <defs>
-    <linearGradient id="left" x1="0" y1="0" x2="0.35" y2="1">
-      <stop offset="0" stop-color="#FBD5E4"/>
-      <stop offset="1" stop-color="#F0AEC8"/>
-    </linearGradient>
-    <linearGradient id="right" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#E68FB2"/>
-      <stop offset="1" stop-color="#CE7099"/>
-    </linearGradient>
-    <linearGradient id="inner" x1="0" y1="0" x2="0.6" y2="1">
-      <stop offset="0" stop-color="#DF85AA"/>
-      <stop offset="1" stop-color="#F0AECB"/>
-    </linearGradient>
-    <linearGradient id="lid" x1="0.15" y1="0" x2="0.7" y2="1">
-      <stop offset="0" stop-color="#FDE0EC"/>
-      <stop offset="1" stop-color="#F5B3CD"/>
-    </linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="#FDDCE9"/><stop offset="1" stop-color="#F2AEC8"/></linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#EB95B6"/><stop offset="1" stop-color="#D1709A"/></linearGradient>
+    <linearGradient id="in" x1="0.1" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="#C15F89"/><stop offset="1" stop-color="#E68FB2"/></linearGradient>
+    <linearGradient id="lid" x1="0.1" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="#FFEDF5"/><stop offset="1" stop-color="#F9BFD6"/></linearGradient>
   </defs>
-
-  <rect width="64" height="64" rx="14" fill="#FFF4F8"/>
-
-  <!-- 落地阴影 -->
-  <ellipse cx="32" cy="56.6" rx="16" ry="3.3" fill="#C0718F" opacity="0.18"/>
-
-  <!-- 盒身 -->
-  <path d="M9.2 34.8 32 45.4v12.4L9.2 47.2Z" fill="url(#left)"/>
-  <path d="M32 45.4l22.8-10.6v12.4L32 57.8Z" fill="url(#right)"/>
-  <path d="M9.2 34.8 32 24.2l22.8 10.6L32 45.4Z" fill="url(#inner)"/>
-
-  <!-- 盒口前沿的亮边 -->
-  <path d="M9.2 34.8 32 45.36l22.8-10.56" stroke="#FFFFFF" stroke-width="1.4" stroke-linecap="round" opacity="0.6" fill="none"/>
-  <path d="M32 45.8v11.4" stroke="#FFFFFF" stroke-width="1.1" stroke-linecap="round" opacity="0.4"/>
-
-  <!-- 掀起的盖板 -->
-  <path d="M9.8 34.2 31.8 23.4l8.4 4-4.4-17.6c-.4-1.6-2.4-2.2-3.8-1.2L12.2 23.2c-2.2 1.4-3.2 4.2-2.6 6.8.2 1.4 1.2 2.8 2.6 3.4Z" fill="url(#lid)"/>
-  <path d="M11.2 32.8 31.8 22.8l6.8 3.2-.4-2.2-6.4-3-19.8 10.2c-1.6.8-2.4 2.8-2 4.6.8-1.4 2-2.4 3.2-2.8Z" fill="#DE8FB3" opacity="0.45"/>
+  <rect width="200" height="200" fill="#FFF7FA"/>
+  <ellipse cx="98" cy="180" rx="40" ry="5.6" fill="#C0718F" opacity="0.15"/>
+  <path d="M84 176L148.4 143.8L148.4 103.8L84 136Z" fill="url(#left)"/>
+  <path d="M148.4 143.8L109 124.1L109 84.1L148.4 103.8Z" fill="url(#right)"/>
+  <path d="M84 136L148.4 103.8L109 84.1L44.6 116.3Z" fill="url(#in)"/>
+  <path d="M47 118 103 90" stroke="#FFE7B4" stroke-width="3.4" stroke-linecap="round" fill="none"/>
+  <path d="M47 122 103 94" stroke="#FFE7B4" stroke-width="3.4" stroke-linecap="round" fill="none"/>
+  <path d="M52 123 108 95" stroke="#CBEDDC" stroke-width="3.4" stroke-linecap="round" fill="none"/>
+  <path d="M60 124 116 96" stroke="#FBC7DC" stroke-width="3.4" stroke-linecap="round" fill="none"/>
+  <path d="M70 124 126 96" stroke="#FFEFC9" stroke-width="3.4" stroke-linecap="round" fill="none"/>
+  <path d="M80 123 136 95" stroke="#DDE9F7" stroke-width="3.4" stroke-linecap="round" fill="none"/>
+  <path d="M84 136 84 176 148.4 143.8 148.4 103.8" fill="none" stroke="#FFFFFF" stroke-width="1.7" stroke-linejoin="round" opacity="0.5"/>
+  <ellipse cx="90" cy="150" rx="6" ry="3.2" fill="#F07AA5" opacity="0.26"/>
+  <ellipse cx="98" cy="145" rx="2.6" ry="3.2" fill="#6B4A5C" opacity="0.82"/>
+  <ellipse cx="110" cy="139" rx="2.6" ry="3.2" fill="#6B4A5C" opacity="0.82"/>
+  <circle cx="97.2" cy="143.8" r="0.9" fill="#FFFFFF"/>
+  <circle cx="109.2" cy="137.8" r="0.9" fill="#FFFFFF"/>
+  <path d="M148.4 103.8L109 84.1L91.4 43.8L130.8 63.5Z" fill="url(#lid)"/>
+  <path d="M148.4 103.8L109 84.1L91.4 43.8L130.8 63.5Z" fill="none" stroke="#FFFFFF" stroke-width="1.7" stroke-linejoin="round" opacity="0.72"/>
+  <path d="M148.4 103.8 109 84.1" stroke="#DE8FB4" stroke-width="1.3" stroke-linecap="round" opacity="0.4"/>
 </svg>

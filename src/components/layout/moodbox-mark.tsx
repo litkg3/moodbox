@@ -1,93 +1,173 @@
 /**
- * 站标图形：一只粉色、开着盖的小方盒。
+ * 站标图形：一只粉色、盖子半掀着的长方体小盒子。
  *
- * 形象上要「打开」：盖子向后掀起来，盒口露出来 ——
- * 情绪盒子做的事就是「把情绪放进去，也可以再拿出来看」，合上的盒子说不出这件事。
+ * 照用户给的那只粉盒来：薄纸板、浅粉、盖子上掀（不是全打开），
+ * 盒口里塞着一排小纸条 —— 一张纸一种心情。
  *
- * 画法：等轴测（isometric），不用透视 —— 透视在 20px 下会歪，
- * 等轴测缩到 20px 仍然是个清楚的方盒。盒身是两个侧面 + 一个菱形顶面（盒口内壁），
- * 盖板最后画、下沿压在盒口上：不遮住盒子，又明确「盖是掀开的」。
- * 三个可见面各给一档粉深浅，只靠明度差立体，不加描边 —— 小尺寸下描边先糊。
+ * 画法：正交等轴测（2:1 斜度），不用透视 —— 透视在 20px 下会歪。
+ * 顶点按"长 72 / 宽 44 / 高 40"算好后写成常量。长明显大于宽、宽大于高，
+ * 所以看过去是一只能装东西的长盒，而不是一只骰子（之前那版就是太方了）。
+ *
+ * 三个可见面各一档粉，只靠明暗分面；不加描边 —— 小尺寸下描边先糊。
  */
-import { useId } from 'react';
+import { useId } from "react";
 
 interface MoodBoxMarkProps {
   className?: string;
 }
 
+/** 等轴测顶点（viewBox 200×200）。改比例请按 e1/e2/e3 重算整组，别单点微调。 */
+const FL = [84, 176] as const;
+const FR = [148.4, 143.8] as const;
+const BR = [109, 124.1] as const;
+const tFL = [84, 136] as const;
+const tFR = [148.4, 103.8] as const;
+const tBL = [44.6, 116.3] as const;
+const tBR = [109, 84.1] as const;
+
+/** 盖子：以盒口后沿 tFR→tBR 为铰链，向外上方张开 58°（半掀）。 */
+const lid3 = [91.4, 43.8] as const;
+const lid4 = [130.8, 63.5] as const;
+
+const pt = (p: readonly number[]) => `${p[0]!.toFixed(1)} ${p[1]!.toFixed(1)}`;
+const poly = (...pts: readonly (readonly number[])[]) =>
+  `M${pts.map(pt).join("L")}Z`;
+
 export function MoodBoxMark({ className }: MoodBoxMarkProps) {
-  // 渐变 id 不能写死：同一页里可能出现多处站标（页头 + 页脚），
-  // 重复 id 会让后出现的图形引用到前一个的渐变。
-  const uid = useId().replace(/:/g, '');
-  const lidInner = `mb-lid-inner-${uid}`;
-  const left = `mb-left-${uid}`;
-  const right = `mb-right-${uid}`;
-  const inner = `mb-inner-${uid}`;
+  // 渐变 id 不能写死：同一页可能出现多处站标，重复 id 会互相抢引用
+  const uid = useId().replace(/:/g, "");
+  const g = (name: string) => `mb-${name}-${uid}`;
 
   return (
     <svg
-      viewBox="0 0 32 32"
+      viewBox="0 0 200 200"
       className={className}
       role="presentation"
       focusable="false"
       aria-hidden="true"
     >
       <defs>
-        {/* 三个可见面各一档粉：盖板最浅、左前壁次之、右前壁最深，盒口内壁压在最深一档 */}
-        <linearGradient id={left} x1="0" y1="0" x2="0.35" y2="1">
-          <stop offset="0" stopColor="#FBD5E4" />
-          <stop offset="1" stopColor="#F0AEC8" />
+        <linearGradient id={g("left")} x1="0" y1="0" x2="0.4" y2="1">
+          <stop offset="0" stopColor="#FDDCE9" />
+          <stop offset="1" stopColor="#F2AEC8" />
         </linearGradient>
-        <linearGradient id={right} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#E68FB2" />
-          <stop offset="1" stopColor="#CE7099" />
+        <linearGradient id={g("right")} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#EB95B6" />
+          <stop offset="1" stopColor="#D1709A" />
         </linearGradient>
-        <linearGradient id={inner} x1="0" y1="0" x2="0.6" y2="1">
-          <stop offset="0" stopColor="#DF85AA" />
-          <stop offset="1" stopColor="#F0AECB" />
+        <linearGradient id={g("in")} x1="0.1" y1="0" x2="0.8" y2="1">
+          <stop offset="0" stopColor="#C15F89" />
+          <stop offset="1" stopColor="#E68FB2" />
         </linearGradient>
-        <linearGradient id={lidInner} x1="0.15" y1="0" x2="0.7" y2="1">
-          <stop offset="0" stopColor="#FDE0EC" />
-          <stop offset="1" stopColor="#F5B3CD" />
+        <linearGradient id={g("lid")} x1="0.1" y1="0" x2="0.8" y2="1">
+          <stop offset="0" stopColor="#FFEDF5" />
+          <stop offset="1" stopColor="#F9BFD6" />
         </linearGradient>
       </defs>
 
-      {/* 落地的一点影子 */}
-      <ellipse cx="16" cy="29.2" rx="8.2" ry="1.7" fill="#C0718F" opacity="0.18" />
-
-      {/* 盒身：左前壁、右前壁、盒口（菱形顶面，颜色最深，暗示里面是空的） */}
-      <path d="M4.6 17.4 16 22.7v6.2L4.6 23.6Z" fill={`url(#${left})`} />
-      <path d="M16 22.7l11.4-5.3v6.2L16 28.9Z" fill={`url(#${right})`} />
-      <path d="M4.6 17.4 16 12.1l11.4 5.3L16 22.7Z" fill={`url(#${inner})`} />
-
-      {/* 盒口前沿的亮边：一条细线，盒子立刻显得「薄」 */}
-      <path
-        d="M4.6 17.4 16 22.68l11.4-5.28"
-        stroke="#FFFFFF"
-        strokeWidth="0.7"
-        strokeLinecap="round"
-        opacity="0.6"
-        fill="none"
-      />
-      {/* 前面那条竖棱：一条更细的亮线，两个侧面就分得开 */}
-      <path d="M16 22.9v5.7" stroke="#FFFFFF" strokeWidth="0.55" strokeLinecap="round" opacity="0.4" />
-
       {/*
-        掀起的盖子：一块带圆角的薄板，下沿落在盒口后沿（4.6,17.4 → 16,12.1 → 20.1,14.0），
-        向后上方斜倚。用圆角折线收口，不用两条直边拼尖角 —— 尖角看着像漏斗。
-        盖板比盒口浅一档、不描边，才像「在盒子后面」而不是一张贴纸。
+        整体缩小到 78% 并上移：等轴测的盒子最宽的一条对角线本来就是斜的，
+        不缩的话盖顶会顶到画框、底角也会贴边；缩完四周留边，页头里才不挤。
       */}
-      <path
-        d="M4.9 17.1 15.9 11.7l4.2 2L17.9 4.9c-.2-.8-1.2-1.1-1.9-.6L6.1 11.6c-1.1.7-1.6 2.1-1.3 3.4.1.7.6 1.4 1.3 1.7Z"
-        fill={`url(#${lidInner})`}
-      />
-      {/* 盖板内侧的一道浅影：贴着盒口的地方暗一点，纸板才有厚度 */}
-      <path
-        d="M5.6 16.4 15.9 11.4l3.4 1.6-.2-1.1-3.2-1.5-9.9 5.1c-.8.4-1.2 1.4-1 2.3.4-.7 1-1.1 1.6-1.4Z"
-        fill="#DE8FB3"
-        opacity="0.45"
-      />
+      <g transform="translate(100 100) scale(0.78) translate(-100 -100) translate(0 -6)">
+        {/* 落地影子：贴着盒子底边拉长一点，盒子才站得住 */}
+        <ellipse
+          cx="98"
+          cy="180"
+          rx="40"
+          ry="5.6"
+          fill="#C0718F"
+          opacity="0.15"
+        />
 
+        {/* 盒身：左前壁 / 右前壁 / 盒口内壁 */}
+        <path d={poly(FL, FR, tFR, tFL)} fill={`url(#${g("left")})`} />
+        <path d={poly(FR, BR, tBR, tFR)} fill={`url(#${g("right")})`} />
+        <path d={poly(tFL, tFR, tBR, tBL)} fill={`url(#${g("in")})`} />
+
+        {/*
+        盒口里那一小片纸条：只画几笔平行细条，沿长边方向排开。
+        纸条是参考图里最要紧的细节 —— 盒子里装的是"心情"，不是空的。
+        四种浅色交替，像一叠不同心情的小纸片。
+      */}
+        <g opacity="0.95">
+          {(
+            [
+              ["M47 118 103 90", "#FFE7B4"],
+              ["M47 122 103 94", "#FFE7B4"],
+              ["M52 123 108 95", "#CBEDDC"],
+              ["M60 124 116 96", "#FBC7DC"],
+              ["M70 124 126 96", "#FFEFC9"],
+              ["M80 123 136 95", "#DDE9F7"],
+            ] as const
+          ).map(([d, c]) => (
+            <path
+              key={d}
+              d={d}
+              stroke={c}
+              strokeWidth="3.4"
+              strokeLinecap="round"
+            />
+          ))}
+        </g>
+
+        {/* 盒口前沿与前面那条竖棱：两道细亮线，棱线立刻清楚 */}
+        <path
+          d={`M${pt(tFL)}L${pt(FL)}L${pt(FR)}L${pt(tFR)}`}
+          fill="none"
+          stroke="#FFFFFF"
+          strokeWidth="1.7"
+          strokeLinejoin="round"
+          opacity="0.5"
+        />
+
+        {/* 正面的表情：两点眼睛 + 一点腮红。盒子一有表情，整套形象就立住了 */}
+        <ellipse
+          cx="90"
+          cy="150"
+          rx="6"
+          ry="3.2"
+          fill="#F07AA5"
+          opacity="0.26"
+        />
+        <ellipse
+          cx="98"
+          cy="145"
+          rx="2.6"
+          ry="3.2"
+          fill="#6B4A5C"
+          opacity="0.82"
+        />
+        <ellipse
+          cx="110"
+          cy="139"
+          rx="2.6"
+          ry="3.2"
+          fill="#6B4A5C"
+          opacity="0.82"
+        />
+        <circle cx="97.2" cy="143.8" r="0.9" fill="#FFFFFF" />
+        <circle cx="109.2" cy="137.8" r="0.9" fill="#FFFFFF" />
+
+        {/* 盖子：半掀，从后沿翻起，浅一档 + 白边，才像一块纸板而不是贴纸 */}
+        <path d={poly(tFR, tBR, lid3, lid4)} fill={`url(#${g("lid")})`} />
+        <path
+          d={poly(tFR, tBR, lid3, lid4)}
+          fill="none"
+          stroke="#FFFFFF"
+          strokeWidth="1.7"
+          strokeLinejoin="round"
+          opacity="0.72"
+        />
+        {/* 铰链那一条：稍深，盖子与盒口才接得上 */}
+        <path
+          d={`M${pt(tFR)}L${pt(tBR)}`}
+          stroke="#DE8FB4"
+          strokeWidth="1.3"
+          strokeLinecap="round"
+          opacity="0.4"
+        />
+      </g>
     </svg>
   );
 }
