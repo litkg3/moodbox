@@ -120,17 +120,21 @@ describe('情绪内容库', () => {
   });
 
   /*
-   * 委屈、麻木按需求各只留一句。
+   * 委屈、麻木、烦躁按需求各只留一句。
    *
    * 一句也能用，但「再给我一点温暖」在这种情况下会被面板隐藏 ——
    * 按下去还是同一句，只会让人以为按钮坏了。条数写死在这里，
    * 以后有人顺手补几条时，会先被这条测试提醒「面板行为要一起看」。
    */
-  it('委屈与麻木各只留一句', () => {
+  it('委屈、麻木与烦躁各只留一句', () => {
     const wronged = EMOTIONS.find((emotion) => emotion.id === 'wronged');
     const numbness = EMOTIONS.find((emotion) => emotion.id === 'numbness');
+    const irritation = EMOTIONS.find((emotion) => emotion.id === 'irritation');
     expect(wronged?.messages).toEqual(['去树洞广场诉说你的委屈吧，会有人安慰你的！']);
     expect(numbness?.messages).toEqual(['宁要痛苦，不要麻木。']);
+    // 烦躁球这一句指向页头的「呼吸放松」，旧的那 15 条一句都不该留下
+    expect(irritation?.messages).toEqual(['当你感到烦躁时，不妨试试主页的“呼吸放松”。']);
+    expect(irritation?.messages.join('')).not.toContain('你现在很想摔东西吧');
   });
 
   it('文案不重复，且都带有配色与坐标', () => {

@@ -90,10 +90,11 @@ export const MIN_MESSAGES_BY_EMOTION: Partial<Record<EmotionId, number>> = {
   pain: 7,
   // 疲惫：文案已按需求整体替换为一组「允许自己休息」的短句，共 5 条。
   exhaustion: 5,
-  // 委屈 / 麻木：按需求各只留一句，全部旧文案删掉。
+  // 委屈 / 麻木 / 烦躁：按需求各只留一句，全部旧文案删掉。
   // 一句也允许，但没有可轮换的内容时面板不会再显示「再给我一点温暖」。
   wronged: 1,
   numbness: 1,
+  irritation: 1,
 };
 
 /** 所有情绪球是否达到各自的最低文案条数（供单元测试与内容自检使用）。 */
