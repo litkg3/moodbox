@@ -196,33 +196,57 @@ export function MoodBoxMark({ className }: MoodBoxMarkProps) {
           opacity="0.5"
         />
 
-        {/* 正面的表情：两点眼睛 + 一点腮红。盒子一有表情，整套形象就立住了 */}
-        <ellipse
-          cx="90"
-          cy="150"
-          rx="6"
-          ry="3.2"
-          fill="#F07AA5"
-          opacity="0.26"
-        />
-        <ellipse
-          cx="98"
-          cy="145"
-          rx="2.6"
-          ry="3.2"
-          fill="#6B4A5C"
-          opacity="0.82"
-        />
-        <ellipse
-          cx="110"
-          cy="139"
-          rx="2.6"
-          ry="3.2"
-          fill="#6B4A5C"
-          opacity="0.82"
-        />
-        <circle cx="97.2" cy="143.8" r="0.9" fill="#FFFFFF" />
-        <circle cx="109.2" cy="137.8" r="0.9" fill="#FFFFFF" />
+        {/*
+        表情：两只眼睛 + 一道笑弧 + 两颊腮红。
+        脸画在前面这块斜面上，所以五官一律沿 E1 排（斜率 1:2），
+        嘴的弧也不能是水平的 —— 平着画立刻像贴了张脸在盒子上。
+      */}
+        <g>
+          <ellipse
+            cx="96"
+            cy="148"
+            rx="5.6"
+            ry="2.6"
+            fill="#F07AA5"
+            opacity="0.24"
+            transform="rotate(-26.6 96 148)"
+          />
+          <ellipse
+            cx="126.5"
+            cy="134"
+            rx="5.6"
+            ry="2.6"
+            fill="#F07AA5"
+            opacity="0.24"
+            transform="rotate(-26.6 126.5 134)"
+          />
+          <ellipse
+            cx="104"
+            cy="141.5"
+            rx="2.9"
+            ry="3.8"
+            fill="#6B4A5C"
+            opacity="0.84"
+          />
+          <ellipse
+            cx="116"
+            cy="135.5"
+            rx="2.9"
+            ry="3.8"
+            fill="#6B4A5C"
+            opacity="0.84"
+          />
+          <circle cx="103" cy="140.2" r="1.05" fill="#FFFFFF" />
+          <circle cx="115" cy="134.2" r="1.05" fill="#FFFFFF" />
+          <path
+            d="M106 151Q110.1 154.6 114.2 146.9"
+            fill="none"
+            stroke="#6B4A5C"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            opacity="0.72"
+          />
+        </g>
 
       </g>
     </svg>

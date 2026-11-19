@@ -93,7 +93,7 @@
     </div>
     <div class="cell">
       <h2>配色</h2>
-      <div style="display:flex;gap:10px;flex-wrap:wrap" id="swatches"></div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 8px;max-width:220px" id="swatches"></div>
       <p>四个面同属一个粉调、只靠明度拉开：盖板最浅，前面次之，左右两侧再深一档，盒内压到最暗；纸条用四种浅色交替，像不同心情的小纸片。</p>
     </div>
   </div>
@@ -158,16 +158,18 @@ function moodBox({ size = 240, blink = true, float = true, id = 'mb' } = {}) {
 
     ${strips.map(([d, c]) => `<path d="${d}" stroke="${c}" stroke-width="3.4" stroke-linecap="round" fill="none"/>`).join('')}
     <path d="M${V.tBL.join(' ')} ${V.tFL.join(' ')} ${V.FL.join(' ')} ${V.FR.join(' ')} ${V.tFR.join(' ')}" fill="none" stroke="#FFFFFF" stroke-width="1.7" stroke-linejoin="round" opacity="0.5"/>
+    <ellipse cx="96" cy="148" rx="5.6" ry="2.6" fill="#F07AA5" opacity="0.24" transform="rotate(-26.6 96 148)"/>
+    <ellipse cx="126.5" cy="134" rx="5.6" ry="2.6" fill="#F07AA5" opacity="0.24" transform="rotate(-26.6 126.5 134)"/>
     <g id="${id}-eyes">
-      <ellipse cx="98" cy="145" rx="2.6" ry="3.2" fill="#6B4A5C" opacity="0.82"/>
-      <ellipse cx="110" cy="139" rx="2.6" ry="3.2" fill="#6B4A5C" opacity="0.82"/>
-      <circle cx="97.2" cy="143.8" r="0.9" fill="#FFF"/><circle cx="109.2" cy="137.8" r="0.9" fill="#FFF"/>
+      <ellipse cx="104" cy="141.5" rx="2.9" ry="3.8" fill="#6B4A5C" opacity="0.84"/>
+      <ellipse cx="116" cy="135.5" rx="2.9" ry="3.8" fill="#6B4A5C" opacity="0.84"/>
+      <circle cx="103" cy="140.2" r="1.05" fill="#FFF"/><circle cx="115" cy="134.2" r="1.05" fill="#FFF"/>
     </g>
     <g id="${id}-closed" style="display:none">
-      <path d="M94.6 145.4q3.4-3.4 6.8 0" fill="none" stroke="#6B4A5C" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>
-      <path d="M106.6 139.4q3.4-3.4 6.8 0" fill="none" stroke="#6B4A5C" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>
+      <path d="M100.9 141.9q3 3 6 0" fill="none" stroke="#6B4A5C" stroke-width="1.7" stroke-linecap="round" opacity="0.82"/>
+      <path d="M112.9 135.9q3 3 6 0" fill="none" stroke="#6B4A5C" stroke-width="1.7" stroke-linecap="round" opacity="0.82"/>
     </g>
-    <ellipse cx="90" cy="150" rx="6" ry="3.2" fill="#F07AA5" opacity="0.26"/>
+    <path d="M106 151Q110.1 154.6 114.2 146.9" fill="none" stroke="#6B4A5C" stroke-width="1.7" stroke-linecap="round" opacity="0.72"/>
     <path d="M${V.tBL.join(' ')} ${V.tBR.join(' ')}" stroke="#E7A2C0" stroke-width="1.3" stroke-linecap="round" opacity="0.45"/>
   </g>
 </svg>`;
@@ -207,14 +209,14 @@ const sizes = document.getElementById('sizes');
 });
 
 const palette = [
-  ['#FBDCEA', '盖板'], ['#FBD7E5', '左前壁'], ['#F8C6DA', '右前壁'],
-  ['#D68FA6', '盒内'], ['#FFE7B4', '纸条'],
+  ['#FBDCEA', '盖板'], ['#FBD7E5', '前面'], ['#F7C9DC', '左侧面'],
+  ['#F8C6DA', '右侧面'], ['#D68FA6', '盒内'], ['#FFE7B4', '纸条'],
 ];
 const sw = document.getElementById('swatches');
 palette.forEach(([color, name]) => {
   const item = document.createElement('div');
   item.style.cssText = 'display:flex;flex-direction:column;gap:6px;align-items:center;font-size:10.5px;color:var(--ink-faint)';
-  item.innerHTML = `<span style="width:38px;height:38px;border-radius:12px;background:${color};border:1px solid rgba(0,0,0,0.06)"></span>${name}`;
+  item.innerHTML = `<span style="width:33px;height:33px;border-radius:11px;background:${color};border:1px solid rgba(0,0,0,0.06)"></span>${name}`;
   sw.appendChild(item);
 });
 
