@@ -254,7 +254,6 @@ export function LettersView({ embedded = false }: { embedded?: boolean } = {}) {
           if (unsealTarget) void unseal(unsealTarget);
         }}
         title="要拆开吗？"
-        description="封着的信有它自己的重量。拆开之后它就只是一段文字了 —— 也可以再等一阵子。"
         confirmLabel="拆开看看"
         cancelLabel="再封一会儿"
         tone="primary"

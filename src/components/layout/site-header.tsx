@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Home } from 'lucide-react';
 import { AudioPlayer } from '@/components/audio/audio-player';
+import { MoodBoxMark } from '@/components/layout/moodbox-mark';
 import { MoreMenu } from '@/components/layout/more-menu';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { TopToolBar } from '@/components/layout/top-tool-bar';
@@ -52,11 +53,8 @@ export function SiteHeader() {
           className="group flex items-center gap-2.5 rounded-full pr-2 focus-visible:outline-offset-4"
           aria-label="情绪盒子 MoodBox 首页"
         >
-          <span className="relative grid h-8 w-8 place-items-center">
-            <span className="absolute inset-0 rounded-full bg-[radial-gradient(120%_120%_at_32%_22%,#ffffff_0%,#efe4fa_38%,#c9b6e8_100%)] shadow-[0_6px_16px_-8px_rgba(142,118,184,0.9)] transition-transform duration-700 group-hover:scale-[1.06]" />
-            <span className="absolute left-[7px] top-[6px] h-[6px] w-[7px] rounded-full bg-white/85 blur-[1px]" />
-            <span className="absolute inset-[5px] rounded-full border border-white/45" />
-          </span>
+          {/* 卡通盒子站标：hover 时轻轻抬一下，像盒盖被顶起来一点 */}
+          <MoodBoxMark className="h-8 w-8 shrink-0 drop-shadow-[0_5px_12px_rgba(142,118,184,0.35)] transition-transform duration-700 group-hover:-translate-y-[1px] group-hover:scale-[1.06]" />
           <span className="flex flex-col leading-none">
             <span className="font-display text-[14px] font-normal tracking-[0.26em] text-ink">
               情绪盒子

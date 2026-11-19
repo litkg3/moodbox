@@ -760,7 +760,7 @@ function PostCard({
               <textarea
                 value={replyText}
                 onChange={(event) => setReplyText(event.target.value)}
-                placeholder="写一句就好，不必给建议。"
+                placeholder="说一句就好，让 TA 知道有人在。"
                 rows={3}
                 maxLength={MAX_REPLY_LENGTH}
                 aria-label="回复内容"
