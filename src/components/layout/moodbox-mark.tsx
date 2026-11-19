@@ -203,22 +203,22 @@ export function MoodBoxMark({ className }: MoodBoxMarkProps) {
       */}
         <g>
           <ellipse
-            cx="96"
-            cy="148"
+            cx="96.6"
+            cy="146.9"
             rx="5.6"
             ry="2.6"
             fill="#F07AA5"
-            opacity="0.24"
-            transform="rotate(-26.6 96 148)"
+            opacity="0.3"
+            transform="rotate(-26.6 96.6 146.9)"
           />
           <ellipse
-            cx="126.5"
-            cy="134"
+            cx="124.7"
+            cy="132.8"
             rx="5.6"
             ry="2.6"
             fill="#F07AA5"
-            opacity="0.24"
-            transform="rotate(-26.6 126.5 134)"
+            opacity="0.3"
+            transform="rotate(-26.6 124.7 132.8)"
           />
           <ellipse
             cx="104"
