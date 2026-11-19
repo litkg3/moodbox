@@ -177,14 +177,20 @@ function EmotionPanelContent({
 
       {/* 三个主按钮，居中排一排（窄屏换行也保持居中） */}
       <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">
-        <button
-          type="button"
-          onClick={warmUp}
-          className="mb-deep-btn-primary inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-[12.5px] tracking-[0.04em] transition-all duration-300 active:scale-[0.98]"
-        >
-          <Sparkles size={14} strokeWidth={1.7} aria-hidden="true" />
-          再给我一点温暖
-        </button>
+        {/*
+          只有一句话的球（委屈、麻木）不显示「再给我一点温暖」：
+          按下去还是同一句，换个动画重放一遍，用户只会以为按钮坏了。
+        */}
+        {emotion.messages.length > 1 ? (
+          <button
+            type="button"
+            onClick={warmUp}
+            className="mb-deep-btn-primary inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-[12.5px] tracking-[0.04em] transition-all duration-300 active:scale-[0.98]"
+          >
+            <Sparkles size={14} strokeWidth={1.7} aria-hidden="true" />
+            再给我一点温暖
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => setReading(true)}

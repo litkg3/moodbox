@@ -100,6 +100,37 @@ describe('情绪内容库', () => {
     expect(parting?.messages.join('')).not.toContain('分别不是失败');
   });
 
+  it('痛苦球换成一组「与痛苦相处」的短句（7 条）', () => {
+    const pain = EMOTIONS.find((emotion) => emotion.id === 'pain');
+    expect(pain?.messages).toHaveLength(7);
+    expect(pain?.messages[0]).toBe('如果感到痛苦就去爬山，去看世界。');
+    expect(pain?.messages.at(-1)).toBe('生命的长度总会稀释痛苦的浓度。');
+    expect(pain?.messages.join('')).not.toContain('如果此刻真的很痛');
+    // 自伤提示放在 supportNote 里，不占文案额度，也不能跟着这次替换被删掉
+    expect(pain?.supportNote).toContain('热线');
+  });
+
+  it('疲惫球换成一组「允许自己休息」的短句（5 条）', () => {
+    const exhaustion = EMOTIONS.find((emotion) => emotion.id === 'exhaustion');
+    expect(exhaustion?.messages).toHaveLength(5);
+    expect(exhaustion?.messages[0]).toBe('流水不争先，争的是滔滔不绝。');
+    expect(exhaustion?.messages.join('')).not.toContain('如果今天真的很累');
+  });
+
+  /*
+   * 委屈、麻木按需求各只留一句。
+   *
+   * 一句也能用，但「再给我一点温暖」在这种情况下会被面板隐藏 ——
+   * 按下去还是同一句，只会让人以为按钮坏了。条数写死在这里，
+   * 以后有人顺手补几条时，会先被这条测试提醒「面板行为要一起看」。
+   */
+  it('委屈与麻木各只留一句', () => {
+    const wronged = EMOTIONS.find((emotion) => emotion.id === 'wronged');
+    const numbness = EMOTIONS.find((emotion) => emotion.id === 'numbness');
+    expect(wronged?.messages).toEqual(['去树洞广场诉说你的委屈吧，会有人安慰你的！']);
+    expect(numbness?.messages).toEqual(['宁要痛苦，不要麻木。']);
+  });
+
   it('文案不重复，且都带有配色与坐标', () => {
     for (const emotion of EMOTIONS) {
       expect(new Set(emotion.messages).size).toBe(emotion.messages.length);
