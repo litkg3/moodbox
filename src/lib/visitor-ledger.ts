@@ -18,7 +18,7 @@
  * ```json
  * {
  *   "2026-11-20": {
- *     "abc123": { "posts": 2, "replies": 5, "nickname": true }
+ *     "abc123": { "posts": 2, "replies": 5, "renames": 1 }
  *   }
  * }
  * ```
@@ -33,7 +33,9 @@ interface DayEntry {
   posts?: number;
   /** 今天写出去几条回复（含已删除的） */
   replies?: number;
-  /** 今天改过昵称没有 */
+  /** 今天改过几次昵称 */
+  renames?: number;
+  /** 旧版账本里的布尔值：只要为 true 就算改过一次，读的时候兼容 */
   nickname?: boolean;
 }
 
@@ -103,17 +105,38 @@ export function readUsage(now: Date = new Date(), visitorId?: string): QuotaUsag
   return { posts, replies };
 }
 
-/** 今天还能不能改昵称（一天一次）。 */
-export function canRenameToday(now: Date = new Date(), visitorId?: string): boolean {
-  return !readLedger()[dayKey(now)]?.[visitorId || ANON]?.nickname;
+/** 一天最多能改几次昵称。 */
+export const RENAMES_PER_DAY = 2;
+
+/** 读某个访客今天改过几次昵称。兼容旧账本里的 `nickname: true`。 */
+export function readRenameCount(now: Date = new Date(), visitorId?: string): number {
+  const entry = readLedger()[dayKey(now)]?.[visitorId || ANON];
+  if (!entry) return 0;
+  const count = Number.isFinite(entry.renames) ? Math.max(0, Math.floor(entry.renames ?? 0)) : 0;
+  return Math.max(count, entry.nickname ? 1 : 0);
 }
 
-/** 记下「今天改过昵称了」。 */
+/** 今天还能不能改昵称（一天两次）。 */
+export function canRenameToday(now: Date = new Date(), visitorId?: string): boolean {
+  return readRenameCount(now, visitorId) < RENAMES_PER_DAY;
+}
+
+/** 今天还剩几次改昵称的机会。 */
+export function renamesLeftToday(now: Date = new Date(), visitorId?: string): number {
+  return Math.max(0, RENAMES_PER_DAY - readRenameCount(now, visitorId));
+}
+
+/** 记下「今天又改了一次昵称」。 */
 export function recordNicknameChange(visitorId?: string): void {
   const today = dayKey();
   const ledger = readLedger();
   const row = ledger[today] ?? {};
-  row[visitorId || ANON] = { ...(row[visitorId || ANON] ?? {}), nickname: true };
+  const entry = row[visitorId || ANON] ?? {};
+  const used = Math.max(
+    Number.isFinite(entry.renames) ? Math.floor(entry.renames ?? 0) : 0,
+    entry.nickname ? 1 : 0,
+  );
+  row[visitorId || ANON] = { ...entry, renames: used + 1, nickname: undefined };
   ledger[today] = row;
   writeLedger(ledger);
   notify();
@@ -147,6 +170,7 @@ export function RESET_LEDGER_FOR_TESTS(): void {
   }
   cachedSnapshot = '';
   cachedRename = '';
+  cachedRenameLeft = '';
   notify();
 }
 
@@ -188,6 +212,8 @@ export function getUsageSnapshot(): QuotaUsage {
 
 let cachedRename = '';
 let cachedRenameValue = true;
+let cachedRenameLeft = '';
+let cachedRenameLeftValue = RENAMES_PER_DAY;
 
 export function getRenameSnapshot(): boolean {
   const allowed = canRenameToday(new Date(), activeVisitorId);
@@ -197,4 +223,15 @@ export function getRenameSnapshot(): boolean {
     cachedRenameValue = allowed;
   }
   return cachedRenameValue;
+}
+
+/** 还剩几次改名机会（给按钮上的小字用）。 */
+export function getRenameLeftSnapshot(): number {
+  const left = renamesLeftToday(new Date(), activeVisitorId);
+  const key = `${activeVisitorId ?? ''}|${left}`;
+  if (key !== cachedRenameLeft) {
+    cachedRenameLeft = key;
+    cachedRenameLeftValue = left;
+  }
+  return cachedRenameLeftValue;
 }

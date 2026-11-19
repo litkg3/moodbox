@@ -15,7 +15,7 @@ async function page(width, height, theme = 'day', reducedMotion = 'no-preference
   p.on('console', (msg) => {
     if (msg.type() === 'error') {
       const text = msg.text();
-      if (!text.includes('time-machine') && !text.includes('404')) {
+      if (!text.includes('404')) {
         errors.push(`[console] ${text}`);
       }
     }

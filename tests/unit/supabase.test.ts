@@ -172,7 +172,20 @@ describe('Supabase 后端 · 写', () => {
     expect(post.hugged).toBe(true);
   });
 
-  it('库里还没更新到带 p_visitor 的拥抱函数时，退回单参数调用', async () => {
+  it('取消拥抱也带上 p_undo=true，让云端真的把计数减回去', async () => {
+    rpcMock.mockResolvedValue(ok({ ...rawPost, hugs: 3, hugged: false }));
+    const backend = createSupabaseBackend();
+    const post = await backend.hugPost('post_abc', 'visitor_key', false);
+    expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_hug', {
+      p_id: 'post_abc',
+      p_visitor: 'visitor_key',
+      p_undo: true,
+    });
+    expect(post.hugs).toBe(3);
+    expect(post.hugged).toBe(false);
+  });
+
+  it('库里还是只带 p_visitor 的旧签名时，退回两参数调用', async () => {
     const missing = { code: 'PGRST202', message: 'Could not find the function public.moodbox_square_hug' };
     rpcMock
       .mockResolvedValueOnce({ data: null, error: missing })
@@ -181,8 +194,20 @@ describe('Supabase 后端 · 写', () => {
     const post = await backend.hugPost('post_abc', 'visitor_key');
     expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_hug', {
       p_id: 'post_abc',
-      p_undo: false,
+      p_visitor: 'visitor_key',
     });
+    expect(post.hugs).toBe(4);
+  });
+
+  it('连 p_visitor 都没有的更旧签名，退回单参数', async () => {
+    const missing = { code: 'PGRST202', message: 'Could not find the function public.moodbox_square_hug' };
+    rpcMock
+      .mockResolvedValueOnce({ data: null, error: missing })
+      .mockResolvedValueOnce({ data: null, error: missing })
+      .mockResolvedValueOnce(ok({ ...rawPost, hugs: 4 }));
+    const backend = createSupabaseBackend();
+    const post = await backend.hugPost('post_abc', 'visitor_key');
+    expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_hug', { p_id: 'post_abc' });
     expect(post.hugs).toBe(4);
   });
 
@@ -194,7 +219,7 @@ describe('Supabase 后端 · 写', () => {
     });
     const backend = createSupabaseBackend();
     await expect(backend.hugPost('post_abc', 'visitor_key')).rejects.toThrow(/重新执行一次/);
-    expect(rpcMock).toHaveBeenCalledTimes(2);
+    expect(rpcMock).toHaveBeenCalledTimes(3);
   });
 
   it('拥抱遇到网络 / 业务错误时直接抛出，不会误降级成单参数调用', async () => {

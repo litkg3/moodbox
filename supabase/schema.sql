@@ -554,15 +554,22 @@ $$;
  * 界面据此把按钮变成「已抱」并禁用。
  */
 drop function if exists public.moodbox_square_hug(text);
-create or replace function public.moodbox_square_hug(p_id text, p_visitor text default null)
+drop function if exists public.moodbox_square_hug(text, text);
+drop function if exists public.moodbox_square_hug(text, text, boolean);
+create or replace function public.moodbox_square_hug(
+  p_id      text,
+  p_visitor text default null,
+  p_undo    boolean default false
+)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_hash    text := public.moodbox_visitor_hash(p_visitor);
+  v_hash     text := public.moodbox_visitor_hash(p_visitor);
   v_inserted boolean := false;
+  v_deleted  boolean := false;
 begin
   if not exists (
     select 1 from public.square_posts where id = p_id and status = 'approved'
@@ -571,8 +578,21 @@ begin
   end if;
 
   if v_hash is null then
-    -- 老客户端没带 visitor：只能老实 +1，服务端无从去重
-    update public.square_posts set hugs = hugs + 1 where id = p_id;
+    -- 老客户端没带 visitor：只能老实加减，服务端无从去重，也无从取消
+    if p_undo then
+      update public.square_posts set hugs = greatest(hugs - 1, 0) where id = p_id;
+    else
+      update public.square_posts set hugs = hugs + 1 where id = p_id;
+    end if;
+  elsif p_undo then
+    -- 取消拥抱：删掉这条「访客 × 帖子」记录，计数跟着减，且不会减成负数
+    delete from public.square_hugs
+    where post_id = p_id and visitor_hash = v_hash;
+    v_deleted := found;
+
+    if v_deleted then
+      update public.square_posts set hugs = greatest(hugs - 1, 0) where id = p_id;
+    end if;
   else
     insert into public.square_hugs (post_id, visitor_hash)
     values (p_id, v_hash)
@@ -588,6 +608,9 @@ begin
   return public.moodbox_mine(public.moodbox_post_json(p_id), p_visitor);
 end;
 $$;
+
+comment on function public.moodbox_square_hug(text, text, boolean) is
+  '拥抱 / 取消拥抱。p_visitor 去重（一人一帖一票），p_undo=true 时取消。两次调用都不带节流字段，前端做冷却。';
 
 -- 回复：只能回复已通过的帖子；最多 200 字
 drop function if exists public.moodbox_square_reply(text, text, text, boolean);
@@ -820,7 +843,7 @@ revoke all on function public.moodbox_mine(jsonb, text)              from public
 
 grant execute on function public.moodbox_square_list(text, text)                                   to anon, authenticated;
 grant execute on function public.moodbox_square_create(text, text, boolean, text, text)            to anon, authenticated;
-grant execute on function public.moodbox_square_hug(text, text)                                    to anon, authenticated;
+grant execute on function public.moodbox_square_hug(text, text, boolean)                             to anon, authenticated;
 grant execute on function public.moodbox_square_reply(text, text, text, boolean, text, text)       to anon, authenticated;
 grant execute on function public.moodbox_square_review(text, text, text)                           to anon, authenticated;
 grant execute on function public.moodbox_square_delete(text, text)                                 to anon, authenticated;

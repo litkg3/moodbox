@@ -1,11 +1,10 @@
 /**
  * 背景音乐配置。
  *
- * 重要说明：
- * 本项目不内置、不下载、不分发任何受版权保护的音乐。
- * 请自行取得《Time Machine》相应版本的合法授权后，把音频文件放到 `public/audio/` 下，
- * 并在此处填写文件名。文件缺失时播放器会进入“音源缺失”状态并给出明确提示，
- * 不会影响网站其它任何功能。
+ * 当前曲目：《Long Day》——PurrpleCat（Pixabay）。
+ * 音频文件位于 `public/audio/long-day.mp3`，随站点一起分发。
+ * 若需要更换曲目，把音频放到 `public/audio/` 下并修改下面的 `src` 即可；
+ * 文件缺失时播放器会进入“音源缺失”状态并给出明确提示，不影响其它任何功能。
  */
 export interface AudioTrackConfig {
   title: string;
@@ -19,9 +18,9 @@ export interface AudioTrackConfig {
 }
 
 export const AUDIO_TRACK: AudioTrackConfig = {
-  title: 'Time Machine',
-  artist: '作者信息待填写',
-  src: '/audio/time-machine.mp3',
+  title: 'Long Day',
+  artist: 'PurrpleCat · Pixabay',
+  src: '/audio/long-day.mp3',
   defaultVolume: 0.35,
   loop: true,
 };

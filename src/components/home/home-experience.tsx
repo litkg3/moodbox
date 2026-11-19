@@ -7,6 +7,7 @@ import { MessageCircleHeart } from 'lucide-react';
 import { EmotionPanel } from '@/components/emotion/emotion-panel';
 import { enterSquare } from '@/components/layout/square-entrance';
 import { EmotionSky } from '@/components/emotion/emotion-sky';
+import { MeteorShower } from '@/components/home/meteor-shower';
 import { useToast } from '@/components/ui/toast';
 import { HOME_BLESSING_LINES, SLOGAN } from '@/data/emotions';
 import { useMoodBox } from '@/hooks/use-moodbox';
@@ -91,6 +92,12 @@ export function HomeExperience() {
         onSelect={handleSelect}
         onBurstComplete={handleBurstComplete}
       />
+
+      {/*
+        深夜 + 星空模式时，偶尔划过一场流星雨。
+        放在天空之上、文字之下：它是背景的一部分，不该压住任何字。
+      */}
+      <MeteorShower />
 
       <div className="pointer-events-none relative z-10 flex min-h-[100dvh] flex-col items-center justify-center px-5 pb-24 pt-[96px] lg:pb-28 lg:pt-[108px]">
         <div className="home-copy flex w-full max-w-[440px] flex-col items-center text-center">

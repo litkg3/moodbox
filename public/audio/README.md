@@ -1,38 +1,40 @@
-# 背景音乐放置说明
+# 背景音乐
 
-本目录**不包含**任何音频文件。
+本目录存放站点的背景音乐，随项目一起分发。
 
-《Time Machine》存在多个同名作品，版权归属各不相同。本项目不分发、不抓取、不内置任何受版权保护的音乐。
+## 当前曲目
 
-## 启用方式
+| 项 | 内容 |
+| --- | --- |
+| 曲名 | 《Long Day》 |
+| 作者 | PurrpleCat（发布在 [Pixabay](https://pixabay.com/music/)） |
+| 文件 | `public/audio/long-day.mp3` |
+| 授权 | Pixabay Content License（可免费用于商业与非商业项目，无需署名） |
 
-1. 取得你打算使用的那个版本的合法授权；
-2. 把音频文件命名为 `time-machine.mp3`，放在本目录下：
-
-```text
-public/audio/time-machine.mp3
-```
-
-3. 如有需要，修改 `src/lib/audio-config.ts`：
+配置在 `src/lib/audio-config.ts`：
 
 ```ts
 export const AUDIO_TRACK: AudioTrackConfig = {
-  title: 'Time Machine',
-  artist: '在这里填写作者',      // 建议填写，界面会显示
-  src: '/audio/time-machine.mp3',
+  title: 'Long Day',
+  artist: 'PurrpleCat · Pixabay',
+  src: '/audio/long-day.mp3',
   defaultVolume: 0.35,
   loop: true,
 };
 ```
 
-4. 刷新页面，点击右上角「音乐」按钮开启。
+## 更换曲目
+
+1. 把新的音频放到本目录，例如 `public/audio/xxx.mp3`；
+2. 修改上面的 `title`、`artist`、`src` 三行；
+3. 刷新页面，点击右上角「音乐」按钮开启。
 
 ## 没有音频文件时会怎样
 
 - 播放器在页面加载时就会探测音源是否可用（`<audio preload="metadata">`），不需要等你点播放才发现；
-- 右上角「音乐」按钮上会出现一个 5px 的暖色小圆点，展开面板后状态徽标显示「未接入」，并给出上面这段文件路径说明；
+- 右上角「音乐」按钮上会出现一个 5px 的暖色小圆点，展开面板后状态徽标显示「未接入」，并给出文件路径说明；
 - 此时点击播放不会卡在「准备中」，而是立刻回到「未接入」；
-- 浏览器控制台会出现一条 `/audio/time-machine.mp3` 的 404 —— 这是「文件本来就没有随项目分发」的事实，不是程序错误；放入文件后该报错消失；
+- 浏览器控制台会出现一条 `/audio/xxx.mp3` 的 404 —— 这是「文件没有随项目分发」的事实，不是程序错误；放入文件后该报错消失；
 - 网站其它功能完全不受影响，也不会假装正在播放。
 
 ## 建议

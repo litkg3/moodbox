@@ -133,10 +133,13 @@ export default function AboutPage() {
         <div className="flex gap-3">
           <Music2 size={16} strokeWidth={1.6} className="mt-[3px] shrink-0 text-ink-faint" />
           <p>
-            网站预留了名为《Time Machine》的背景音乐播放位，但并<strong className="font-medium text-ink">不内置</strong>
-            任何音频文件——同名作品有很多版本，版权归属也不同。只有在取得合法授权、
-            把文件放进项目目录后，音乐才会启用；没有文件时播放器会给出说明，
-            不影响其它任何功能。
+            背景音乐是 <strong className="font-medium text-ink">《Long Day》</strong>，作者 PurrpleCat，
+            发布于 <strong className="font-medium text-ink">Pixabay</strong>。这是一首无人声的纯音乐，
+            起伏很轻，放在这里只是为了给页面垫一层安静的气味，不抢文字的位置。
+          </p>
+          <p className="mt-3">
+            音乐不会自动播放，需要你点右上角的「音乐」按钮；音量和开关都会被记住，
+            下次进来还是你上次的选择。不想听的时候关掉就好，不影响其它任何功能。
           </p>
         </div>
       </Section>

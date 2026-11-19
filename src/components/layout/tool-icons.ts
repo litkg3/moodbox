@@ -3,7 +3,7 @@ import {
   Footprints,
   Info,
   Mail,
-  MessagesSquare,
+  MessageCircleHeart,
   Sparkles,
   Trash2,
   Wind,
@@ -18,7 +18,8 @@ export const TOOL_ICONS: Record<ToolKey, LucideIcon> = {
   calendar: Footprints,
   breathe: Wind,
   quiz: Compass,
-  square: MessagesSquare,
+  // 与主页「树洞广场」按钮保持同一颗图标，导航和入口对得上
+  square: MessageCircleHeart,
   about: Info,
   clear: Trash2,
 };

@@ -6,6 +6,8 @@ import type { PostDraft, ReplyDraft, StoryDraft } from '@/lib/backend/types';
 import { isIndexedDBSupported } from '@/lib/db';
 import { EMPTY_USAGE, type QuotaUsage } from '@/lib/quota';
 import {
+  RENAMES_PER_DAY,
+  getRenameLeftSnapshot,
   getRenameSnapshot,
   getUsageSnapshot,
   setLedgerVisitor,
@@ -404,3 +406,7 @@ function subscribeRename(listener: () => void): () => void {
 
 export const useCanRenameToday = (): boolean =>
   useSyncExternalStore(subscribeRename, getRenameSnapshot, () => true);
+
+/** 今天还剩几次改名机会（0–2）。按钮上的小字用它。 */
+export const useRenamesLeftToday = (): number =>
+  useSyncExternalStore(subscribeRename, getRenameLeftSnapshot, () => RENAMES_PER_DAY);

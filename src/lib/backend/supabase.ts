@@ -286,21 +286,32 @@ export function createSupabaseBackend(options: SupabaseBackendOptions = {}): Con
 
     async hugPost(id: string, visitorId?: string, want = true) {
       /*
-       * 带 p_visitor 的签名是「一个人只占一次数」的前提；
-       * 库还是旧版（只有 p_id）时就退回单参数调用，先让人抱上，
-       * 只是这时候服务端既没法去重，也没法取消。
+       * 云端取消拥抱。
        *
-       * `p_undo` 是取消。旧库没有这个参数 —— 传过去会被 PostgREST 判成
-       * 未知参数而整条失败，所以取消也走同一套降级：失败就当没抱过。
+       * 三种签名按能力从高到低依次尝试，靠 `rpcFallback` 挡住 PostgREST 的
+       * PGRST202（函数或参数不存在）：
+       *
+       * 1. `(p_id, p_visitor, p_undo)` —— 完整版：一人一帖一票，能在服务端真正取消；
+       * 2. `(p_id, p_visitor)`         —— 旧库：能去重，但取消只落回本地；
+       * 3. `(p_id)`                    —— 更旧的库：只能老实加减。
+       *
+       * 注意：只有「函数不存在 / 参数不认识」这类错误才降级，帖子被删、
+       * 网络断掉都会原样抛出去，不会把失败伪装成成功。
        */
+      const undo = !want;
       const post = await rpcFallback([
         () =>
           rawRpc<unknown>('moodbox_square_hug', {
             p_id: id,
             p_visitor: visitorId ?? null,
-            p_undo: !want,
+            p_undo: undo,
           }),
-        () => rawRpc<unknown>('moodbox_square_hug', { p_id: id, p_undo: !want }),
+        () =>
+          rawRpc<unknown>('moodbox_square_hug', {
+            p_id: id,
+            p_visitor: visitorId ?? null,
+          }),
+        () => rawRpc<unknown>('moodbox_square_hug', { p_id: id }),
       ]);
       return toPost(post);
     },

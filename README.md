@@ -312,12 +312,12 @@ tests/
 
 ## 七、背景音乐配置
 
-项目**不内置、不下载、不分发**任何受版权保护的音频。《Time Machine》存在多个同名版本，版权归属不同，请自行取得合法授权。
+当前曲目：**《Long Day》—— PurrpleCat（Pixabay）**，无人声纯音乐，文件位于 `public/audio/long-day.mp3`，随项目一起分发，授权遵循 [Pixabay Content License](https://pixabay.com/service/license-summary/)。
 
-启用步骤：
+更换曲目：
 
-1. 把已获授权的音频放到 `public/audio/time-machine.mp3`；
-2. 如有需要，修改 `src/lib/audio-config.ts` 中的 `src`、`title`、`artist`、`defaultVolume`；
+1. 把音频放到 `public/audio/long-day.mp3`（或换成自己的文件名）；
+2. 修改 `src/lib/audio-config.ts` 中的 `src`、`title`、`artist`、`defaultVolume`；
 3. 刷新页面，点击页头「音乐」即可开启。
 
 行为说明：

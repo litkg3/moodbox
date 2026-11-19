@@ -186,12 +186,6 @@ export function AdminGate() {
             返回广场
           </Link>
         </div>
-
-        <p className="mt-5 border-t border-white/50 pt-4 text-[11px] leading-[1.9] text-ink-ghost">
-          {serverVerified
-            ? '口令会送到 Supabase 比对，前端绕不过去；连续错三次只是为了挡住随手乱试。'
-            : '当前没有配置云端，口令在浏览器里比对，只用于演示，不是真实的权限系统。'}
-        </p>
       </div>
     </div>
   );

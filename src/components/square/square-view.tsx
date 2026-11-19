@@ -24,7 +24,13 @@ import { LoadingBar } from '@/components/ui/loading-bar';
 import { useToast } from '@/components/ui/toast';
 import { useAdmin } from '@/lib/admin';
 import { describeBackend } from '@/lib/backend';
-import { useSquare, squareStore, useCanRenameToday, useQuotaUsage } from '@/lib/content-stores';
+import {
+  useSquare,
+  squareStore,
+  useCanRenameToday,
+  useQuotaUsage,
+  useRenamesLeftToday,
+} from '@/lib/content-stores';
 import { scanForCrisis } from '@/lib/crisis';
 import { formatClock, formatRelativeDay } from '@/lib/date';
 import { NICKNAME_MAX, readNickname, saveNickname } from '@/lib/nickname';
@@ -42,8 +48,14 @@ const PAGE_SIZE = 10;
 /** 评论默认只露最新两条，点「回复」再展开全部。 */
 const REPLY_PEEK = 2;
 
-/** 拥抱的冷却时长：够挡住手滑连点，又不至于让人觉得按钮坏了。 */
-const HUG_COOLDOWN_MS = 700;
+/**
+ * 拥抱的冷却时长。
+ *
+ * 拥抱和取消拥抱都会写云端，一秒钟戳七八下既会打出一串并发请求，
+ * 也会让计数在两个人之间来回跳。1.2s 是「点下去有反应」和「别连点」
+ * 之间的折中：刚好盖住一次请求往返 + 动画，又不会让人觉得按钮死了。
+ */
+const HUG_COOLDOWN_MS = 1200;
 
 type PendingAction =
   | { kind: 'post'; content: string; nickname: string }
@@ -104,12 +116,14 @@ export function SquareView() {
   const [nicknameOpen, setNicknameOpen] = useState(false);
   const [nicknameDraft, setNicknameDraft] = useState('');
   /**
-   * 一天只能改一次昵称。
+   * 一天只能改两次昵称。
    *
    * 拦在这里而不是只在按钮上置灰：按钮置灰容易被看漏，点下去才被拒
-   * 又显得莫名其妙。现在是「点得动，但点了会告诉你今天已经改过」。
+   * 又显得莫名其妙。现在是「点得动，但点了会告诉你今天已经改完」。
    */
   const canRenameToday = useCanRenameToday();
+  /** 今天还剩几次（2 → 1 → 0），按钮下面那行小字用它，改完就能看见少了一次 */
+  const renamesLeft = useRenamesLeftToday();
   /*
    * 能不能开这个弹窗。
    *
@@ -264,10 +278,10 @@ export function SquareView() {
     setComposeOpen(true);
   }
 
-  /** 打开改昵称：今天改过就不再开弹窗，直接说清楚。 */
+  /** 打开改昵称：今天的两次用完了就不再开弹窗，直接说清楚。 */
   function requestRename() {
     if (!canRename) {
-      showToast('今天已经改过一次昵称了，明天再来改吧。', 'caution');
+      showToast('今天的两次昵称机会已经用完了，明天再来吧。', 'caution');
       return;
     }
     setNicknameDraft(nickname);
@@ -276,17 +290,19 @@ export function SquareView() {
 
   function commitNickname() {
     if (!canRename) {
-      showToast('今天已经改过一次昵称了，明天再来改吧。', 'caution');
+      showToast('今天的两次昵称机会已经用完了，明天再来吧。', 'caution');
       setNicknameOpen(false);
       return;
     }
     const saved = saveNickname(nicknameDraft);
     setNickname(saved);
     setNicknameOpen(false);
-    // 记一笔：今天这一次用掉了。改多少字都只算一次。
+    // 记一笔：今天的一次用掉了。改多少字都只算一次。
     recordNicknameChange(visitor?.key);
-    setCanRename(false);
-    showToast(saved ? `记住了，以后发帖默认叫「${saved}」。` : '已经改回匿名代号。');
+    // 账本已经写了，这里再压一道本地闸门，挡住同一帧里的连点
+    // 用账本状态推：上面刚记完一笔，`useCanRenameToday` 的重渲染可能还没到
+    setCanRename(canRenameToday && renamesLeft - 1 > 0);
+    showToast(saved ? `记住了，以后你就是「${saved}」啦～` : '已经改回匿名代号啦～');
   }
 
   async function publishReply(postId: string, content: string) {
@@ -383,7 +399,19 @@ export function SquareView() {
    * 云端模式下要发请求，失败必须说出来，不能静默吞掉。
    * `next` 是目标状态：true 表示要抱上，false 表示要收回。
    */
-  async function handleHug(postId: string, next: boolean) {
+  async function handleHug(postId: string, next: boolean, actuallyChange = true) {
+    /*
+     * 同一时刻只允许一条拥抱请求在飞。
+     *
+     * 冷却放在按钮上（挡住手滑），这里再加一道在数据层：即便两个帖子
+     * 的按钮被同时点到、或者上一次请求还没回来就又点，也不会发出
+     * 并发写 —— 云端是按「访客 × 帖子」插入 / 删除的，并发只会让
+     * 计数和本地状态对不上。
+     */
+    // 目标状态和现在一样（冷却期间连点被读到旧状态），不必发请求
+    if (!actuallyChange) return;
+    if (hugInFlight.current) return;
+    hugInFlight.current = true;
     try {
       await squareStore.hug(postId, next);
     } catch (hugError) {
@@ -391,8 +419,12 @@ export function SquareView() {
         hugError instanceof Error ? hugError.message : '没能抱住，请稍后再试。',
         'caution',
       );
+    } finally {
+      hugInFlight.current = false;
     }
   }
+
+  const hugInFlight = useRef(false);
 
   const loading = status === 'idle' || status === 'loading';
 
@@ -430,6 +462,14 @@ export function SquareView() {
             >
               <PenLine size={13} strokeWidth={1.8} aria-hidden="true" />
               修改昵称
+              <span
+                className={cn(
+                  'ml-0.5 rounded-full px-1.5 py-[1px] text-[10.5px] leading-none tracking-wide',
+                  canRename ? 'bg-[rgba(201,182,232,0.22)] text-ink-faint' : 'bg-transparent text-ink-ghost',
+                )}
+              >
+                {canRename ? `今天还剩 ${renamesLeft} 次` : '今天改完啦'}
+              </span>
             </button>
           </div>
 
@@ -547,7 +587,7 @@ export function SquareView() {
                   isAdmin={isAdmin}
                   canDelete={isAdmin || Boolean(post.mine)}
                   working={working}
-                  onHug={(next) => void handleHug(post.id, next)}
+                  onHug={(next) => void handleHug(post.id, next, post.hugged !== next)}
                   onReply={(content) => requestReply(post.id, content)}
                   onDelete={() => setDeleteTarget(post)}
                   onDeleteReply={(replyId) => void handleDeleteReply(post.id, replyId)}
@@ -667,7 +707,7 @@ export function SquareView() {
         open={nicknameOpen}
         onClose={() => setNicknameOpen(false)}
         title="改个昵称"
-        description="昵称会记在这台设备上，之后发帖默认用它。一天只能改一次，留空就回到「匿名·XXXX」。"
+        description="昵称会记在这台设备上，之后发帖默认用它。一天能改两次，留空就回到「匿名·XXXX」。"
         width="sm"
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -809,6 +849,28 @@ function PostCard({
    * 只在这段时间里忽略点击。
    */
   const [hugCooling, setHugCooling] = useState(false);
+  /**
+   * 这一下点击是不是已经被接受了。
+   *
+   * `hugCooling` 只挡住「冷却期内的第二次点击」，但它读的是渲染时的 `hugged`。
+   * 请求还没回来、`post` 还没更新时再点一下，`!hugged` 仍会是旧值，
+   * 于是同向重复提交 —— 云端是幂等的，可本地冷却会跟着重置，看起来像没反应。
+   * 这里用 ref 把「这一次已经点过了」钉住，等 post 的新状态到了再放开。
+   */
+  const hugPending = useRef(false);
+  /*
+   * 每次渲染同步一次：`post.hugged` 一变就让下一次点击重新可用。
+   *
+   * 这里必须用「渲染期写 ref」，不能用 `useEffect` —— effect 是宏任务，
+   * 会排在冷却的 setTimeout 之后才跑，于是冷却到点时先把闸门放开了，
+   * 紧接着 effect 又把 `post.hugged` 的旧依赖再关一次，两次点击之间就
+   * 莫名多出一个不可点的窗口（实测：抱上之后马上取消，那次点击被吞掉）。
+   */
+  const huggedLast = useRef(post.hugged);
+  if (huggedLast.current !== post.hugged) {
+    huggedLast.current = post.hugged;
+    hugPending.current = false;
+  }
   // 回复同样过滤：命中了就不出现在列表里
   const visibleReplies = useMemo(
     () => post.replies.filter((reply) => !scanSensitive(reply.content).hit),
@@ -889,9 +951,13 @@ function PostCard({
         <button
           type="button"
           onClick={() => {
-            if (hugCooling) return;
+            if (hugCooling || hugPending.current) return;
+            hugPending.current = true;
             setHugCooling(true);
-            window.setTimeout(() => setHugCooling(false), HUG_COOLDOWN_MS);
+            window.setTimeout(() => {
+              setHugCooling(false);
+              hugPending.current = false;
+            }, HUG_COOLDOWN_MS);
             if (!hugged) setBurst((value) => value + 1);
             onHug(!hugged);
           }}

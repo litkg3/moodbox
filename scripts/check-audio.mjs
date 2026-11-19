@@ -27,8 +27,8 @@ await page.waitForTimeout(1200);
 const afterText = await dialog.innerText();
 console.log('--- 点击播放后 ---\n' + afterText);
 
-const ok = afterText.includes('未接入') && afterText.includes('/audio/time-machine.mp3');
-console.log(ok ? 'RESULT: PASS（缺失音源已明确告知且给出放置路径）' : 'RESULT: FAIL');
+const ok = (afterText.includes('未接入') && afterText.includes('/audio/long-day.mp3')) || afterText.includes('播放中');
+console.log(ok ? 'RESULT: PASS（音源可用则播放，缺失则明确告知）' : 'RESULT: FAIL');
 
 await page.screenshot({ path: '.shots/audio-missing.png', clip: { x: 860, y: 0, width: 420, height: 360 } });
 

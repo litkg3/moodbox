@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   RESET_LEDGER_FOR_TESTS,
   canRenameToday,
+  readRenameCount,
   readUsage,
+  renamesLeftToday,
   recordNicknameChange,
   recordPost,
   recordReply,
@@ -12,7 +14,7 @@ import {
  * 访客账本。
  *
  * 这是「删掉帖子也不退额度」的唯一依据，所以几条性质必须钉住：
- * 只增不减、按访客分开、按自然日分开、昵称一天一次。
+ * 只增不减、按访客分开、按自然日分开、昵称一天两次。
  */
 describe('访客账本', () => {
   beforeEach(() => {
@@ -52,11 +54,42 @@ describe('访客账本', () => {
     expect(readUsage(new Date(), 'visitor-a').posts).toBe(1);
   });
 
-  it('昵称一天只能改一次', () => {
+  it('昵称一天能改两次，第三次就不行了', () => {
     expect(canRenameToday(new Date(), 'visitor-a')).toBe(true);
+    expect(renamesLeftToday(new Date(), 'visitor-a')).toBe(2);
+
+    recordNicknameChange('visitor-a');
+    expect(readRenameCount(new Date(), 'visitor-a')).toBe(1);
+    expect(canRenameToday(new Date(), 'visitor-a')).toBe(true);
+    expect(renamesLeftToday(new Date(), 'visitor-a')).toBe(1);
+
+    recordNicknameChange('visitor-a');
+    expect(readRenameCount(new Date(), 'visitor-a')).toBe(2);
+    expect(canRenameToday(new Date(), 'visitor-a')).toBe(false);
+    expect(renamesLeftToday(new Date(), 'visitor-a')).toBe(0);
+  });
+
+  it('改昵称的次数也按访客分开，同一台设备上的另一个人不受影响', () => {
+    recordNicknameChange('visitor-a');
     recordNicknameChange('visitor-a');
     expect(canRenameToday(new Date(), 'visitor-a')).toBe(false);
-    // 同一台设备上的另一个人不受影响
     expect(canRenameToday(new Date(), 'visitor-b')).toBe(true);
+    expect(renamesLeftToday(new Date(), 'visitor-b')).toBe(2);
+  });
+
+  it('旧账本里的 nickname: true 算作已用一次，只剩一次机会', () => {
+    const now = new Date();
+    const key = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+    ].join('-');
+    window.localStorage.setItem(
+      'moodbox:square-ledger:v1',
+      JSON.stringify({ [key]: { 'visitor-a': { nickname: true } } }),
+    );
+    expect(readRenameCount(now, 'visitor-a')).toBe(1);
+    expect(canRenameToday(now, 'visitor-a')).toBe(true);
+    expect(renamesLeftToday(now, 'visitor-a')).toBe(1);
   });
 });

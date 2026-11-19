@@ -181,11 +181,10 @@ export function AudioPlayer() {
 
             {isMissing ? (
               <p className="mt-2 rounded-2xl bg-white/55 px-3 py-2 text-[10.5px] leading-[1.7] text-ink-faint">
-                把已获授权的音频放到{' '}
-                <code className="rounded bg-white/70 px-1 py-[1px] text-[10px] text-ink-soft">
+                音频文件 <code className="rounded bg-white/70 px-1 py-[1px] text-[10px] text-ink-soft">
                   public{AUDIO_TRACK.src}
                 </code>{' '}
-                后刷新即可自动启用。
+                没有找到，换个网络再试试。
               </p>
             ) : null}
           </motion.div>

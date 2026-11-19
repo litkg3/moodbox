@@ -118,13 +118,7 @@ export function ClearDataDialog({ open, onClose }: ClearDataDialogProps) {
           </li>
         </ul>
 
-        <p className="text-[12px] leading-[1.9] text-ink-faint">
-          {cloudSquare
-            ? '内置的治愈故事会保留。广场的帖子存在 Supabase 云端，这里不会删除它们 —— 需要清空请到 Supabase 里执行 supabase/reset-square.sql。'
-            : '内置的治愈故事会保留，它不是你的记录。'}
-        </p>
-
-        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/70 bg-white/45 px-4 py-3">
+        <label className="mt-1 flex cursor-pointer items-start gap-3 rounded-2xl border border-white/70 bg-white/45 px-4 py-3">
           <input
             type="checkbox"
             checked={acknowledged}

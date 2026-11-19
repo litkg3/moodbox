@@ -250,7 +250,7 @@ truncate table public.square_replies, public.square_posts;
 写在这里，免得答辩时被问住：
 
 1. **没有身份体系。** 匿名访客可以无限发帖（虽然都要审核）。要防刷，得接 Supabase Auth 或加 IP 频率限制。
-2. **拥抱可以刷。** 同一个浏览器可以反复抱同一条帖子，`moodbox_square_hug` 不去重。要去重得记录访客标识（fingerprint 或匿名 session id），那会引入"追踪用户"的问题，本项目的取舍是宁可被刷也不追踪。
+2. **拥抱一人一票，靠匿名访客标识去重。** `moodbox_square_hug(p_id, p_visitor, p_undo)` 在 `square_hugs` 表里写一行「帖子 × 访客哈希」，同一访客重复调用只会 `on conflict do nothing`；`p_undo = true` 时删掉这行并把计数减回去，所以**取消拥抱是真的落库的**，不只是前端把心变灰。访客标识是本地随机生成的一串 id，做过哈希，不含 IP、不含浏览器指纹 —— 换个浏览器就是另一个人。前端的 700ms 冷却只是挡住手滑连点，不是安全边界。
 3. **管理员是单一口令，不是账号体系。** 改口令需要进 SQL Editor。多人协作审核需要真正的后台账号。
 4. **自伤识别仍在前端。** `lib/crisis.ts` 只做提示，不拦截。真正的防线应该是服务端在 `moodbox_square_create` 里再跑一遍关键词，命中时通知管理员 —— 现在的实现是把 `needs_support` 交给客户端判断，理论上可以绕过。
 5. **没有实时推送。** 别人发的新帖需要刷新页面才看到。要实时只需在 Supabase 里开 Realtime 并订阅 `square_posts`。
