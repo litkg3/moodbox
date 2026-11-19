@@ -14,10 +14,23 @@ describe('情绪内容库', () => {
     expect(validateEmotionLibrary()).toEqual({ ok: true, problems: [] });
   });
 
-  it('焦虑球的面板短句保持原来那组（共 8 条）', () => {
+  it('焦虑球的面板短句：原来 8 条 + 允许焦虑的 2 条（共 10 条）', () => {
     const anxiety = EMOTIONS.find((emotion) => emotion.id === 'anxiety');
-    expect(anxiety?.messages).toHaveLength(8);
+    expect(anxiety?.messages).toHaveLength(10);
     expect(anxiety?.messages[0]).toBe('当你真心渴望某样东西时，整个宇宙都会联合起来助你实现愿望。');
+    // 新增的两条追加在末尾：一条讲「允许焦虑」，一条讲「给悬而未决留点耐心」
+    expect(anxiety?.messages[8]).toContain('允许焦虑的出现');
+    expect(anxiety?.messages[9]).toContain('悬而未决');
+  });
+
+  it('备考球在原来 14 条之后追加了 2 条（共 16 条）', () => {
+    const exam = EMOTIONS.find((emotion) => emotion.id === 'exam');
+    expect(exam?.messages).toHaveLength(16);
+    expect(exam?.messages[14]).toBe('恰同学少年，风华正茂！');
+    expect(exam?.messages[15]).toContain('愿意反复靠近一件事');
+    // 追加不是替换：原来那条「得偿所愿」和「impossible」都得在
+    expect(exam?.messages).toContain('祝你得偿所愿！');
+    expect(exam?.messages.some((message) => message.includes("I'm possible"))).toBe(true);
   });
 
   it('焦虑球带一篇「看个小故事」专属故事，整段不拆', () => {
