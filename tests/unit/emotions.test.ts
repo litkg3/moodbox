@@ -30,8 +30,14 @@ describe('情绪内容库', () => {
     expect(story?.content).toContain('用你喜欢的方式度过一生');
     expect(story?.content).toContain('梅须逊雪三分白，雪却输梅一段香');
     expect(story?.content).toContain('人生海海，山山而川，不过尔尔');
-    // 保留分段（面板按 pre-wrap 渲染，换行就是呼吸）
-    expect(story?.content.split('\n\n').length).toBeGreaterThanOrEqual(5);
+    // 排版按四段走：良知与理想 / 徐霞客 / 人各有志与梅雪 / 释怀
+    const paragraphs = story?.content.split('\n\n') ?? [];
+    expect(paragraphs).toHaveLength(4);
+    const [first = '', second = '', third = '', fourth = ''] = paragraphs;
+    expect(first.endsWith('一个叫良知，另一个叫理想。')).toBe(true);
+    expect(second.startsWith('而全书的结尾')).toBe(true);
+    expect(third.endsWith('雪却输梅一段香。')).toBe(true);
+    expect(fourth.startsWith('读懂了兴衰与无常')).toBe(true);
     expect(story?.content.length).toBeGreaterThan(250);
   });
 

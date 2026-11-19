@@ -131,7 +131,10 @@ export function StoryPanel({ onBack, emotion }: StoryPanelProps) {
             ref={bodyRef}
             data-story-body=""
             className={cn(
-              'mb-scroll-x mt-4 max-h-[36vh] overflow-y-auto overscroll-contain pr-1',
+              // 手机竖屏纵向紧张，按 36vh 留出按钮；屏幕够高（≥640px）时给到
+              // min(44vh, 26rem)，这一段就能整篇读完，不必为最后两行滚动。
+              // 横屏手机高度只有 390px，绝不能放宽，否则卡片会被顶出视口。
+              'mb-scroll-x mt-4 max-h-[36vh] overflow-y-auto overscroll-contain pr-1 [@media(min-height:640px)]:max-h-[min(44vh,26rem)]',
               moreBelow && 'mb-fade-bottom',
             )}
           >
