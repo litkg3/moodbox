@@ -13,7 +13,9 @@
  * 之前铰在短边上，盖板立在侧面，像贴了一块小板子。
  * 盖子要画在盒身**之前** —— 它立在盒口后沿，下半截本来就该被盒口挡住。
  *
- * 三个可见面各一档粉，只靠明暗分面；不加描边 —— 小尺寸下描边先糊。
+ * 四个面各一档粉：左侧面 / 前面 / 右侧面 / 盒内，只靠明暗分面，
+ * 不加描边 —— 小尺寸下描边先糊。左侧面是补出来的一面，
+ * 少它盒子左边会空一块，看着像被斜切掉一角。
  */
 import { useId } from "react";
 
@@ -46,6 +48,7 @@ const tFL = at(0, 0, 1);
 const tFR = at(1, 0, 1);
 const tBR = at(1, 1, 1);
 const tBL = at(0, 1, 1);
+const BL = at(0, 1, 0);
 
 /**
  * 盖子：以远侧长边 tBL→tBR 为铰链，掀过竖直、往后仰 10°（100°）—— 这才叫半掀。
@@ -76,20 +79,28 @@ export function MoodBoxMark({ className }: MoodBoxMarkProps) {
     >
       <defs>
         <linearGradient id={g("left")} x1="0" y1="0" x2="0.4" y2="1">
-          <stop offset="0" stopColor="#FDE3EE" />
-          <stop offset="1" stopColor="#F5B8D0" />
+          <stop offset="0" stopColor="#FBD7E5" />
+          <stop offset="1" stopColor="#F3AFCB" />
         </linearGradient>
         <linearGradient id={g("right")} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#FBD8E5" />
-          <stop offset="1" stopColor="#EFA9C2" />
+          <stop offset="0" stopColor="#F8C6DA" />
+          <stop offset="1" stopColor="#EC9FBC" />
         </linearGradient>
-        <linearGradient id={g("in")} x1="0.1" y1="0" x2="0.8" y2="1">
-          <stop offset="0" stopColor="#CE7FA0" />
-          <stop offset="1" stopColor="#E8A6C2" />
+        <linearGradient id={g("inBack")} x1="0.2" y1="0" x2="0.6" y2="1">
+          <stop offset="0" stopColor="#E1A0B8" />
+          <stop offset="1" stopColor="#D38CA4" />
+        </linearGradient>
+        <linearGradient id={g("inFloor")} x1="0.1" y1="0" x2="0.7" y2="1">
+          <stop offset="0" stopColor="#D68FA6" />
+          <stop offset="1" stopColor="#C87D94" />
+        </linearGradient>
+        <linearGradient id={g("inLeft")} x1="0" y1="0" x2="0.7" y2="1">
+          <stop offset="0" stopColor="#F7C9DC" />
+          <stop offset="1" stopColor="#EDA8C4" />
         </linearGradient>
         <linearGradient id={g("lid")} x1="0.1" y1="0" x2="0.8" y2="1">
-          <stop offset="0" stopColor="#FDE6F1" />
-          <stop offset="1" stopColor="#F6BCD3" />
+          <stop offset="0" stopColor="#FBDCEA" />
+          <stop offset="1" stopColor="#F4B7CF" />
         </linearGradient>
       </defs>
 
@@ -115,7 +126,7 @@ export function MoodBoxMark({ className }: MoodBoxMarkProps) {
         */}
         <path
           d={poly(lidA, lidB, [lidB[0], lidB[1] - 3.4], [lidA[0], lidA[1] - 3.4])}
-          fill="#F5B9D0"
+          fill="#F0A8C4"
           opacity="0.85"
         />
         <path d={poly(tBL, tBR, lidB, lidA)} fill={`url(#${g("lid")})`} />
@@ -127,10 +138,18 @@ export function MoodBoxMark({ className }: MoodBoxMarkProps) {
           strokeLinejoin="round"
           opacity="0.72"
         />
-        {/* 盒身：左前壁 / 右前壁 / 盒口内壁 —— 三面都是粉，只差明度 */}
+        {/*
+        内腔：后内壁 / 内底 / 左侧面。
+        盒子是敞口的，后内壁和内底压暗，盒口才有深度；左侧面刷成正常粉，
+        盒子左边才是实心的 —— 少它左边会透出背景，像被斜切掉一角。
+      */}
+        <path d={poly(tBL, tBR, BR, BL)} fill={`url(#${g("inBack")})`} />
+        <path d={poly(FL, FR, BR, BL)} fill={`url(#${g("inFloor")})`} />
+        <path d={poly(tFL, tBL, BL, FL)} fill={`url(#${g("inLeft")})`} />
+
+        {/* 盒身：前面 / 右侧面 —— 都刷满粉，只差明度 */}
         <path d={poly(FL, FR, tFR, tFL)} fill={`url(#${g("left")})`} />
         <path d={poly(FR, BR, tBR, tFR)} fill={`url(#${g("right")})`} />
-        <path d={poly(tFL, tFR, tBR, tBL)} fill={`url(#${g("in")})`} />
 
         {/* 折痕：盖子根压住盒口后沿的那道暗，缺了它盖子和盒口是"拼接"的 */}
         <path
@@ -169,7 +188,7 @@ export function MoodBoxMark({ className }: MoodBoxMarkProps) {
 
         {/* 盒口前沿与前面那条竖棱：两道细亮线，棱线立刻清楚 */}
         <path
-          d={`M${pt(tFL)}L${pt(FL)}L${pt(FR)}L${pt(tFR)}`}
+          d={`M${pt(tBL)}L${pt(tFL)}L${pt(FL)}L${pt(FR)}L${pt(tFR)}`}
           fill="none"
           stroke="#FFFFFF"
           strokeWidth="1.7"

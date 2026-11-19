@@ -94,7 +94,7 @@
     <div class="cell">
       <h2>配色</h2>
       <div style="display:flex;gap:10px;flex-wrap:wrap" id="swatches"></div>
-      <p>三面同属一个粉调、只靠明度拉开：盖板最浅、左前壁次之、右前壁最深，盒口内壁压暗一档；纸条用四种浅色交替，像不同心情的小纸片。</p>
+      <p>四个面同属一个粉调、只靠明度拉开：盖板最浅，前面次之，左右两侧再深一档，盒内压到最暗；纸条用四种浅色交替，像不同心情的小纸片。</p>
     </div>
   </div>
 
@@ -120,7 +120,7 @@ const dY = W * Math.cos(A) * -E2[1] - W * Math.sin(A);
 const tBLp = at(0, 1, 1), tBRp = at(1, 1, 1);
 const V = {
   FL: at(0, 0, 0), FR: at(1, 0, 0), BR: at(1, 1, 0),
-  tFL: at(0, 0, 1), tFR: at(1, 0, 1), tBL: tBLp, tBR: tBRp,
+  tFL: at(0, 0, 1), tFR: at(1, 0, 1), tBL: tBLp, tBR: tBRp, BL: at(0, 1, 0),
   // 盖子铰在远侧长边 tBL→tBR，掀过竖直、往后仰 10°
   lidA: [+(tBLp[0] + dX).toFixed(1), +(tBLp[1] + dY).toFixed(1)],
   lidB: [+(tBRp[0] + dX).toFixed(1), +(tBRp[1] + dY).toFixed(1)],
@@ -137,23 +137,27 @@ function moodBox({ size = 240, blink = true, float = true, id = 'mb' } = {}) {
 <svg viewBox="0 0 200 200" width="${size}" height="${size}" role="img"
      aria-label="情绪盒子：一只盖子半掀的粉色小盒子，盒口里塞满了写着心情的小纸条">
   <defs>
-    <linearGradient id="${id}-l" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="#FDE3EE"/><stop offset="1" stop-color="#F5B8D0"/></linearGradient>
-    <linearGradient id="${id}-r" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FBD8E5"/><stop offset="1" stop-color="#EFA9C2"/></linearGradient>
-    <linearGradient id="${id}-i" x1="0.1" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="#CE7FA0"/><stop offset="1" stop-color="#E8A6C2"/></linearGradient>
-    <linearGradient id="${id}-d" x1="0.1" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="#FDE6F1"/><stop offset="1" stop-color="#F6BCD3"/></linearGradient>
+    <linearGradient id="${id}-l" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="#FBD7E5"/><stop offset="1" stop-color="#F3AFCB"/></linearGradient>
+    <linearGradient id="${id}-r" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F8C6DA"/><stop offset="1" stop-color="#EC9FBC"/></linearGradient>
+    <linearGradient id="${id}-ib" x1="0.2" y1="0" x2="0.6" y2="1"><stop offset="0" stop-color="#E1A0B8"/><stop offset="1" stop-color="#D38CA4"/></linearGradient>
+    <linearGradient id="${id}-if" x1="0.1" y1="0" x2="0.7" y2="1"><stop offset="0" stop-color="#D68FA6"/><stop offset="1" stop-color="#C87D94"/></linearGradient>
+    <linearGradient id="${id}-il" x1="0" y1="0" x2="0.7" y2="1"><stop offset="0" stop-color="#F7C9DC"/><stop offset="1" stop-color="#EDA8C4"/></linearGradient>
+    <linearGradient id="${id}-d" x1="0.1" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="#FBDCEA"/><stop offset="1" stop-color="#F4B7CF"/></linearGradient>
   </defs>
   <g class="${float ? 'float' : ''}" transform="translate(100 100) scale(0.9) translate(-100 -100) translate(0 -12)">
     <ellipse cx="98" cy="180" rx="40" ry="5.6" fill="#C0718F" opacity="0.15"/>
-    <path d="${poly([V.lidA, V.lidB, [V.lidB[0], V.lidB[1] - 3.4], [V.lidA[0], V.lidA[1] - 3.4]])}" fill="#F5B9D0" opacity="0.85"/>
+    <path d="${poly([V.lidA, V.lidB, [V.lidB[0], V.lidB[1] - 3.4], [V.lidA[0], V.lidA[1] - 3.4]])}" fill="#F0A8C4" opacity="0.85"/>
     <path d="${poly([V.tBL, V.tBR, V.lidB, V.lidA])}" fill="url(#${id}-d)"/>
     <path d="${poly([V.tBL, V.tBR, V.lidB, V.lidA])}" fill="none" stroke="#FFFFFF" stroke-width="1.7" stroke-linejoin="round" opacity="0.72"/>
+    <path d="${poly([V.tBL, V.tBR, V.BR, V.BL])}" fill="url(#${id}-ib)"/>
+    <path d="${poly([V.FL, V.FR, V.BR, V.BL])}" fill="url(#${id}-if)"/>
+    <path d="${poly([V.tFL, V.tBL, V.BL, V.FL])}" fill="url(#${id}-il)"/>
     <path d="${poly([V.FL, V.FR, V.tFR, V.tFL])}" fill="url(#${id}-l)"/>
     <path d="${poly([V.FR, V.BR, V.tBR, V.tFR])}" fill="url(#${id}-r)"/>
-    <path d="${poly([V.tFL, V.tFR, V.tBR, V.tBL])}" fill="url(#${id}-i)"/>
     <path d="${poly([V.tBL, V.tBR])}" fill="none" stroke="#B96A8B" stroke-width="2.6" stroke-linecap="round" opacity="0.18"/>
 
     ${strips.map(([d, c]) => `<path d="${d}" stroke="${c}" stroke-width="3.4" stroke-linecap="round" fill="none"/>`).join('')}
-    <path d="M${V.tFL.join(' ')} ${V.FL.join(' ')} ${V.FR.join(' ')} ${V.tFR.join(' ')}" fill="none" stroke="#FFFFFF" stroke-width="1.7" stroke-linejoin="round" opacity="0.5"/>
+    <path d="M${V.tBL.join(' ')} ${V.tFL.join(' ')} ${V.FL.join(' ')} ${V.FR.join(' ')} ${V.tFR.join(' ')}" fill="none" stroke="#FFFFFF" stroke-width="1.7" stroke-linejoin="round" opacity="0.5"/>
     <g id="${id}-eyes">
       <ellipse cx="98" cy="145" rx="2.6" ry="3.2" fill="#6B4A5C" opacity="0.82"/>
       <ellipse cx="110" cy="139" rx="2.6" ry="3.2" fill="#6B4A5C" opacity="0.82"/>
@@ -203,8 +207,8 @@ const sizes = document.getElementById('sizes');
 });
 
 const palette = [
-  ['#FEF0F7', '盖板'], ['#FDE3EE', '左前壁'], ['#FBD8E5', '右前壁'],
-  ['#CE7FA0', '盒口'], ['#FFE7B4', '纸条'],
+  ['#FBDCEA', '盖板'], ['#FBD7E5', '左前壁'], ['#F8C6DA', '右前壁'],
+  ['#D68FA6', '盒内'], ['#FFE7B4', '纸条'],
 ];
 const sw = document.getElementById('swatches');
 palette.forEach(([color, name]) => {
