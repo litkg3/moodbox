@@ -96,6 +96,21 @@ class ListStore<T> {
     return this.loading;
   }
 
+  /**
+   * 等当前这次加载结束（没有在加载就立刻返回）。
+   *
+   * 给「身份来晚了」这种场景用：列表可能已经在读了，而读取时还没有 viewer，
+   * mine 全是 false；等它读完再刷一遍，才不会把结果覆盖成一片空白。
+   */
+  async whenSettled(): Promise<void> {
+    if (!this.loading) return;
+    try {
+      await this.loading;
+    } catch {
+      // 加载失败会写进 snapshot，这里不用再处理
+    }
+  }
+
   async refresh(): Promise<void> {
     try {
       this.setItems(await this.load());
@@ -174,7 +189,19 @@ class SquareStore extends ListStore<SquarePost> {
     if (squareViewerId === visitorId) return;
     squareViewerId = visitorId;
     void this.refreshQuota();
-    if (this.status === 'ready') void this.refresh();
+
+    /*
+     * 无条件补一次拉取 —— 这就是「刷新后删不掉自己帖子」的根因。
+     *
+     * 列表的第一次加载可能在身份解析完成之前就开始了，那时 listPosts(null)，
+     * 每条帖子的 mine 都是 false。原先是「只有 status === 'ready' 才刷新」，
+     * 可身份恰好落在 loading 期间时，两边都不动手，界面就永远停在
+     * 「一条都不是我的」。改成等这次加载收尾之后必定再刷一遍。
+     */
+    void (async () => {
+      await this.whenSettled();
+      if (this.status === 'ready') await this.refresh();
+    })();
   }
 
   /** 问后端要今天的额度用量；拿不到就保持原值，不影响发帖。 */

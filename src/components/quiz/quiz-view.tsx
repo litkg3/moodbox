@@ -1,13 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, ArrowRight, RefreshCw, Sparkles } from 'lucide-react';
 import { useToolOverlay } from '@/components/layout/tool-overlay-provider';
 import { Button } from '@/components/ui/button';
 import { EMOTION_MAP, pickMessage } from '@/lib/emotions';
-import type { EmotionId } from '@/types';
+import type { Emotion, EmotionId } from '@/types';
 import { cn } from '@/lib/utils';
 
 interface QuizOption {
@@ -22,10 +22,13 @@ interface QuizQuestion {
 }
 
 /**
- * 六个问题。
+ * 题库。
  *
- * 这不是任何一份量表 —— 没有计分标准，没有临床分级，也不产出"你有 X 分"。
+ * 不是任何一份量表 —— 没有计分标准，没有临床分级，也不产出"你有 X 分"。
  * 它只做一件事：把你说不清的那种感觉，落回到一颗具体的球上。
+ *
+ * 题目比一次测试要多（13 题抽 6 题）：常来的人不会每次都碰到同一套问题，
+ * 也就不会因为"上次选过这个"而照着印象填。
  */
 const QUESTIONS: readonly QuizQuestion[] = [
   {
@@ -88,7 +91,80 @@ const QUESTIONS: readonly QuizQuestion[] = [
       { text: '暂时不想丢什么', emotion: 'joy' },
     ],
   },
+  {
+    id: 'body',
+    question: '这会儿身体里，哪里最明显？',
+    options: [
+      { text: '肩颈绷着，松不下来', emotion: 'anxiety' },
+      { text: '整个人是沉的，抬不动', emotion: 'exhaustion' },
+      { text: '胸口或胃里堵着一团', emotion: 'wronged' },
+      { text: '说不上来，好像没什么感觉', emotion: 'numbness' },
+    ],
+  },
+  {
+    id: 'night',
+    question: '晚上躺下之后，通常是哪一种？',
+    options: [
+      { text: '很快就睡着了', emotion: 'joy' },
+      { text: '翻来覆去，脑子停不下来', emotion: 'anxiety' },
+      { text: '会突然很想哭', emotion: 'sadness' },
+      { text: '盯着天花板，什么也没想', emotion: 'numbness' },
+    ],
+  },
+  {
+    id: 'someone',
+    question: '最近有没有一个人，一想到就有点复杂？',
+    options: [
+      { text: '想见，又不太敢见', emotion: 'parting' },
+      { text: '有点烦，说不上来为什么', emotion: 'irritation' },
+      { text: '希望对方能主动找我一次', emotion: 'loneliness' },
+      { text: '没有，最近挺好的', emotion: 'joy' },
+    ],
+  },
+  {
+    id: 'praise',
+    question: '别人夸你的时候，你的第一反应是？',
+    options: [
+      { text: '觉得对方只是客气', emotion: 'wronged' },
+      { text: '开心，但有点不自在', emotion: 'loneliness' },
+      { text: '坦然收下，说声谢谢', emotion: 'joy' },
+      { text: '想反驳，觉得自己不配', emotion: 'pain' },
+    ],
+  },
+  {
+    id: 'phone',
+    question: '手机响的时候，你心里先冒出什么？',
+    options: [
+      { text: '希望是某个人', emotion: 'loneliness' },
+      { text: '有点紧张，怕是不好的事', emotion: 'anxiety' },
+      { text: '不太想回，先放着', emotion: 'numbness' },
+      { text: '看是谁，没什么特别', emotion: 'joy' },
+    ],
+  },
+  {
+    id: 'effort',
+    question: '你最近的那些努力，有人看见吗？',
+    options: [
+      { text: '没有，不过我也习惯了', emotion: 'wronged' },
+      { text: '有，但我觉得还不够', emotion: 'exam' },
+      { text: '我不太确定自己在努力什么', emotion: 'lost' },
+      { text: '有人看见了，这就够了', emotion: 'joy' },
+    ],
+  },
+  {
+    id: 'tomorrow',
+    question: '想到明天，更接近哪一种感觉？',
+    options: [
+      { text: '有点怕，希望它慢点来', emotion: 'anxiety' },
+      { text: '都一样，没什么差别', emotion: 'numbness' },
+      { text: '有一两件想做的事', emotion: 'joy' },
+      { text: '只是觉得很累', emotion: 'exhaustion' },
+    ],
+  },
 ];
+
+/** 一次做几题。题库再厚，一屏也只走六步。 */
+const QUIZ_LENGTH = 6;
 
 type Suggestion = { label: string; href?: string; tool?: 'jar' | 'letters' };
 
@@ -157,54 +233,170 @@ const TIE_BREAK: readonly EmotionId[] = [
   'joy',
 ];
 
+/** 上一次的结果存这里。刷新、下次进来都先看到它，除非自己点「重新做一次」。 */
+const RESULT_KEY = 'moodbox:quiz-result:v1';
+
+interface QuizResult {
+  emotion: Emotion;
+  score: number;
+  runnersUp: Emotion[];
+  message: string;
+}
+
+interface StoredResult {
+  emotionId: EmotionId;
+  score: number;
+  runnersUp: EmotionId[];
+  message: string;
+  at: number;
+}
+
+function readStoredResult(): StoredResult | null {
+  try {
+    const raw = window.localStorage.getItem(RESULT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredResult;
+    if (!parsed?.emotionId || !EMOTION_MAP[parsed.emotionId]) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredResult(result: QuizResult): void {
+  try {
+    const payload: StoredResult = {
+      emotionId: result.emotion.id,
+      score: result.score,
+      runnersUp: result.runnersUp.map((emotion) => emotion.id),
+      message: result.message,
+      at: Date.now(),
+    };
+    window.localStorage.setItem(RESULT_KEY, JSON.stringify(payload));
+  } catch {
+    // 存不下就只是下次要重做一遍，不影响这次结果
+  }
+}
+
+function clearStoredResult(): void {
+  try {
+    window.localStorage.removeItem(RESULT_KEY);
+  } catch {
+    // 忽略
+  }
+}
+
+/** 从题库里随机抽六题（Fisher–Yates，就地洗一副牌再取前六张）。 */
+function pickQuestions(): QuizQuestion[] {
+  const pool = [...QUESTIONS];
+  for (let index = pool.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(Math.random() * (index + 1));
+    const a = pool[index];
+    const b = pool[swap];
+    if (a && b) {
+      pool[index] = b;
+      pool[swap] = a;
+    }
+  }
+  return pool.slice(0, QUIZ_LENGTH);
+}
+
+/** 把六道题的答案折算成一颗球。 */
+function scoreAnswers(answers: Record<string, EmotionId>): QuizResult | null {
+  const counts = new Map<EmotionId, number>();
+  for (const emotion of Object.values(answers)) {
+    counts.set(emotion, (counts.get(emotion) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return TIE_BREAK.indexOf(a[0]) - TIE_BREAK.indexOf(b[0]);
+  });
+  const top = ranked[0];
+  if (!top) return null;
+  const emotion = EMOTION_MAP[top[0]];
+  return {
+    emotion,
+    score: top[1],
+    runnersUp: ranked.slice(1, 3).map(([id]) => EMOTION_MAP[id]),
+    message: pickMessage(emotion.messages).message,
+  };
+}
+
 export function QuizView() {
+  /**
+   * 三种状态：还没挂载（骨架）、有上次的结果（直接看）、正在做题。
+   *
+   * `ready` 之前不渲染题目 —— 题库是随机抽的，先渲染一套再换另一套会闪。
+   */
+  const [ready, setReady] = useState(false);
+  const [questions, setQuestions] = useState<QuizQuestion[]>(() =>
+    QUESTIONS.slice(0, QUIZ_LENGTH),
+  );
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, EmotionId>>({});
-  const [finished, setFinished] = useState(false);
+  const [result, setResult] = useState<QuizResult | null>(null);
   const { openTool } = useToolOverlay();
 
-  const total = QUESTIONS.length;
-  const question = QUESTIONS[step];
-
-  const result = useMemo(() => {
-    if (!finished) return null;
-    const counts = new Map<EmotionId, number>();
-    for (const emotion of Object.values(answers)) {
-      counts.set(emotion, (counts.get(emotion) ?? 0) + 1);
+  // 挂载后才知道该续上一次的结果，还是重新抽题
+  useEffect(() => {
+    const stored = readStoredResult();
+    if (stored) {
+      setResult({
+        emotion: EMOTION_MAP[stored.emotionId],
+        score: stored.score,
+        runnersUp: (stored.runnersUp ?? [])
+          .filter((id) => EMOTION_MAP[id])
+          .map((id) => EMOTION_MAP[id]),
+        message: stored.message,
+      });
+    } else {
+      setQuestions(pickQuestions());
     }
-    const ranked = [...counts.entries()].sort((a, b) => {
-      if (b[1] !== a[1]) return b[1] - a[1];
-      return TIE_BREAK.indexOf(a[0]) - TIE_BREAK.indexOf(b[0]);
-    });
-    const top = ranked[0];
-    if (!top) return null;
-    const emotion = EMOTION_MAP[top[0]];
-    return {
-      emotion,
-      score: top[1],
-      runnersUp: ranked.slice(1, 3).map(([id]) => EMOTION_MAP[id]),
-      message: pickMessage(emotion.messages).message,
-    };
-  }, [answers, finished]);
+    setReady(true);
+  }, []);
+
+  const total = questions.length;
+  const question = questions[step];
 
   function choose(emotion: EmotionId) {
     if (!question) return;
     const nextAnswers = { ...answers, [question.id]: emotion };
     setAnswers(nextAnswers);
     if (step + 1 >= total) {
-      setFinished(true);
+      const next = scoreAnswers(nextAnswers);
+      if (next) {
+        setResult(next);
+        writeStoredResult(next);
+      }
     } else {
       setStep(step + 1);
     }
   }
 
   function restart() {
-    setStep(0);
+    clearStoredResult();
+    setResult(null);
     setAnswers({});
-    setFinished(false);
+    setStep(0);
+    setQuestions(pickQuestions());
   }
 
-  if (finished && result) {
+  if (!ready) {
+    return (
+      <div className="mx-auto max-w-[640px]" aria-hidden="true">
+        <p className="text-[11px] uppercase tracking-[0.42em] text-ink-ghost">A Small Quiz</p>
+        <div className="mt-4 h-8 w-[180px] animate-pulse rounded-full bg-white/40" />
+        <div className="mt-3 h-4 w-full max-w-[420px] animate-pulse rounded-full bg-white/30" />
+        <div className="mt-10 space-y-2.5">
+          {[0, 1, 2, 3].map((index) => (
+            <div key={index} className="h-[54px] animate-pulse rounded-[18px] bg-white/30" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (result) {
     return (
       <div className="mx-auto max-w-[640px]">
         <motion.div
@@ -295,22 +487,18 @@ export function QuizView() {
           情绪测试
         </h1>
         <p className="mt-3 max-w-[46ch] text-pretty text-[13.5px] leading-[1.9] text-ink-faint sm:text-sm">
-          六个问题，帮你把此刻的感觉说得更清楚一点。没有对错，选最像的那个就好。
+          六个问题，每次从题库里换一组。没有对错，选最像的那个就好。
         </p>
       </header>
 
       {/* 进度 */}
       <div className="mb-7 flex items-center gap-2" aria-hidden="true">
-        {QUESTIONS.map((item, index) => (
+        {questions.map((item, index) => (
           <span
             key={item.id}
             className={cn(
               'h-[3px] flex-1 rounded-full transition-colors duration-500',
-              index < step || (finished && index === total - 1)
-                ? 'bg-[rgba(142,118,184,0.65)]'
-                : index === step
-                  ? 'bg-[rgba(201,182,232,0.7)]'
-                  : 'bg-[rgba(141,133,152,0.18)]',
+              index < step ? 'bg-[rgba(142,118,184,0.65)]' : 'bg-[rgba(141,133,152,0.18)]',
             )}
           />
         ))}
@@ -372,7 +560,7 @@ export function QuizView() {
 
       <p className="mt-9 flex items-center gap-2 text-[11.5px] leading-[1.9] text-ink-ghost">
         <Sparkles size={12} strokeWidth={1.6} aria-hidden="true" />
-        结果只保存在当前页面，不会写入你的任何记录。
+        做完会记住这次结果，下次进来先看到它；想重做随时可以。
       </p>
     </div>
   );

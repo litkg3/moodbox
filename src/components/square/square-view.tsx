@@ -4,8 +4,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
+  ChevronDown,
   Database,
   Heart,
+  LockOpen,
   MapPin,
   MessageCircle,
   MessagesSquare,
@@ -13,7 +15,6 @@ import {
   Send,
   Trash2,
 } from 'lucide-react';
-import { AdminBar } from '@/components/admin/admin-bar';
 import { CrisisNoticeDialog } from '@/components/square/crisis-notice-dialog';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -33,6 +34,12 @@ import { resolveVisitor, type VisitorIdentity } from '@/lib/visitor';
 import type { SquarePost, SquareReply } from '@/types';
 import { cn } from '@/lib/utils';
 
+/** 一屏先给十条；再多就等用户自己点「查看更多」，别一次把几百条塞进 DOM。 */
+const PAGE_SIZE = 10;
+
+/** 评论默认只露最新两条，点「回复」再展开全部。 */
+const REPLY_PEEK = 2;
+
 type PendingAction =
   | { kind: 'post'; content: string; nickname: string }
   | { kind: 'reply'; postId: string; content: string; nickname: string };
@@ -42,7 +49,7 @@ type SortMode = SquareSortMode;
 
 export function SquareView() {
   const { items: posts, status, error } = useSquare();
-  const { isAdmin } = useAdmin();
+  const { isAdmin, lock } = useAdmin();
   const { showToast } = useToast();
 
   /**
@@ -145,17 +152,48 @@ export function SquareView() {
    */
   const listed = useMemo(() => sortPostsForView(approved, sort), [approved, sort]);
 
+  /**
+   * 一屏十条，点「查看更多」再加十条。
+   *
+   * 广场的帖子只增不减，一次全渲染的话，几百条卡片 + 每条的回复列表
+   * 会直接把移动端浏览器拖死。分页比虚拟滚动简单得多，也不会在
+   * 快速滑动时闪白。
+   */
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [sort, approved.length]);
+
+  const visible = listed.slice(0, visibleCount);
+  const hasMore = listed.length > visibleCount;
+
   /* ---------------- 发布 ---------------- */
+
+  /**
+   * 拿当前身份，必要时等它解析完。
+   *
+   * 身份要查一次归属地（可能几百毫秒，网络差时更久）。发帖时如果 visitor
+   * 还是 null，visitorId 就会以空值写进库里 —— 那条帖子此后永远认不出是
+   * 谁发的，连自己都删不掉。所以这里宁可等一下，也不写一条没有主的记录。
+   */
+  async function ensureIdentity(): Promise<VisitorIdentity> {
+    if (visitor) return visitor;
+    const identity = await resolveVisitor();
+    setVisitor(identity);
+    squareStore.setViewer(identity.key);
+    return identity;
+  }
 
   async function publishPost(content: string, nickname: string) {
     setWorking(true);
     try {
+      const me = await ensureIdentity();
       await squareStore.publish({
         content,
         nickname,
-        alias: visitor?.alias,
-        visitorId: visitor?.key,
-        region: visitor?.region ?? null,
+        alias: me.alias,
+        visitorId: me.key,
+        region: me.region ?? null,
         needsSupport: scanForCrisis(content).flagged,
       });
       setComposeOpen(false);
@@ -213,11 +251,12 @@ export function SquareView() {
   async function publishReply(postId: string, content: string) {
     setWorking(true);
     try {
+      const me = await ensureIdentity();
       await squareStore.reply(postId, {
         content,
-        alias: visitor?.alias,
-        visitorId: visitor?.key,
-        region: visitor?.region ?? null,
+        alias: me.alias,
+        visitorId: me.key,
+        region: me.region ?? null,
         needsSupport: scanForCrisis(content).flagged,
       });
       showToast('回复已经送达。');
@@ -314,7 +353,7 @@ export function SquareView() {
   return (
     <div>
       <header className="mb-8 flex flex-col gap-5 sm:mb-10 sm:flex-row sm:items-end sm:justify-between">
-        <div className="max-w-[560px]">
+        <div className="w-full max-w-[560px] sm:flex-1">
           <p className="text-[11px] uppercase tracking-[0.42em] text-ink-ghost">Hollow Square</p>
           <h1 className="mt-3 font-display text-[26px] font-light leading-tight tracking-[0.06em] text-ink sm:text-[34px]">
             树洞广场
@@ -322,37 +361,54 @@ export function SquareView() {
           <p className="mt-3 max-w-[48ch] text-pretty text-[13.5px] leading-[1.9] text-ink-faint sm:text-sm">
             当小球难以匹配你复杂的心情时，不妨来到树洞广场，欢迎你来倾诉，分享你的故事。
           </p>
-          {/* 昵称在页面上就能改，改完记住；不用等到发帖那一步才想起来 */}
-          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11.5px]">
-            <span className="text-ink-ghost">我的昵称</span>
-            <span className="text-ink-faint">{myName}</span>
+
+          {/*
+            昵称单独做成一张卡：之前只是行内一行小字，"我的昵称 匿名·K7Q2 修改"
+            挤在一起，看不出这里能改。现在给它一块自己的地方，
+            名字放大、右上一个明确的按钮。
+          */}
+          <div className="mt-4 flex items-center gap-3 rounded-[18px] border border-white/75 bg-white/55 px-4 py-2.5">
+            <div className="min-w-0">
+              <p className="text-[10px] tracking-[0.2em] text-ink-ghost">我的昵称</p>
+              <p className="mt-0.5 truncate text-[13.5px] text-ink">{myName}</p>
+            </div>
             <button
               type="button"
               onClick={() => {
                 setNicknameDraft(nickname);
                 setNicknameOpen(true);
               }}
-              className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/50 px-2.5 py-0.5 text-[11px] text-ink-soft transition-colors hover:text-ink"
+              className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border border-[rgba(141,133,152,0.22)] bg-white/70 px-2.5 py-1 text-[11px] text-ink-soft transition-colors hover:border-[rgba(201,182,232,0.6)] hover:text-ink"
             >
               <PenLine size={11} strokeWidth={1.8} aria-hidden="true" />
               修改
             </button>
           </div>
+
           {/* 数据存在哪必须写在页面上，不能让人以为换台设备还能看到 */}
           {source ? (
-            <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11.5px] leading-relaxed text-ink-ghost">
-              <span className="inline-flex items-start gap-1.5">
-                <Database
-                  size={12}
-                  strokeWidth={1.6}
-                  className="mt-[3px] shrink-0"
-                  aria-hidden="true"
-                />
-                <span className="text-ink-faint">{source.label}</span>
+            <p className="mt-3 flex items-center gap-1.5 text-[11.5px] leading-relaxed text-ink-ghost">
+              <Database size={12} strokeWidth={1.6} className="shrink-0" aria-hidden="true" />
+              <span className="text-ink-faint">{source.label}</span>
+            </p>
+          ) : null}
+
+          {/* 管理员入口不放在页面上，只留一个"已经进来"的提示与退出 */}
+          {isAdmin ? (
+            <div className="mt-3 inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-[rgba(142,118,184,0.35)] bg-[rgba(201,182,232,0.16)] px-3.5 py-1.5 text-[11px] text-ink-faint">
+              <span className="text-ink">管理员模式</span>
+              <span aria-hidden="true" className="opacity-40">
+                ·
               </span>
-              {/* 管理员入口与「已接入 Supabase」同一行展示 */}
-              <AdminBar ability="可以删除不合适的帖子" buttonOnly />
-              <p className="w-full pl-[18px]">{source.detail}</p>
+              <span>可以删除不合适的帖子</span>
+              <button
+                type="button"
+                onClick={lock}
+                className="ml-1 inline-flex items-center gap-1 border-l border-[rgba(142,118,184,0.28)] pl-2 text-ink-ghost transition-colors hover:text-ink"
+              >
+                <LockOpen size={11} strokeWidth={1.8} aria-hidden="true" />
+                退出
+              </button>
             </div>
           ) : null}
         </div>
@@ -401,6 +457,8 @@ export function SquareView() {
           </div>
         </div>
 
+        <PinnedNotice />
+
         {loading ? (
           <div className="space-y-3">
             {/* 进度条放在列表位置，与下面的占位卡片是同一套卡片语言 */}
@@ -432,8 +490,9 @@ export function SquareView() {
             </p>
           </div>
         ) : (
+          <>
           <ul className="space-y-3.5">
-            {listed.map((post) => (
+            {visible.map((post) => (
               <li key={post.id}>
                 <PostCard
                   post={post}
@@ -450,6 +509,19 @@ export function SquareView() {
               </li>
             ))}
           </ul>
+          {hasMore ? (
+            <div className="mt-5 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/55 px-5 py-2.5 text-[12px] text-ink-soft transition-colors hover:border-[rgba(201,182,232,0.6)] hover:text-ink"
+              >
+                查看更多
+                <ChevronDown size={13} strokeWidth={1.8} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
+          </>
         )}
       </section>
 
@@ -605,6 +677,49 @@ export function SquareView() {
   );
 }
 
+/* ---------------- 置顶说明 ---------------- */
+
+/**
+ * 广场顶部那条「置顶」。
+ *
+ * 单独画成一个卡片、单独画一个图钉图标，而不是塞在正文里当一行灰字：
+ * 它是这一页唯一的规则说明，得让人一眼看见，又不至于像横幅广告。
+ * 图标是现画的（一张纸 + 一颗图钉），与站内其他线性图标的笔触对齐。
+ */
+function PinnedNotice() {
+  return (
+    <aside
+      aria-label="广场说明"
+      className="mb-4 flex items-start gap-3 rounded-[20px] border border-[rgba(201,182,232,0.42)] bg-[rgba(201,182,232,0.13)] px-4 py-3.5"
+    >
+      <span className="mt-[1px] shrink-0 text-lavender-deep">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M7.6 4.4h8.8a1.7 1.7 0 0 1 1.7 1.7v10.6a1.7 1.7 0 0 1-1.7 1.7H7.6a1.7 1.7 0 0 1-1.7-1.7V6.1a1.7 1.7 0 0 1 1.7-1.7Z"
+            stroke="currentColor"
+            strokeWidth="1.3"
+            opacity="0.82"
+          />
+          <path
+            d="M9.2 9.1h5.6M9.2 12h5.6M9.2 14.9h3.4"
+            stroke="currentColor"
+            strokeWidth="1.3"
+            strokeLinecap="round"
+            opacity="0.6"
+          />
+          <circle cx="12" cy="3.1" r="1.4" fill="currentColor" opacity="0.9" />
+        </svg>
+      </span>
+      <div className="min-w-0">
+        <p className="text-[10.5px] tracking-[0.16em] text-lavender-deep">置顶 · 广场说明</p>
+        <p className="mt-1 text-[11.5px] leading-[1.9] text-ink-faint">
+          只收心里的话。广告、引流、联系方式与攻击他人的内容会被删除；也请别留下真实姓名、住址和电话。
+        </p>
+      </div>
+    </aside>
+  );
+}
+
 /* ---------------- 单条帖子 ---------------- */
 
 function PostCard({
@@ -642,6 +757,19 @@ function PostCard({
     [post.replies],
   );
   const hugged = Boolean(post.hugged);
+
+  /**
+   * 评论默认只露最新两条。
+   *
+   * 一条热帖可能挂着几十条回复，全铺开会把下面的帖子挤到屏幕外，
+   * 滑半天也翻不到下一条。点「回复」时顺手展开全部 —— 想说话的人
+   * 通常也想知道前面都说了什么，不必再多一次「查看全部」的点击。
+   */
+  const [repliesExpanded, setRepliesExpanded] = useState(false);
+  const shownReplies =
+    !repliesExpanded && visibleReplies.length > REPLY_PEEK
+      ? visibleReplies.slice(-REPLY_PEEK)
+      : visibleReplies;
 
   // 边打字边检查：命中就提示并禁用发送，不用等按下按钮才被拦
   const replyScan = useMemo(() => scanSensitive(replyText), [replyText]);
@@ -738,7 +866,11 @@ function PostCard({
 
         <button
           type="button"
-          onClick={() => setReplyOpen((prev) => !prev)}
+          onClick={() => {
+            setReplyOpen((prev) => !prev);
+            // 打开输入框的同时把折叠的评论放出来
+            setRepliesExpanded(true);
+          }}
           className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(141,133,152,0.2)] px-3 py-1.5 text-[11.5px] text-ink-faint transition-colors hover:text-ink"
         >
           <MessageCircle size={13} strokeWidth={1.7} aria-hidden="true" />
@@ -812,7 +944,7 @@ function PostCard({
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            {visibleReplies.map((reply) => (
+            {shownReplies.map((reply) => (
               <ReplyItem
                 key={reply.id}
                 reply={reply}

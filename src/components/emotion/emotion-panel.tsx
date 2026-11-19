@@ -281,6 +281,7 @@ function EmotionPanelContent({
             rows={3}
             maxLength={800}
             aria-label="心事内容"
+            data-no-autofocus
             className="mb-deep-field w-full resize-none rounded-2xl px-4 pb-11 pt-3 text-[12.5px] leading-[1.9] outline-none"
           />
           <button

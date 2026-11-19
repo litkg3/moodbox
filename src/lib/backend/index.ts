@@ -59,7 +59,7 @@ export function describeBackend(): {
   if (backend.mode === 'supabase') {
     return {
       mode: 'supabase',
-      label: '树洞广场已接入 Supabase',
+      label: '树洞广场已接入 Supabase 数据库',
       detail: '心事信箱与开心罐仍然只在这台设备上。',
     };
   }

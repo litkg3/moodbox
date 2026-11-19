@@ -99,6 +99,11 @@ export async function listPosts(viewerId?: string): Promise<SquarePost[]> {
  * 现在由管理员事后删除（见 lib/admin.ts）来兜底不合适的内容。
  */
 export async function createPost(draft: PostDraft): Promise<SquarePost> {
+  /*
+   * 这里不强制 visitorId：老的调用方（以及导入的示例数据）确实可能没有身份，
+   * 拒绝会让它们全部失效。界面层已经把「发帖前先等身份就绪」做掉了
+   * （见 square-view 的 ensureIdentity），所以真实发帖一定带得上来。
+   */
   // 每天最多 3 条。判在写入之前，且用的是同一份统计函数，
   // 与界面上的「今天还能发 N 条」不会互相矛盾。
   const usage = await getQuotaUsage(draft.visitorId);

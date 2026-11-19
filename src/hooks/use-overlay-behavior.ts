@@ -28,6 +28,10 @@ const FOCUSABLE = [
  *
  * 顺序：显式标了 data-autofocus 的 > 第一个可见的文本输入框 > 浮层本身（tabIndex=-1）。
  * 确认类弹窗没有输入框，于是焦点停在容器上，不会误触「删除」。
+ *
+ * 另有一类输入框要主动跳过：标了 `data-no-autofocus` 的。典型是情绪面板里
+ * 那个「写一封心事」—— 面板只是给人看一段话，手机上一聚焦就弹键盘、
+ * 输入框亮起一圈焦点边框，和卡片的边框叠成"双重边框"。
  */
 const TEXT_ENTRY = [
   'input:not([type])',
@@ -47,7 +51,7 @@ function pickInitialFocus(container: HTMLElement): HTMLElement {
 
   // 只认"能打字的"控件：文件选择框、勾选框、按钮都不该抢焦点
   const fields = Array.from(container.querySelectorAll<HTMLElement>(TEXT_ENTRY)).filter(
-    (node) => node.offsetParent !== null,
+    (node) => node.offsetParent !== null && !node.hasAttribute('data-no-autofocus'),
   );
 
   const firstField = fields[0];

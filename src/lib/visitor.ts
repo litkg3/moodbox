@@ -4,21 +4,20 @@
  * 匿名访客身份。
  *
  * 树洞广场没有账号体系，但「能删掉自己发的东西」需要一个稳定的身份。
- * 这里用「IP 归属地 + 一段哈希」来近似：
  *
- * - `key`：由 IP 派生的稳定哈希（16 位十六进制），只在本地与提交时使用，
+ * ⚠️ 这里的 `key` **只由本机种子派生**，绝不掺 IP。
+ * 之前是「IP 优先、拿不到才退回本机种子」，结果刷新页面时归属地接口一旦超时，
+ * 种子就从 IP 换成了本机随机值 —— 同一个人的 key 变了，`mine` 全部变 false，
+ * 自己刚发的帖子立刻删不掉。把 IP 从种子里摘出去，刷新多少次都是同一个人；
+ * IP 只用来估算省份，纯展示。
+ *
+ * - `key`：由本机种子派生的稳定哈希（16 位十六进制），只在本地与提交时使用，
  *   云端也只会把它再哈希一次存进 `visitor_hash`，不会展示给任何人；
- * - `suffix`：从同一个种子里取 4 位字母数字，用作「匿名·K7Q2」的后缀。
- *   同一个 IP 在同一段时间里拿到的后缀是一致的，别人能认出「这是同一个人」，
- *   但无法反推出 IP；
+ * - `suffix`：从同一个种子里取 4 位字母数字，用作「匿名·K7Q2」的后缀；
  * - `region`：IP 归属地，只到省份（如「广东」），用于在帖子旁边标一个位置。
  *
- * 如果取不到 IP（断网、被拦截、脚本环境），就退回一个存在本机随机种子上，
- * 后缀依然是稳定的，只是 `region` 为空 —— 功能不因此失效。
- *
- * 隐私说明：归属地查询走 `ipwho.is` 的公开接口，只发送请求本身，不携带任何
- * 本地内容。设置 `NEXT_PUBLIC_MOODBOX_NO_GEO=1` 可以整段关掉这次外部请求，
- * 此时只有本机随机身份。
+ * 隐私说明：归属地查询只发一个 GET，不携带任何本地内容。
+ * 设置 `NEXT_PUBLIC_MOODBOX_NO_GEO=1` 可以整段关掉，此时只有本机身份。
  */
 
 export interface VisitorIdentity {
@@ -28,17 +27,15 @@ export interface VisitorIdentity {
   suffix: string;
   /** 展示用昵称：匿名·K7Q2 */
   alias: string;
-  /** IP 归属地（城市级），拿不到时为 null */
+  /** IP 归属地（省级），拿不到时为 null */
   region: string | null;
-  /** 身份来源：解析到了 IP / 只能退回本机随机 */
+  /** 身份来源：解析到了 IP 归属地 / 只能退回本机 */
   source: 'ip' | 'device';
 }
 
-const CACHE_KEY = 'moodbox:visitor:v1';
+const CACHE_KEY = 'moodbox:visitor:v2';
 const DEVICE_KEY = 'moodbox:device:v1';
 const CACHE_TTL = 12 * 60 * 60 * 1000;
-const GEO_TIMEOUT = 3500;
-const GEO_ENDPOINT = 'https://ipwho.is/?lang=zh-CN';
 
 /** 去掉 I/O/0/1 这些容易看错的字符，避免「这是 l 还是 1」。 */
 const SUFFIX_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -141,38 +138,120 @@ function buildRegion(country?: unknown, province?: unknown, city?: unknown): str
   return cleaned ? cleaned.slice(0, 20) : null;
 }
 
+/**
+ * 归属地查询的候选源，同时发、谁先给结果用谁。
+ *
+ * 只用一家的时候偏差很明显：单库对移动流量、教育网、云主机的判定经常落到
+ * 省会甚至隔壁省。三家串行试的话，最坏要等三个超时（七八秒），
+ * 而身份又要等这次查询 —— 发帖会被拖住。并行竞速之后等待时间
+ * 只等于"最快那家的响应"，一般几百毫秒。
+ *
+ * 三家都支持浏览器直连（CORS），也都不需要 key。
+ */
+interface GeoSource {
+  id: string;
+  url: string;
+  /** 单源超时：串起来最多三秒多，不会把广场首屏拖住 */
+  timeout: number;
+  read: (data: Record<string, unknown>) => {
+    ip: unknown;
+    country: unknown;
+    region: unknown;
+    city: unknown;
+  };
+}
+
+const GEO_SOURCES: readonly GeoSource[] = [
+  {
+    id: 'ipapi',
+    url: 'https://ipapi.co/json/?lang=zh-CN',
+    timeout: 2600,
+    read: (data) => ({
+      ip: data.ip,
+      country: data.country_name,
+      region: data.region,
+      city: data.city,
+    }),
+  },
+  {
+    id: 'ipsb',
+    url: 'https://api.ip.sb/geoip',
+    timeout: 2600,
+    read: (data) => ({
+      ip: data.ip,
+      country: data.country,
+      region: data.region,
+      city: data.city,
+    }),
+  },
+  {
+    id: 'ipwho',
+    url: 'https://ipwho.is/?lang=zh-CN',
+    timeout: 2600,
+    read: (data) => ({
+      ip: data.ip,
+      country: data.country,
+      region: data.region,
+      city: data.city,
+    }),
+  },
+];
+
+async function fetchGeo(source: GeoSource): Promise<GeoLookup | null> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), source.timeout);
+  try {
+    const response = await window.fetch(source.url, {
+      signal: controller.signal,
+      cache: 'no-store',
+      credentials: 'omit',
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as Record<string, unknown>;
+    if (!data || data.success === false || data.error === true) return null;
+    const parsed = source.read(data);
+    const region = buildRegion(parsed.country, parsed.region, parsed.city);
+    const ip = typeof parsed.ip === 'string' && parsed.ip.trim() ? parsed.ip.trim() : null;
+    // 既没有 IP 也没有省份，等于这个源什么都没给，继续试下一个
+    if (!ip && !region) return null;
+    return { ip, region };
+  } catch {
+    // 超时、断网、被 CORS 拦住都走这里：换下一个源
+    return null;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 async function lookupGeo(): Promise<GeoLookup> {
   const empty: GeoLookup = { ip: null, region: null };
   if (typeof window === 'undefined' || typeof window.fetch !== 'function') return empty;
   if (process.env.NEXT_PUBLIC_MOODBOX_NO_GEO === '1') return empty;
 
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), GEO_TIMEOUT);
-  try {
-    const response = await window.fetch(GEO_ENDPOINT, {
-      signal: controller.signal,
-      cache: 'no-store',
-      credentials: 'omit',
-    });
-    if (!response.ok) return empty;
-    const data = (await response.json()) as {
-      success?: boolean;
-      ip?: unknown;
-      country?: unknown;
-      region?: unknown;
-      city?: unknown;
+  return new Promise<GeoLookup>((resolve) => {
+    let settled = false;
+    let outstanding = GEO_SOURCES.length;
+
+    const finish = (value: GeoLookup) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
     };
-    if (!data || data.success === false) return empty;
-    return {
-      ip: typeof data.ip === 'string' && data.ip.trim() ? data.ip.trim() : null,
-      region: buildRegion(data.country, data.region, data.city),
-    };
-  } catch {
-    // 超时、断网、被 CORS 拦住都走这里：不影响发帖，只是没有归属地
-    return empty;
-  } finally {
-    window.clearTimeout(timer);
-  }
+
+    for (const source of GEO_SOURCES) {
+      void fetchGeo(source)
+        .then((result) => {
+          // 谁先答上来就用谁；还没答的直接放弃，不必等它超时
+          if (result) finish(result);
+        })
+        .finally(() => {
+          outstanding -= 1;
+          // 全都没结果时，别让 Promise 悬着
+          if (outstanding === 0) finish(empty);
+        });
+    }
+  });
 }
 
 function readCache(): VisitorIdentity | null {
@@ -209,6 +288,10 @@ let pending: Promise<VisitorIdentity> | null = null;
  *
  * 同一页面里多处调用只会真正解析一次（含网络请求）；
  * 结果按 12 小时缓存，避免每次进广场都去查 IP。
+ *
+ * key 与 region 是分开来的：key 来自本机种子（永远稳定），region 来自网络
+ * （可能为空）。这样"归属地查不到"只会让帖子少一个省份标签，
+ * 不会让一个人变成另一个人。
  */
 export function resolveVisitor(): Promise<VisitorIdentity> {
   if (typeof window === 'undefined') {
@@ -220,12 +303,9 @@ export function resolveVisitor(): Promise<VisitorIdentity> {
 
   if (!pending) {
     pending = (async () => {
+      const seed = readDeviceSeed();
       const geo = await lookupGeo();
-      const identity = identityFromSeed(
-        geo.ip ?? `device:${readDeviceSeed()}`,
-        geo.region,
-        geo.ip ? 'ip' : 'device',
-      );
+      const identity = identityFromSeed(seed, geo.region, geo.ip ? 'ip' : 'device');
       writeCache(identity);
       return identity;
     })().finally(() => {
