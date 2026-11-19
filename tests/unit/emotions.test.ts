@@ -46,6 +46,47 @@ describe('情绪内容库', () => {
     expect(withStory.map((emotion) => emotion.id)).toEqual(['anxiety']);
   });
 
+  /*
+   * 开心 / 难过 / 迷茫 / 分别 这四颗球的文案已经整体换成用户给的那几组。
+   * 断言都写「首句 + 末句 + 旧文案不得残留」三件：
+   * 只查条数的话，将来顺手追加几条也不会被发现；只查首句的话，
+   * 又容易变成「新文案拼在旧文案前面」。
+   */
+  it('开心球换成一组轻快的短句（14 条）', () => {
+    const joy = EMOTIONS.find((emotion) => emotion.id === 'joy');
+    expect(joy?.messages).toHaveLength(14);
+    expect(joy?.messages[0]).toBe('我无限地爱着每一天！');
+    expect(joy?.messages.at(-1)).toBe('期待，生命里许多还未发生的幸福。');
+    expect(joy?.messages).toContain('人生小满胜万全。');
+    expect(joy?.messages.join('')).not.toContain('把这份开心存进盒子里');
+  });
+
+  it('难过球换成一组「接受情绪」的短句（8 条）', () => {
+    const sadness = EMOTIONS.find((emotion) => emotion.id === 'sadness');
+    expect(sadness?.messages).toHaveLength(8);
+    expect(sadness?.messages[0]).toBe('快快擦干眼泪，看昙花多美。');
+    expect(sadness?.messages.at(-1)).toBe('去感受自己，才能治愈自己。');
+    expect(sadness?.messages.join('')).not.toContain('难过的时候不用急着变好');
+  });
+
+  it('迷茫球换成一组「向内建立」的短句（15 条）', () => {
+    const lost = EMOTIONS.find((emotion) => emotion.id === 'lost');
+    expect(lost?.messages).toHaveLength(15);
+    expect(lost?.messages[0]).toBe('生命的意义在于活出自我，而不是成为别人眼中的你。');
+    expect(lost?.messages.at(-1)).toBe('迷茫是自我认知的开始！');
+    expect(lost?.messages.join('')).not.toContain('雾不会一直这么浓');
+  });
+
+  it('分别球换成一组「阶段性陪伴」的短句（12 条）', () => {
+    const parting = EMOTIONS.find((emotion) => emotion.id === 'parting');
+    expect(parting?.messages).toHaveLength(12);
+    expect(parting?.messages[0]).toBe('短暂的离别，是为了下一次更好的相聚。');
+    expect(parting?.messages.at(-1)).toBe('如果人生总是后知后觉，那请在拥有的时候珍惜一切。');
+    // 「向之所欣……」是这一组里唯一的古文，最容易在录入时被截断
+    expect(parting?.messages.some((message) => message.includes('况修短随化，终期于尽'))).toBe(true);
+    expect(parting?.messages.join('')).not.toContain('分别不是失败');
+  });
+
   it('文案不重复，且都带有配色与坐标', () => {
     for (const emotion of EMOTIONS) {
       expect(new Set(emotion.messages).size).toBe(emotion.messages.length);
