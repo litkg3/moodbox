@@ -5,8 +5,13 @@
  * 盒口里塞着一排小纸条 —— 一张纸一种心情。
  *
  * 画法：正交等轴测（2:1 斜度），不用透视 —— 透视在 20px 下会歪。
- * 顶点按"长 72 / 宽 44 / 高 40"算好后写成常量。长明显大于宽、宽大于高，
- * 所以看过去是一只能装东西的长盒，而不是一只骰子（之前那版就是太方了）。
+ * 长 72 / 宽 44 / 高 40，长明显大于宽，看过去是只能装东西的长盒而不是骰子。
+ * 所有顶点都由 L / W / H 与盖角推出来，改比例只改这四个数。
+ *
+ * 盖子铰在**远侧那条长边**上（72 那条），掀过竖直往后仰 10°：
+ * 盖板宽度横跨整个盒口，一眼就能看出"长盒 + 长边翻盖"；
+ * 之前铰在短边上，盖板立在侧面，像贴了一块小板子。
+ * 盖子要画在盒身**之前** —— 它立在盒口后沿，下半截本来就该被盒口挡住。
  *
  * 三个可见面各一档粉，只靠明暗分面；不加描边 —— 小尺寸下描边先糊。
  */
@@ -16,18 +21,41 @@ interface MoodBoxMarkProps {
   className?: string;
 }
 
-/** 等轴测顶点（viewBox 200×200）。改比例请按 e1/e2/e3 重算整组，别单点微调。 */
-const FL = [84, 176] as const;
-const FR = [148.4, 143.8] as const;
-const BR = [109, 124.1] as const;
-const tFL = [84, 136] as const;
-const tFR = [148.4, 103.8] as const;
-const tBL = [44.6, 116.3] as const;
-const tBR = [109, 84.1] as const;
+/** 尺寸（等轴测单位）。改这三个数，整只盒子跟着变。 */
+const L = 72;
+const W = 44;
+const H = 40;
 
-/** 盖子：以盒口后沿 tFR→tBR 为铰链，向外上方张开 58°（半掀）。 */
-const lid3 = [91.4, 43.8] as const;
-const lid4 = [130.8, 63.5] as const;
+/** 等轴测两个水平轴：E1 沿长边向右后，E2 沿宽边向左后，斜率都是 1:2。 */
+const E1 = [0.8944, -0.4472] as const;
+const E2 = [-0.8944, -0.4472] as const;
+
+/** 最近的底角，整只盒子从这里长出去。 */
+const O = [84, 176] as const;
+
+/** 盒子局部坐标：i 沿长、j 沿宽、k 向上。 */
+const at = (i: number, j: number, k: number): [number, number] => [
+  O[0] + i * L * E1[0] + j * W * E2[0],
+  O[1] + i * L * E1[1] + j * W * E2[1] - k * H,
+];
+
+const FL = at(0, 0, 0);
+const FR = at(1, 0, 0);
+const BR = at(1, 1, 0);
+const tFL = at(0, 0, 1);
+const tFR = at(1, 0, 1);
+const tBR = at(1, 1, 1);
+const tBL = at(0, 1, 1);
+
+/**
+ * 盖子：以远侧长边 tBL→tBR 为铰链，掀过竖直、往后仰 10°（100°）—— 这才叫半掀。
+ * 掀起的位移 = 宽 ×（cosθ 沿近侧水平方向 + sinθ 沿垂直向上）。
+ */
+const LID_ANGLE = (100 * Math.PI) / 180;
+const LID_DX = W * Math.cos(LID_ANGLE) * -E2[0];
+const LID_DY = W * Math.cos(LID_ANGLE) * -E2[1] - W * Math.sin(LID_ANGLE);
+const lidA: [number, number] = [tBL[0] + LID_DX, tBL[1] + LID_DY];
+const lidB: [number, number] = [tBR[0] + LID_DX, tBR[1] + LID_DY];
 
 const pt = (p: readonly number[]) => `${p[0]!.toFixed(1)} ${p[1]!.toFixed(1)}`;
 const poly = (...pts: readonly (readonly number[])[]) =>
@@ -48,28 +76,28 @@ export function MoodBoxMark({ className }: MoodBoxMarkProps) {
     >
       <defs>
         <linearGradient id={g("left")} x1="0" y1="0" x2="0.4" y2="1">
-          <stop offset="0" stopColor="#FDDCE9" />
-          <stop offset="1" stopColor="#F2AEC8" />
+          <stop offset="0" stopColor="#FDE3EE" />
+          <stop offset="1" stopColor="#F5B8D0" />
         </linearGradient>
         <linearGradient id={g("right")} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#EB95B6" />
-          <stop offset="1" stopColor="#D1709A" />
+          <stop offset="0" stopColor="#FBD8E5" />
+          <stop offset="1" stopColor="#EFA9C2" />
         </linearGradient>
         <linearGradient id={g("in")} x1="0.1" y1="0" x2="0.8" y2="1">
-          <stop offset="0" stopColor="#C15F89" />
-          <stop offset="1" stopColor="#E68FB2" />
+          <stop offset="0" stopColor="#CE7FA0" />
+          <stop offset="1" stopColor="#E8A6C2" />
         </linearGradient>
         <linearGradient id={g("lid")} x1="0.1" y1="0" x2="0.8" y2="1">
-          <stop offset="0" stopColor="#FFEDF5" />
-          <stop offset="1" stopColor="#F9BFD6" />
+          <stop offset="0" stopColor="#FDE6F1" />
+          <stop offset="1" stopColor="#F6BCD3" />
         </linearGradient>
       </defs>
 
       {/*
-        整体缩小到 78% 并上移：等轴测的盒子最宽的一条对角线本来就是斜的，
-        不缩的话盖顶会顶到画框、底角也会贴边；缩完四周留边，页头里才不挤。
+        整体缩到 82% 并上移：等轴测盒子的外接框是斜的，不缩盖顶会顶到画框；
+        盖子改到长边之后盒身变矮变宽，重心偏下，所以多抬一点。
       */}
-      <g transform="translate(100 100) scale(0.78) translate(-100 -100) translate(0 -6)">
+      <g transform="translate(100 100) scale(0.86) translate(-100 -100) translate(0 -14)">
         {/* 落地影子：贴着盒子底边拉长一点，盒子才站得住 */}
         <ellipse
           cx="98"
@@ -80,10 +108,38 @@ export function MoodBoxMark({ className }: MoodBoxMarkProps) {
           opacity="0.15"
         />
 
-        {/* 盒身：左前壁 / 右前壁 / 盒口内壁 */}
+        {/*
+        盖子先画，盒身压在上面 —— 盖子是立在盒口后沿的，下半截本来就该
+        被盒口挡住。顺序反了的话，盖板整片浮在盒口之上，看着就像搭了张纸。
+        顶上那条 3.4 的深边是纸板厚度，别省。
+        */}
+        <path
+          d={poly(lidA, lidB, [lidB[0], lidB[1] - 3.4], [lidA[0], lidA[1] - 3.4])}
+          fill="#F5B9D0"
+          opacity="0.85"
+        />
+        <path d={poly(tBL, tBR, lidB, lidA)} fill={`url(#${g("lid")})`} />
+        <path
+          d={poly(tBL, tBR, lidB, lidA)}
+          fill="none"
+          stroke="#FFFFFF"
+          strokeWidth="1.7"
+          strokeLinejoin="round"
+          opacity="0.72"
+        />
+        {/* 盒身：左前壁 / 右前壁 / 盒口内壁 —— 三面都是粉，只差明度 */}
         <path d={poly(FL, FR, tFR, tFL)} fill={`url(#${g("left")})`} />
         <path d={poly(FR, BR, tBR, tFR)} fill={`url(#${g("right")})`} />
         <path d={poly(tFL, tFR, tBR, tBL)} fill={`url(#${g("in")})`} />
+
+        {/* 折痕：盖子根压住盒口后沿的那道暗，缺了它盖子和盒口是"拼接"的 */}
+        <path
+          d={`M${pt(tBL)}L${pt(tBR)}`}
+          stroke="#B96A8B"
+          strokeWidth="2.6"
+          strokeLinecap="round"
+          opacity="0.18"
+        />
 
         {/*
         盒口里那一小片纸条：只画几笔平行细条，沿长边方向排开。
@@ -149,24 +205,6 @@ export function MoodBoxMark({ className }: MoodBoxMarkProps) {
         <circle cx="97.2" cy="143.8" r="0.9" fill="#FFFFFF" />
         <circle cx="109.2" cy="137.8" r="0.9" fill="#FFFFFF" />
 
-        {/* 盖子：半掀，从后沿翻起，浅一档 + 白边，才像一块纸板而不是贴纸 */}
-        <path d={poly(tFR, tBR, lid3, lid4)} fill={`url(#${g("lid")})`} />
-        <path
-          d={poly(tFR, tBR, lid3, lid4)}
-          fill="none"
-          stroke="#FFFFFF"
-          strokeWidth="1.7"
-          strokeLinejoin="round"
-          opacity="0.72"
-        />
-        {/* 铰链那一条：稍深，盖子与盒口才接得上 */}
-        <path
-          d={`M${pt(tFR)}L${pt(tBR)}`}
-          stroke="#DE8FB4"
-          strokeWidth="1.3"
-          strokeLinecap="round"
-          opacity="0.4"
-        />
       </g>
     </svg>
   );
