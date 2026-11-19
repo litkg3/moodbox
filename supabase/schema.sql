@@ -21,7 +21,8 @@
 --    `mine: true/false`，指纹不下发，所以「删自己的」这条规则在服务端成立。
 --    归属地（region）是城市级文字，由前端解析后带上，仅用于展示。
 --
---    版本：v5（2026-11）
+--    版本：v6（2026-11）
+--      v6 调整：发帖上限 600 → 1000 字（表约束与函数校验同步放宽）。
 --      v5 新增：发帖/回复的内容安全拦截（黄赌毒、联系方式、硬广告）
 --               与每日配额（每人每天 3 条帖子、20 条回复，按 Asia/Shanghai 自然日）。
 --      升级方式：把本文件**整段**重新执行一次即可，不会清掉已有内容。
@@ -33,7 +34,7 @@
 create table if not exists public.square_posts (
   id            text        primary key,
   nickname      text        not null default '匿名的人',
-  content       text        not null check (char_length(btrim(content)) between 1 and 600),
+  content       text        not null check (char_length(btrim(content)) between 1 and 1000),
   -- 三态：待审核 / 已通过 / 已拒绝。默认 pending，且只有函数能改。
   status        text        not null default 'pending'
                             check (status in ('pending', 'approved', 'rejected')),
@@ -50,6 +51,14 @@ create table if not exists public.square_posts (
 -- 老库升级：幂等补列
 alter table public.square_posts add column if not exists visitor_hash text;
 alter table public.square_posts add column if not exists region       text;
+
+-- 发帖上限从 600 抬到 1000（前端表单同步放宽）。
+-- 老库的约束名是建表时自动生成的 square_posts_content_check，先删再建；
+-- not valid 只是跳过对历史行的校验，新写入一律按 1000 判。
+alter table public.square_posts drop constraint if exists square_posts_content_check;
+alter table public.square_posts
+  add constraint square_posts_content_check
+  check (char_length(btrim(content)) between 1 and 1000) not valid;
 
 comment on table public.square_posts is '树洞广场的帖子；所有读写都只能经 moodbox_* 函数';
 comment on column public.square_posts.visitor_hash is '发布者匿名指纹：只用于让本人删掉自己的帖子，不存 IP';
@@ -501,8 +510,8 @@ begin
   if char_length(v_content) = 0 then
     raise exception '写点什么再发出去吧。';
   end if;
-  if char_length(v_content) > 600 then
-    raise exception '太长了，600 字以内更容易被读完。';
+  if char_length(v_content) > 1000 then
+    raise exception '太长了，1000 字以内更容易被读完。';
   end if;
   -- 内容安全：黄赌毒、硬广告、联系方式。前端已经拦过一遍，
   -- 这里是为了防止绕过前端直接调接口。

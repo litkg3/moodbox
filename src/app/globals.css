@@ -430,14 +430,34 @@ html[data-theme='night'] .mb-surface-solid {
 /*
  * iOS Safari 在聚焦输入框时，如果字号小于 16px 会自动把整个页面放大
  * （用户切出输入法后页面仍停留在放大状态，看起来像「界面被拽大了」）。
- * 移动端把表单控件字号固定到 16px，从根上避免这次自动缩放。
+ *
+ * 但把移动端所有控件一律顶到 16px 又过头了：广场帖子的正文 13.5px、
+ * 字段标题 12px，输入框里的提示语反而比标题大一圈，看着很突兀。
+ * 所以统一到 15px（与正文同一档），只有确实需要防放大的 iOS 保留 16px
+ * （`-webkit-touch-callout` 只有 iOS Safari 认，其他浏览器不受影响）。
  */
 @media (max-width: 1023px) {
   .mb-field,
   input,
   textarea,
   select {
-    font-size: 16px;
+    font-size: 14px;
+  }
+
+  @supports (-webkit-touch-callout: none) {
+    .mb-field,
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
+
+    /* iOS 上正文仍是 16px，但提示语压回 14px：它只是占位，不该比标题抢眼 */
+    .mb-field::placeholder,
+    input::placeholder,
+    textarea::placeholder {
+      font-size: 14px;
+    }
   }
 }
 
@@ -635,6 +655,33 @@ html[data-theme='night'] .mb-deep-strong {
  */
 html[data-theme='night'] .mb-deep-card {
   --color-white: #ffffff;
+}
+
+/* 抱抱动画中间那块小卡片：要压在帖子之上，又不能让底下的字看不清 */
+.mb-hug-pill {
+  background: rgba(255, 252, 249, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 18px 44px -20px rgba(92, 70, 132, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px) saturate(1.05);
+}
+
+html[data-theme='night'] .mb-hug-pill {
+  background: rgba(46, 40, 68, 0.92);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 18px 44px -18px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* 抱抱时飘起来的心：深色底上必须提亮，否则整段动画等于没做 */
+.mb-hug-heart {
+  color: #8b6fb8;
+}
+
+html[data-theme='night'] .mb-hug-heart {
+  color: #cbb9ea;
 }
 
 /* 卡片里的分隔线：两端淡出，两张主题下都看得见（白日是淡紫，夜里是白） */

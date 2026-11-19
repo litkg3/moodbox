@@ -43,6 +43,25 @@ function sortPosts(posts: SquarePost[]): SquarePost[] {
   return [...posts].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+/** 广场列表的排序方式：按时间（默认）或按热度（拥抱数） */
+export type SquareSortMode = 'time' | 'hug';
+
+/**
+ * 排一遍再交给列表渲染。
+ *
+ * 热度相同的时候按时间排 —— 否则同分帖子的先后会跟着数组下标走，
+ * 每次刷新看起来都像在乱跳。两种模式都是「新的/热的在上面」。
+ */
+export function sortPostsForView(posts: SquarePost[], mode: SquareSortMode): SquarePost[] {
+  const next = [...posts];
+  if (mode === 'hug') {
+    next.sort((a, b) => b.hugs - a.hugs || b.createdAt.localeCompare(a.createdAt));
+  } else {
+    next.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  return next;
+}
+
 export function sortReplies(replies: SquareReply[]): SquareReply[] {
   return [...replies].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }

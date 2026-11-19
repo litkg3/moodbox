@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { createPortal } from 'react-dom';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   Database,
-  HeartHandshake,
+  Heart,
   MapPin,
   MessageCircle,
   MessagesSquare,
@@ -24,8 +25,9 @@ import { describeBackend } from '@/lib/backend';
 import { useSquare, squareStore, useQuotaUsage } from '@/lib/content-stores';
 import { scanForCrisis } from '@/lib/crisis';
 import { formatClock, formatRelativeDay } from '@/lib/date';
+import { NICKNAME_MAX, readNickname, saveNickname } from '@/lib/nickname';
 import { quotaHint, quotaMessage, quotaState } from '@/lib/quota';
-import { MAX_REPLY_LENGTH, charLength } from '@/lib/square-repo';
+import { MAX_REPLY_LENGTH, charLength, sortPostsForView, type SquareSortMode } from '@/lib/square-repo';
 import { describeSensitive, scanSensitive } from '@/lib/sensitive';
 import { resolveVisitor, type VisitorIdentity } from '@/lib/visitor';
 import type { SquarePost, SquareReply } from '@/types';
@@ -34,6 +36,9 @@ import { cn } from '@/lib/utils';
 type PendingAction =
   | { kind: 'post'; content: string; nickname: string }
   | { kind: 'reply'; postId: string; content: string; nickname: string };
+
+/** 广场的两种排序方式：按时间（默认）与按热度 */
+type SortMode = SquareSortMode;
 
 export function SquareView() {
   const { items: posts, status, error } = useSquare();
@@ -76,6 +81,23 @@ export function SquareView() {
   const [working, setWorking] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SquarePost | null>(null);
 
+  /** 排序方式只影响这一屏的展示顺序，不写进存储：下次进来还是「按时间」。 */
+  const [sort, setSort] = useState<SortMode>('time');
+
+  /**
+   * 本机记住的昵称。设过一次之后，之后每次发帖默认都用它，
+   * 不用每次都重新想一个名字。
+   */
+  const [nickname, setNickname] = useState('');
+  const [nicknameOpen, setNicknameOpen] = useState(false);
+  const [nicknameDraft, setNicknameDraft] = useState('');
+  useEffect(() => {
+    setNickname(readNickname());
+  }, []);
+
+  /** 展示与发帖都走这个名字：自己设过就用它，否则用「匿名·XXXX」。 */
+  const myName = nickname || visitor?.alias || '匿名的人';
+
   /**
    * 管理员解锁 / 退出时重新拉一次列表。
    *
@@ -114,6 +136,14 @@ export function SquareView() {
     () => posts.filter((post) => post.status === 'approved' && !scanSensitive(post.content).hit),
     [posts],
   );
+
+  /**
+   * 按当前排序方式排一遍（默认按时间）。
+   *
+   * 排序逻辑放在 `square-repo` 里：这是个纯函数，单元测试能直接覆盖，
+   * 不用把组件挂起来。
+   */
+  const listed = useMemo(() => sortPostsForView(approved, sort), [approved, sort]);
 
   /* ---------------- 发布 ---------------- */
 
@@ -157,12 +187,27 @@ export function SquareView() {
       showToast(describeSensitive(sensitive), 'caution');
       return;
     }
+    // 对话框里没填就落回「记住的昵称」，最后才是匿名代号
+    const author = draft.nickname.trim() || nickname;
     if (scanForCrisis(content).flagged) {
-      setPendingAction({ kind: 'post', content, nickname: draft.nickname.trim() });
+      setPendingAction({ kind: 'post', content, nickname: author });
       setCrisisOpen(true);
       return;
     }
-    void publishPost(content, draft.nickname.trim());
+    void publishPost(content, author);
+  }
+
+  /** 打开写一条：昵称预先填好，想改这一次的可以就地改。 */
+  function openCompose() {
+    setDraft({ content: '', nickname });
+    setComposeOpen(true);
+  }
+
+  function commitNickname() {
+    const saved = saveNickname(nicknameDraft);
+    setNickname(saved);
+    setNicknameOpen(false);
+    showToast(saved ? `记住了，以后发帖默认叫「${saved}」。` : '已经改回匿名代号。');
   }
 
   async function publishReply(postId: string, content: string) {
@@ -277,6 +322,22 @@ export function SquareView() {
           <p className="mt-3 max-w-[48ch] text-pretty text-[13.5px] leading-[1.9] text-ink-faint sm:text-sm">
             当小球难以匹配你复杂的心情时，不妨来到树洞广场，欢迎你来倾诉，分享你的故事。
           </p>
+          {/* 昵称在页面上就能改，改完记住；不用等到发帖那一步才想起来 */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11.5px]">
+            <span className="text-ink-ghost">我的昵称</span>
+            <span className="text-ink-faint">{myName}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setNicknameDraft(nickname);
+                setNicknameOpen(true);
+              }}
+              className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/50 px-2.5 py-0.5 text-[11px] text-ink-soft transition-colors hover:text-ink"
+            >
+              <PenLine size={11} strokeWidth={1.8} aria-hidden="true" />
+              修改
+            </button>
+          </div>
           {/* 数据存在哪必须写在页面上，不能让人以为换台设备还能看到 */}
           {source ? (
             <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11.5px] leading-relaxed text-ink-ghost">
@@ -295,25 +356,49 @@ export function SquareView() {
             </div>
           ) : null}
         </div>
-        <Button variant="primary" size="md" onClick={() => setComposeOpen(true)} className="shrink-0">
+        <Button variant="primary" size="md" onClick={openCompose} className="shrink-0">
           <PenLine size={15} strokeWidth={1.7} />
           写一条
         </Button>
       </header>
 
-      <AdminBar ability="可以删除不合适的帖子" hideEntry />
-
       <section aria-labelledby="square-title">
-        <div className="mb-3 flex items-baseline gap-3">
+        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
           <h2 id="square-title" className="text-[13px] tracking-[0.1em] text-ink">
             广场
           </h2>
           <span className="text-[11px] text-ink-ghost">{approved.length} 条</span>
-          {postQuota.used > 0 || replyQuota.used > 0 ? (
-            <span className="ml-auto text-[11px] text-ink-ghost" aria-live="polite">
-              {quotaHint('post', usage)}
-            </span>
-          ) : null}
+          {/*
+            两种排序是互斥的，所以用「单选」语义（aria-pressed）而不是 tab：
+            点一下就是切换，不需要再点第二次确认。
+          */}
+          <div
+            className="ml-auto inline-flex items-center gap-0.5 rounded-full border border-white/70 bg-white/45 p-0.5"
+            role="group"
+            aria-label="排序方式"
+          >
+            {(
+              [
+                ['time', '按时间'],
+                ['hug', '按热度'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setSort(value)}
+                aria-pressed={sort === value}
+                className={cn(
+                  'rounded-full px-2.5 py-1 text-[11px] tracking-[0.02em] transition-colors',
+                  sort === value
+                    ? 'bg-white/85 text-ink shadow-[0_1px_2px_rgba(90,72,120,0.08)]'
+                    : 'text-ink-ghost hover:text-ink',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {loading ? (
@@ -348,7 +433,7 @@ export function SquareView() {
           </div>
         ) : (
           <ul className="space-y-3.5">
-            {approved.map((post) => (
+            {listed.map((post) => (
               <li key={post.id}>
                 <PostCard
                   post={post}
@@ -377,8 +462,12 @@ export function SquareView() {
         width="md"
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-[11px] text-ink-ghost">
-              {draft.content.length} / 800
+            <p className="text-[11px] tabular-nums leading-[1.8] text-ink-ghost">
+              {draft.content.length} / 1000
+              <span aria-hidden="true" className="mx-1.5 opacity-40">
+                ·
+              </span>
+              {quotaHint('post', usage)}
             </p>
             <div className="flex flex-col-reverse gap-2 sm:flex-row">
               <Button variant="ghost" size="md" onClick={() => setComposeOpen(false)}>
@@ -405,16 +494,16 @@ export function SquareView() {
               onChange={(event) =>
                 setDraft((prev) => ({ ...prev, nickname: event.target.value }))
               }
-              placeholder={visitor?.alias ?? '匿名的人'}
+              placeholder={myName}
               className="mb-field mt-2"
-              maxLength={16}
+              maxLength={NICKNAME_MAX}
             />
           </label>
           <p className="-mt-1 text-[11px] leading-[1.85] text-ink-ghost">
-            留空就用「{visitor?.alias ?? '匿名的人'}」这个名字。
+            留空就用「{myName}」这个名字，之后也能在广场页改。
             {visitor?.region
-              ? `你的帖子旁会标「${visitor.region}」，这是按 IP 估算的省份，仅供参考。`
-              : '你的帖子旁会标一个按 IP 估算的省份，仅供参考。'}
+              ? `您的 IP 定位显示为「${visitor.region}」，定位结果可能存在一定偏差，仅供参考。`
+              : '您发帖时会带上一个按 IP 估算的省份，定位结果可能存在一定偏差，仅供参考。'}
           </p>
           <label className="block">
             <span className="text-[12px] text-ink-soft">说点什么</span>
@@ -424,7 +513,7 @@ export function SquareView() {
               placeholder="今天发生了什么？不用说得很完整。"
               rows={7}
               className="mb-field mt-2 resize-y leading-[2]"
-              maxLength={800}
+              maxLength={1000}
             />
           </label>
           {/* 边写边查：命中就给一句具体的说明，并把「发出去」置灰 */}
@@ -451,6 +540,43 @@ export function SquareView() {
             </p>
           )}
         </div>
+      </Dialog>
+
+      {/* 改昵称：改完记在本机，发帖时默认带上 */}
+      <Dialog
+        open={nicknameOpen}
+        onClose={() => setNicknameOpen(false)}
+        title="改个昵称"
+        description="昵称会记在这台设备上，之后发帖默认用它。留空就回到「匿名·XXXX」。"
+        width="sm"
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="ghost" size="md" onClick={() => setNicknameOpen(false)}>
+              先不改
+            </Button>
+            <Button variant="primary" size="md" onClick={commitNickname}>
+              记住这个昵称
+            </Button>
+          </div>
+        }
+      >
+        <label className="block">
+          <span className="text-[12px] text-ink-soft">昵称（最多 {NICKNAME_MAX} 个字）</span>
+          <input
+            value={nicknameDraft}
+            onChange={(event) => setNicknameDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') commitNickname();
+            }}
+            placeholder={visitor?.alias ?? '匿名的人'}
+            className="mb-field mt-2"
+            maxLength={NICKNAME_MAX}
+            autoFocus
+          />
+        </label>
+        <p className="mt-2 text-[11px] leading-[1.85] text-ink-ghost">
+          只是显示名，不涉及账号，换一台设备不会同步。
+        </p>
       </Dialog>
 
       <CrisisNoticeDialog
@@ -508,6 +634,8 @@ function PostCard({
 }) {
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyText, setReplyText] = useState('');
+  /** 每抱一次加一；大于 0 时播放一次拥抱动画，播完归零 */
+  const [burst, setBurst] = useState(0);
   // 回复同样过滤：命中了就不出现在列表里
   const visibleReplies = useMemo(
     () => post.replies.filter((reply) => !scanSensitive(reply.content).hit),
@@ -574,7 +702,11 @@ function PostCard({
         */}
         <button
           type="button"
-          onClick={onHug}
+          onClick={() => {
+            if (hugged) return;
+            onHug();
+            setBurst((value) => value + 1);
+          }}
           disabled={hugged}
           aria-label={
             hugged ? `你已经抱过这条心事了，共 ${post.hugs} 个拥抱` : `抱抱这条心事，目前 ${post.hugs} 个拥抱`
@@ -587,12 +719,20 @@ function PostCard({
               : 'border-[rgba(141,133,152,0.2)] text-ink-faint hover:border-[rgba(201,182,232,0.5)] hover:text-ink',
           )}
         >
-          <HeartHandshake
-            size={13}
-            strokeWidth={1.7}
-            aria-hidden="true"
-            className={cn('transition-transform duration-400', hugged && 'scale-110')}
-          />
+          {/* 抱下去的那一下要让手有反馈：心先跳一下，再弹一层光 */}
+          <motion.span
+            key={burst}
+            animate={burst > 0 ? { scale: [1, 1.4, 1] } : { scale: 1 }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            className="inline-flex"
+          >
+            <Heart
+              size={13}
+              strokeWidth={1.7}
+              aria-hidden="true"
+              className={cn('transition-colors duration-400', hugged && 'fill-current')}
+            />
+          </motion.span>
           {hugged ? `已抱 · ${post.hugs}` : post.hugs > 0 ? post.hugs : '抱抱'}
         </button>
 
@@ -683,6 +823,8 @@ function PostCard({
           </motion.ul>
         ) : null}
       </AnimatePresence>
+
+      {burst > 0 ? <HugBurst onDone={() => setBurst(0)} /> : null}
     </article>
   );
 }
@@ -723,5 +865,108 @@ function ReplyItem({
         {reply.content}
       </p>
     </li>
+  );
+}
+
+/* ---------------- 抱抱动画 ---------------- */
+
+/**
+ * 点「抱抱」后的一小段动画。
+ *
+ * 做得克制但要有分量：几颗心从中心散开往上飘，中间浮出一张小卡片
+ * 「抱住你了 / 这条心事，有人接住了」，1.6 秒后自己消失，
+ * 不打断阅读，也不需要点「关闭」。
+ *
+ * 挂在 body 上（portal）：帖子卡片在滚动容器里，动画要落在屏幕中央，
+ * 不能被任何祖先的 `overflow` 或 `transform` 裁掉。
+ * 用户开了「减少动态效果」就只留卡片，不做位移。
+ */
+function HugBurst({ onDone }: { onDone: () => void }) {
+  const reduced = useReducedMotion();
+
+  useEffect(() => {
+    const timer = window.setTimeout(onDone, reduced ? 1100 : 1650);
+    return () => window.clearTimeout(timer);
+  }, [onDone, reduced]);
+
+  /*
+   * 心形按「一圈炸开」的方式分布，而不是全往上飘：
+   * 往上飘容易被误读成「加载动画」，向四周散开才像抱住了一下。
+   * 角度用黄金角错开，保证疏密均匀，又不会是死板的对称。
+   */
+  const hearts = useMemo(() => {
+    const count = 14;
+    const golden = Math.PI * (3 - Math.sqrt(5));
+    return Array.from({ length: count }, (_, index) => {
+      const angle = index * golden - Math.PI / 2;
+      const radius = 62 + (index % 3) * 24;
+      return {
+        id: index,
+        x: Math.cos(angle) * radius * 1.15,
+        // 整体上浮一点：抱抱的落点在上方，不是脚边
+        y: Math.sin(angle) * radius - 26,
+        delay: index * 0.04,
+        size: 15 + (index % 4) * 5,
+        rotate: (index % 2 === 0 ? 1 : -1) * (14 + index * 3),
+      };
+    });
+  }, []);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      className="pointer-events-none fixed inset-0 z-[95] flex items-center justify-center overflow-hidden"
+      aria-hidden="true"
+    >
+      {/* 一圈很淡的光晕：让「抱住」有一个体积感 */}
+      <motion.span
+        className="absolute h-40 w-40 rounded-full"
+        style={{
+          background:
+            'radial-gradient(circle, rgba(201,182,232,0.52) 0%, rgba(201,182,232,0.18) 52%, rgba(201,182,232,0) 70%)',
+        }}
+        initial={{ scale: reduced ? 1 : 0.45, opacity: 0.9 }}
+        animate={{ scale: reduced ? 1 : 2.6, opacity: 0 }}
+        transition={{ duration: reduced ? 0.7 : 1.2, ease: [0.22, 1, 0.36, 1] }}
+      />
+
+      {!reduced
+        ? hearts.map((heart) => (
+            <motion.span
+              key={heart.id}
+              className="mb-hug-heart absolute"
+              initial={{ opacity: 0, x: 0, y: 0, scale: 0.4, rotate: 0 }}
+              animate={{
+                opacity: [0, 1, 0.85, 0],
+                x: heart.x,
+                y: heart.y,
+                scale: 1,
+                rotate: heart.rotate,
+              }}
+              transition={{ duration: 1.35, delay: heart.delay, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <Heart size={heart.size} strokeWidth={1.5} fill="currentColor" />
+            </motion.span>
+          ))
+        : null}
+
+      {/* 文字要压在心上，不能只留一行裸字飘在页面中间 */}
+      <motion.div
+        className="mb-hug-pill relative flex flex-col items-center gap-1 rounded-[22px] px-5 py-3.5"
+        initial={{ opacity: 0, y: 10, scale: 0.96 }}
+        animate={{ opacity: [0, 1, 1, 0], y: reduced ? 0 : -6, scale: 1 }}
+        transition={{ duration: reduced ? 1 : 1.5, times: [0, 0.16, 0.72, 1] }}
+      >
+        <span className="flex items-center gap-1.5 text-lavender-deep">
+          <Heart size={14} strokeWidth={1.7} fill="currentColor" />
+          <span className="text-[13px] tracking-[0.18em] text-ink">抱住你了</span>
+        </span>
+        <span className="text-[10.5px] tracking-[0.06em] text-ink-faint">
+          这条心事，有人接住了
+        </span>
+      </motion.div>
+    </div>,
+    document.body,
   );
 }
