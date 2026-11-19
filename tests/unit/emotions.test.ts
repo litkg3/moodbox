@@ -14,13 +14,15 @@ describe('情绪内容库', () => {
     expect(validateEmotionLibrary()).toEqual({ ok: true, problems: [] });
   });
 
-  it('焦虑球的面板短句：原来 8 条 + 允许焦虑的 2 条（共 10 条）', () => {
+  it('焦虑球的面板短句：原来 8 条 + 允许焦虑的 2 条 + 新追加 1 条（共 11 条）', () => {
     const anxiety = EMOTIONS.find((emotion) => emotion.id === 'anxiety');
-    expect(anxiety?.messages).toHaveLength(10);
+    expect(anxiety?.messages).toHaveLength(11);
     expect(anxiety?.messages[0]).toBe('当你真心渴望某样东西时，整个宇宙都会联合起来助你实现愿望。');
     // 新增的两条追加在末尾：一条讲「允许焦虑」，一条讲「给悬而未决留点耐心」
     expect(anxiety?.messages[8]).toContain('允许焦虑的出现');
     expect(anxiety?.messages[9]).toContain('悬而未决');
+    // 最后补上的一条：世俗的标准答案 vs. 自己的人生体验
+    expect(anxiety?.messages[10]).toBe('世俗给了我们很多标准答案。可人生，是独属于自己的体验。');
   });
 
   it('备考球在原来 14 条之后追加了 2 条（共 16 条）', () => {
