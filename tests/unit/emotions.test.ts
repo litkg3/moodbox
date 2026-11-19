@@ -14,11 +14,15 @@ describe('情绪内容库', () => {
     expect(validateEmotionLibrary()).toEqual({ ok: true, problems: [] });
   });
 
-  it('焦虑球的文案为指定的一组短句', () => {
+  it('焦虑球的文案为《明朝那些事儿》结尾那段感悟', () => {
     const anxiety = EMOTIONS.find((emotion) => emotion.id === 'anxiety');
-    expect(anxiety?.messages).toHaveLength(8);
-    expect(anxiety?.messages[0]).toBe('当你真心渴望某样东西时，整个宇宙都会联合起来助你实现愿望。');
-    expect(anxiety?.messages[2]).toBe('不以物喜，不以己悲。');
+    expect(anxiety?.messages).toHaveLength(10);
+    // 三处标志性的话：良知与理想、用喜欢的方式度过一生、不过尔尔
+    expect(anxiety?.messages[1]).toContain('一个叫良知，另一个叫理想');
+    expect(anxiety?.messages[3]).toBe('这件事情就是，用你喜欢的方式度过一生。');
+    expect(anxiety?.messages[8]).toBe('人生海海，山山而川，不过尔尔。');
+    // 以前那组文案要真的删干净，不能只是被追加在后面
+    expect(anxiety?.messages.join('')).not.toContain('宇宙都会联合起来');
   });
 
   it('文案不重复，且都带有配色与坐标', () => {
