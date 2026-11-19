@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>情绪盒子 · 卡通形象</title>
+<style>
+  :root {
+    --bg: #fdf7f4;
+    --ink: #4b3a44;
+    --ink-faint: #9c8a93;
+    --line: rgba(150, 110, 130, 0.16);
+    --card: rgba(255, 255, 255, 0.72);
+  }
+  html[data-theme='night'] {
+    --bg: #1d1830;
+    --ink: #f6edf2;
+    --ink-faint: #b7a6bd;
+    --line: rgba(255, 255, 255, 0.12);
+    --card: rgba(255, 255, 255, 0.06);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    transition: background 0.5s ease, color 0.5s ease;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 48px 24px 72px; }
+  .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  h1 { font-size: 20px; font-weight: 500; letter-spacing: 0.14em; margin: 0 0 8px; }
+  .sub { font-size: 13px; line-height: 1.9; color: var(--ink-faint); margin: 0; max-width: 44ch; }
+  button.toggle {
+    flex: none; height: 34px; padding: 0 16px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    font-size: 12.5px; letter-spacing: 0.06em;
+  }
+  .hero {
+    margin-top: 36px; border-radius: 28px; border: 1px solid var(--line);
+    background: var(--card); padding: 40px 24px 32px;
+    display: grid; place-items: center; gap: 22px;
+  }
+  .hero .stage { width: min(360px, 78vw); aspect-ratio: 1; display: grid; place-items: center; }
+  .caption { font-size: 12.5px; line-height: 2; color: var(--ink-faint); text-align: center; }
+  .grid {
+    margin-top: 26px; display: grid; gap: 18px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+  .cell {
+    border-radius: 22px; border: 1px solid var(--line); background: var(--card);
+    padding: 22px 20px 18px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .cell h2 { font-size: 12.5px; font-weight: 500; letter-spacing: 0.1em; margin: 0; color: var(--ink); }
+  .cell p { font-size: 11.5px; line-height: 1.85; color: var(--ink-faint); margin: 0; }
+  .sizes { display: flex; align-items: flex-end; gap: 18px; }
+  .sizes span { display: grid; place-items: center; }
+  .note { margin-top: 30px; font-size: 11.5px; line-height: 2; color: var(--ink-faint); }
+  code { font-family: ui-monospace, monospace; font-size: 11px; }
+  .float { animation: float 5.2s ease-in-out infinite; }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-7px); }
+  }
+  @media (prefers-reduced-motion: reduce) { .float { animation: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>情绪盒子 · 卡通形象</h1>
+      <p class="sub">一只粉色的、盖子掀开的小盒子。会呼吸、会眨眼 —— 睁眼时盒口透出一点暖光，像在等你往里放点什么。</p>
+    </div>
+    <button class="toggle" id="theme">切到夜间</button>
+  </div>
+
+  <div class="hero">
+    <div class="stage" id="hero"></div>
+    <p class="caption">吉祥物尺寸：盒子本体 160px，带上下浮动。<br>深呼吸时盒身轻微起伏，每 4.5 秒眨一次眼。</p>
+  </div>
+
+  <div class="grid">
+    <div class="cell">
+      <h2>实际尺寸</h2>
+      <div class="sizes" id="sizes"></div>
+      <p>页头用 32px，空状态用 120–200px，两种尺寸共用同一份图形。</p>
+    </div>
+    <div class="cell">
+      <h2>闭眼 / 打盹</h2>
+      <div id="blink" style="width:132px;height:132px"></div>
+      <p>眨眼与「打盹」共用同一套表情，闭眼就是两条弧线。</p>
+    </div>
+    <div class="cell">
+      <h2>配色</h2>
+      <div style="display:flex;gap:10px;flex-wrap:wrap" id="swatches"></div>
+      <p>盖板最浅、左前壁次之、右前壁最深；盒口内壁最深，暗示里面是空的。</p>
+    </div>
+  </div>
+
+  <p class="note">这张页面只是形象预览。确认造型之后我再接进页头站标、favicon 与空状态插画。</p>
+</div>
+
+<script>
+/* ------------------------------------------------------------------
+ * 一只粉色开盖小盒，等轴测绘制，用 SMIL 做呼吸 / 眨眼。
+ * 用一个函数产出完整 <svg>，所有尺寸只改变 width/height。
+ * ------------------------------------------------------------------ */
+function moodBox({ size = 160, blink = true, float = true, idPrefix = 'mb' } = {}) {
+  const u = idPrefix;
+  return `
+<svg viewBox="0 0 200 200" width="${size}" height="${size}" role="img" aria-label="情绪盒子：一只盖着掀开的粉色小盒子">
+  <defs>
+    <linearGradient id="${u}-left" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#FDE1EC"/>
+      <stop offset="1" stop-color="#F3AFC9"/>
+    </linearGradient>
+    <linearGradient id="${u}-right" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#EA93B6"/>
+      <stop offset="1" stop-color="#CE6D97"/>
+    </linearGradient>
+    <linearGradient id="${u}-inner" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#C9648F"/>
+      <stop offset="1" stop-color="#EE9CBE"/>
+    </linearGradient>
+    <linearGradient id="${u}-lid" x1="0.1" y1="0" x2="0.75" y2="1">
+      <stop offset="0" stop-color="#FFE9F2"/>
+      <stop offset="1" stop-color="#F6B9D2"/>
+    </linearGradient>
+    <radialGradient id="${u}-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#FFD9A8" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#FFB98C" stop-opacity="0.1"/>
+    </radialGradient>
+    <radialGradient id="${u}-cheek" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#F187AE" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#F187AE" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <g class="${float ? 'float' : ''}">
+    <!-- 落地影子 -->
+    <ellipse cx="100" cy="176" rx="52" ry="9" fill="#C0718F" opacity="0.16"/>
+
+    <!-- 盒身：左前壁 / 右前壁 / 盒口 -->
+    <g>
+      <path d="M18 96 100 134v40L18 136Z" fill="url(#${u}-left)"/>
+      <path d="M100 134l82-38v40l-82 38Z" fill="url(#${u}-right)"/>
+      <path d="M18 96 100 58l82 38-82 38Z" fill="url(#${u}-inner)"/>
+      <!-- 盒口里透出的暖光 -->
+      <ellipse cx="100" cy="100" rx="44" ry="21" fill="url(#${u}-glow)" opacity="0.55"/>
+      <!-- 盒口前沿的亮边 -->
+      <path d="M18 96 100 134l82-38" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" opacity="0.65"/>
+      <path d="M100 136v38" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" opacity="0.42"/>
+    </g>
+
+    <!-- 眼睛与腮红：画在盒身右前壁上 -->
+    <g>
+      <ellipse cx="72" cy="140" rx="14" ry="9" fill="url(#${u}-cheek)"/>
+      <g id="${u}-eyes">
+        <ellipse cx="80" cy="134" rx="6.6" ry="8" fill="#5B3F52" opacity="0.86"/>
+        <ellipse cx="118" cy="130" rx="6.6" ry="8" fill="#5B3F52" opacity="0.86"/>
+        <circle cx="77.6" cy="131" r="2.4" fill="#FFFFFF" opacity="0.92"/>
+        <circle cx="115.6" cy="127" r="2.4" fill="#FFFFFF" opacity="0.92"/>
+      </g>
+      <g id="${u}-eyes-closed" style="display:none">
+        <path d="M74 135q6-7 12 0" fill="none" stroke="#5B3F52" stroke-width="2.6" stroke-linecap="round" opacity="0.8"/>
+        <path d="M112 131q6-7 12 0" fill="none" stroke="#5B3F52" stroke-width="2.6" stroke-linecap="round" opacity="0.8"/>
+      </g>
+      <path d="M96 148q4 4 8 0" fill="none" stroke="#5B3F52" stroke-width="2.4" stroke-linecap="round" opacity="0.55"/>
+    </g>
+
+    <!-- 掀起的盖板：下沿压住盒口，向后上方斜倚 -->
+    <g>
+      <path d="M20 95 98 57l22 10-8-44c-.6-5-6.4-7.4-10.4-4.4L24 74c-7 5-10 14-8 22.4 1 5 2 8 4 10.6Z" fill="url(#${u}-lid)"/>
+      <path d="M27 92 98 59l16 7-1.4-8-14.6-6.8L30 88c-5 3-8 9-7.4 15 1.6-4.8 4-8 4.4-11Z" fill="#DC8CB0" opacity="0.38"/>
+    </g>
+  </g>
+</svg>`;
+}
+
+let seq = 0;
+function mount(el, opts = {}) {
+  el.innerHTML = moodBox({ ...opts, idPrefix: 'mb' + seq++ });
+  return el;
+}
+
+/* 眨眼：每 4.5 秒，睁眼组换成两条弧线，180ms 后换回来 */
+function startBlink(root) {
+  const eyes = root.querySelector('[id$="-eyes"]');
+  const closed = root.querySelector('[id$="-eyes-closed"]');
+  if (!eyes || !closed) return;
+  const tick = () => {
+    eyes.style.display = 'none';
+    closed.style.display = '';
+    setTimeout(() => {
+      eyes.style.display = '';
+      closed.style.display = 'none';
+    }, 170);
+  };
+  let stopped = false;
+  const loop = () => {
+    if (stopped) return;
+    tick();
+    timer = setTimeout(loop, 3800 + Math.random() * 1600);
+  };
+  let timer = setTimeout(loop, 1600);
+  return () => { stopped = true; clearTimeout(timer); };
+}
+
+const hero = document.getElementById('hero');
+mount(hero, { size: 320 });
+startBlink(hero);
+
+const blinkCell = document.getElementById('blink');
+mount(blinkCell, { size: 132, float: false });
+const eyes = blinkCell.querySelector('[id$="-eyes"]');
+const closed = blinkCell.querySelector('[id$="-eyes-closed"]');
+eyes.style.display = 'none';
+closed.style.display = '';
+
+const sizes = document.getElementById('sizes');
+[72, 56, 40, 32].forEach((s) => {
+  const span = document.createElement('span');
+  span.innerHTML = moodBox({ size: s, float: false, idPrefix: 'sz' + s });
+  sizes.appendChild(span);
+});
+
+const palette = [
+  ['#FFE9F2', '盖板'],
+  ['#FDE1EC', '左前壁'],
+  ['#EA93B6', '右前壁'],
+  ['#C9648F', '盒口'],
+  ['#FFD9A8', '盒内暖光'],
+];
+const sw = document.getElementById('swatches');
+palette.forEach(([color, name]) => {
+  const item = document.createElement('div');
+  item.style.cssText = 'display:flex;flex-direction:column;gap:6px;align-items:center;font-size:10.5px;color:var(--ink-faint)';
+  item.innerHTML = `<span style="width:38px;height:38px;border-radius:12px;background:${color};border:1px solid rgba(0,0,0,0.06)"></span>${name}`;
+  sw.appendChild(item);
+});
+
+const toggle = document.getElementById('theme');
+if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+  document.documentElement.dataset.theme = 'night';
+  toggle.textContent = '切到日间';
+}
+toggle.addEventListener('click', () => {
+  const night = document.documentElement.dataset.theme === 'night';
+  document.documentElement.dataset.theme = night ? '' : 'night';
+  toggle.textContent = night ? '切到夜间' : '切到日间';
+});
+</script>
+</body>
+</html>
