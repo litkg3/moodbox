@@ -70,14 +70,14 @@
   <div class="top">
     <div>
       <h1>情绪盒子 · 卡通形象</h1>
-      <p class="sub">一只粉色的、盖子掀开的小盒子。会呼吸、会眨眼 —— 睁眼时盒口透出一点暖光，像在等你往里放点什么。</p>
+      <p class="sub">一只粉色的、盖子半盖着的小盒子。会呼吸、会眨眼 —— 盖沿留着一道缝，缝里透出一点暖光，像在等你往里放点什么。</p>
     </div>
     <button class="toggle" id="theme">切到夜间</button>
   </div>
 
   <div class="hero">
     <div class="stage" id="hero"></div>
-    <p class="caption">吉祥物尺寸：盒子本体 160px，带上下浮动。<br>深呼吸时盒身轻微起伏，每 4.5 秒眨一次眼。</p>
+    <p class="caption">吉祥物尺寸：盒子本体 320px，带上下浮动。<br>盖子半掩着，缝里那点暖光会慢慢明灭，像里面有什么在呼吸。每 4.5 秒眨一次眼。</p>
   </div>
 
   <div class="grid">
@@ -94,7 +94,7 @@
     <div class="cell">
       <h2>配色</h2>
       <div style="display:flex;gap:10px;flex-wrap:wrap" id="swatches"></div>
-      <p>盖板最浅、左前壁次之、右前壁最深；盒口内壁最深，暗示里面是空的。</p>
+      <p>盖板最浅、左前壁次之、右前壁最深；盒口内壁最深，半掩的盖沿下透出暖光，暗示里面是空的、还能放东西。</p>
     </div>
   </div>
 
@@ -169,10 +169,25 @@ function moodBox({ size = 160, blink = true, float = true, idPrefix = 'mb' } = {
       <path d="M96 148q4 4 8 0" fill="none" stroke="#5B3F52" stroke-width="2.4" stroke-linecap="round" opacity="0.55"/>
     </g>
 
-    <!-- 掀起的盖板：下沿压住盒口，向后上方斜倚 -->
+    <!--
+      半盖着的盖板：比盒口大一圈的纸板，平放、往左后方错开 ——
+      右后两个角探出盒外，左前那一侧露出盒口前沿；盖板抬起来一点，缝里透光。
+      错开这一步就是「半盖」；同心放就是一只关好的盒子了。
+    -->
     <g>
-      <path d="M20 95 98 57l22 10-8-44c-.6-5-6.4-7.4-10.4-4.4L24 74c-7 5-10 14-8 22.4 1 5 2 8 4 10.6Z" fill="url(#${u}-lid)"/>
-      <path d="M27 92 98 59l16 7-1.4-8-14.6-6.8L30 88c-5 3-8 9-7.4 15 1.6-4.8 4-8 4.4-11Z" fill="#DC8CB0" opacity="0.38"/>
+      <!-- 抬起来的那一小段：盒口前沿到盖板前沿之间那道缝的光 -->
+      <path d="M18 96 100 134l82-38-8-4-74 34-74-34Z" fill="url(#${u}-glow)" opacity="0.55"/>
+      <!-- 盖板边缘的厚度：整片先错下去 4px 画一遍 -->
+      <path d="M12 86 88 50l94 43-92 41Z" fill="#E08FB4"/>
+      <!-- 盖板顶面 -->
+      <path d="M12 82 88 46l94 43-92 41Z" fill="url(#${u}-lid)"/>
+      <!-- 盖板投在盒口上的影 -->
+      <path d="M20 85 100 51l80 36-80 37Z" fill="#B85C86" opacity="0.12"/>
+      <!-- 亮边与高光 -->
+      <path d="M12 82 88 46l94 43-92 41Z" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linejoin="round" opacity="0.62"/>
+      <path d="M30 78 88 52l34 16" fill="none" stroke="#FFFFFF" stroke-width="1.9" stroke-linecap="round" opacity="0.45"/>
+      <!-- 前沿一条深一点的边：纸板的分量 -->
+      <path d="M12 82 88 46" fill="none" stroke="#EE9CBE" stroke-width="1.4" opacity="0.5"/>
     </g>
   </g>
 </svg>`;
