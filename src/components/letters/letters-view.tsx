@@ -233,12 +233,15 @@ export function LettersView({ embedded = false }: { embedded?: boolean } = {}) {
           </div>
         }
       >
+        {/* 手机上一聚焦就弹键盘、亮起焦点边框，和卡片边框叠成"双重边框"，所以不自动聚焦 */}
         <textarea
           value={content}
           onChange={(event) => setContent(event.target.value)}
           placeholder="比如：今天被一句话刺到了，到现在还没缓过来……"
           rows={11}
           maxLength={2000}
+          data-no-autofocus
+          aria-label="信的内容"
           className="mb-field resize-y font-display text-[14px] leading-[2.1]"
         />
         <p className="mt-3 text-[11.5px] leading-[1.9] text-ink-ghost">

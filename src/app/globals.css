@@ -1710,3 +1710,53 @@ html[data-theme='night'] .mb-more-btn {
 html[data-theme='night'] .mb-more-btn:hover {
   background: linear-gradient(160deg, rgba(162, 140, 216, 0.94), rgba(198, 162, 192, 0.82));
 }
+
+/*
+ * 从主页走进树洞广场时的两扇门。
+ *
+ * 颜色不写死：用主题的墨色与薰衣草色混出一点底，白日是暖灰紫的纸，
+ * 夜里是压暗的紫，跟着主题走，不需要第二套值。
+ */
+.mb-gate-panel {
+  background:
+    radial-gradient(
+      120% 90% at 50% 30%,
+      color-mix(in srgb, var(--color-lavender) 22%, transparent) 0%,
+      transparent 62%
+    ),
+    color-mix(in srgb, var(--color-paper, #fdf7f4) 96%, var(--color-lavender) 4%);
+  box-shadow: inset 0 0 90px -30px color-mix(in srgb, var(--color-lavender-deep) 26%, transparent);
+}
+
+html[data-theme='night'] .mb-gate-panel {
+  background:
+    radial-gradient(
+      120% 90% at 50% 30%,
+      color-mix(in srgb, var(--color-lavender) 16%, transparent) 0%,
+      transparent 62%
+    ),
+    #1d1a2b;
+  box-shadow: inset 0 0 90px -30px color-mix(in srgb, var(--color-lavender) 22%, transparent);
+}
+
+/* 门缝中间那道细光：两扇门合上时像一条缝 */
+.mb-gate-panel::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--color-lavender) 55%, transparent),
+    transparent
+  );
+}
+
+.mb-gate-panel:first-of-type::after {
+  right: 0;
+}
+
+.mb-gate-panel:last-of-type::after {
+  left: 0;
+}

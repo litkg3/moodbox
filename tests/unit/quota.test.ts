@@ -79,7 +79,8 @@ describe('每日配额', () => {
     expect(quotaMessage('reply')).toContain('20 条');
 
     expect(quotaHint('post', { posts: 1, replies: 0 })).toContain('还能发 2 条');
-    expect(quotaHint('post', { posts: 3, replies: 0 })).toContain('用完');
+    // 用完之后不再显示剩余额度（按要求不写提示文字），只剩一条空串
+    expect(quotaHint('post', { posts: 3, replies: 0 })).toBe('');
     expect(quotaHint('reply', { posts: 0, replies: 5 })).toContain('还能发 15 条');
   });
 });

@@ -130,8 +130,8 @@ export function createHttpBackend(options: HttpBackendOptions): ContentBackend {
         method: 'DELETE',
         headers: { 'X-Moodbox-Visitor': visitorId },
       }),
-    hugPost: (id, visitorId) =>
-      request(`/posts/${id}/hugs`, {
+    hugPost: (id, visitorId, want = true) =>
+      request(want ? `/posts/${id}/hugs` : `/posts/${id}/hugs?undo=1`, {
         method: 'POST',
         headers: visitorId ? { 'X-Moodbox-Visitor': visitorId } : undefined,
       }),

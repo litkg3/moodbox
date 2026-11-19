@@ -5,6 +5,12 @@ import { getContentBackend } from '@/lib/backend';
 import type { PostDraft, ReplyDraft, StoryDraft } from '@/lib/backend/types';
 import { isIndexedDBSupported } from '@/lib/db';
 import { EMPTY_USAGE, type QuotaUsage } from '@/lib/quota';
+import {
+  getRenameSnapshot,
+  getUsageSnapshot,
+  setLedgerVisitor,
+  subscribeLedger,
+} from '@/lib/visitor-ledger';
 import type { HealingStory, HeartLetter, PostStatus, SquarePost, TimeCapsule } from '@/types';
 
 export type ListStatus = 'idle' | 'loading' | 'ready' | 'error' | 'unavailable';
@@ -162,8 +168,9 @@ let squareViewerId: string | undefined;
 /**
  * 今天的额度用量缓存。
  *
- * 发帖成功后 +1 而不是每次都问后端：数量只增不减（删帖不退额度），
- * 本地累加与后端统计不会打架；同时在后台刷新一次，防止多标签页对不上。
+ * 本机模式下真正的数字在账本里（`lib/visitor-ledger.ts`），
+ * 每次刷新直接读账本；云端模式下问后端（数据库函数统计）。
+ * 两边都只增不减：删帖不退额度。
  */
 let quotaUsage: QuotaUsage = { ...EMPTY_USAGE };
 const quotaListeners = new Set<() => void>();
@@ -188,6 +195,8 @@ class SquareStore extends ListStore<SquarePost> {
   setViewer(visitorId: string): void {
     if (squareViewerId === visitorId) return;
     squareViewerId = visitorId;
+    // 账本按访客分行，先把当前身份告诉它，界面上的额度才是这个人的
+    setLedgerVisitor(visitorId);
     void this.refreshQuota();
 
     /*
@@ -246,8 +255,14 @@ class SquareStore extends ListStore<SquarePost> {
     this.setItems(this.items.filter((item) => item.id !== id));
   }
 
-  async hug(id: string): Promise<void> {
-    const next = await getContentBackend().hugPost(id, squareViewerId);
+  /**
+   * 抱一下 / 取消拥抱。
+   *
+   * `want` 为目标状态：true 抱上，false 收回。收回不是「减一个计数」那么简单 ——
+   * 已经抱过的人再点就是取消，所以后端要知道方向。
+   */
+  async hug(id: string, want = true): Promise<void> {
+    const next = await getContentBackend().hugPost(id, squareViewerId, want);
     // 只取拥抱数与「我抱过没有」：整条替换会把 mine（这条是不是我发的）一起冲掉
     this.setItems(
       this.items.map((item) =>
@@ -361,10 +376,31 @@ export const useCapsules = () => useListStore(capsulesStore);
  */
 function subscribeQuota(listener: () => void): () => void {
   quotaListeners.add(listener);
+  // 账本变了也要通知（发帖 / 回复记账发生在本机，不一定经过后端刷新）
+  const off = subscribeLedger(listener);
   return () => {
     quotaListeners.delete(listener);
+    off();
   };
 }
 
+function quotaSnapshot(): QuotaUsage {
+  // 本机模式读账本（含刚发出的那一条），云端模式用后端回报的值
+  return getContentBackend().mode === 'local' ? getUsageSnapshot() : quotaUsage;
+}
+
 export const useQuotaUsage = (): QuotaUsage =>
-  useSyncExternalStore(subscribeQuota, () => quotaUsage, () => EMPTY_USAGE);
+  useSyncExternalStore(subscribeQuota, quotaSnapshot, () => EMPTY_USAGE);
+
+/**
+ * 订阅「今天还能不能改昵称」。
+ *
+ * 账本里给自己记账，不依赖后端：改昵称这件事本来就只发生在本机，
+ * 换台设备重新改是合理的（那边是另一个人在写）。
+ */
+function subscribeRename(listener: () => void): () => void {
+  return subscribeLedger(listener);
+}
+
+export const useCanRenameToday = (): boolean =>
+  useSyncExternalStore(subscribeRename, getRenameSnapshot, () => true);

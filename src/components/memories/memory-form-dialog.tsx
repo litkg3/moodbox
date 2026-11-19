@@ -13,6 +13,14 @@ import { moodBoxStore } from '@/lib/moodbox-store';
 import { cn } from '@/lib/utils';
 import type { Memory, MemoryImage, MemoryMoodId } from '@/types';
 
+/**
+ * 一份快乐的字数上限。
+ *
+ * 从 800 提到 1000：罐子里的纸条本来就是「今天发生了什么」，
+ * 有人愿意多写几句，没必要卡在 800 上。
+ */
+const CONTENT_MAX = 1000;
+
 interface MemoryFormDialogProps {
   open: boolean;
   onClose: () => void;
@@ -186,8 +194,9 @@ export function MemoryFormDialog({
             value={content}
             onChange={(event) => setContent(event.target.value)}
             rows={4}
-            maxLength={800}
+            maxLength={CONTENT_MAX}
             placeholder="今天有什么值得偷偷开心的小事吗？"
+            data-no-autofocus
             aria-invalid={Boolean(errors.content)}
             className={cn(
               'w-full resize-none rounded-2xl border bg-white/70 px-4 py-3.5 text-[13.5px] leading-[1.95] text-ink outline-none transition-colors placeholder:text-ink-ghost/80',
@@ -202,7 +211,7 @@ export function MemoryFormDialog({
             ) : (
               <span />
             )}
-            <span className="text-[10.5px] tabular-nums text-ink-ghost">{content.length}/800</span>
+            <span className="text-[10.5px] tabular-nums text-ink-ghost">{content.length}/{CONTENT_MAX}</span>
           </div>
         </div>
 

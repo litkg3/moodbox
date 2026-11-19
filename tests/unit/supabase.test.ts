@@ -166,6 +166,7 @@ describe('Supabase 后端 · 写', () => {
     expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_hug', {
       p_id: 'post_abc',
       p_visitor: 'visitor_key',
+      p_undo: false,
     });
     expect(post.hugs).toBe(4);
     expect(post.hugged).toBe(true);
@@ -178,7 +179,10 @@ describe('Supabase 后端 · 写', () => {
       .mockResolvedValueOnce(ok({ ...rawPost, hugs: 4 }));
     const backend = createSupabaseBackend();
     const post = await backend.hugPost('post_abc', 'visitor_key');
-    expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_hug', { p_id: 'post_abc' });
+    expect(rpcMock).toHaveBeenLastCalledWith('moodbox_square_hug', {
+      p_id: 'post_abc',
+      p_undo: false,
+    });
     expect(post.hugs).toBe(4);
   });
 

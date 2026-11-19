@@ -14,7 +14,7 @@
  * - `key`：由本机种子派生的稳定哈希（16 位十六进制），只在本地与提交时使用，
  *   云端也只会把它再哈希一次存进 `visitor_hash`，不会展示给任何人；
  * - `suffix`：从同一个种子里取 4 位字母数字，用作「匿名·K7Q2」的后缀；
- * - `region`：IP 归属地，只到省份（如「广东」），用于在帖子旁边标一个位置。
+ * - `region`：IP 归属地，精确到市（如「广东·深圳」），用于在帖子旁边标一个位置。
  *
  * 隐私说明：归属地查询只发一个 GET，不携带任何本地内容。
  * 设置 `NEXT_PUBLIC_MOODBOX_NO_GEO=1` 可以整段关掉，此时只有本机身份。
@@ -27,7 +27,7 @@ export interface VisitorIdentity {
   suffix: string;
   /** 展示用昵称：匿名·K7Q2 */
   alias: string;
-  /** IP 归属地（省级），拿不到时为 null */
+  /** IP 归属地（市级，如「广东·深圳」），拿不到时为 null */
   region: string | null;
   /** 身份来源：解析到了 IP 归属地 / 只能退回本机 */
   source: 'ip' | 'device';
@@ -118,40 +118,47 @@ function shortenPlace(name: string): string {
 }
 
 /**
- * 只保留到「省」一级。
+ * 拼成「省·市」，没有市就只写省。
  *
- * 各家 IP 库对城市的判定经常差几十上百公里（尤其是手机流量、企业专线、
- * 或者被代理/加速器绕过的线路），写上城市的反而让人一眼看出"这不对"。
- * 省一级的准确率高得多，也够表达"同一个地方的人"这层意思。
+ * 只说省份等于没说 —— 「广东」下面几千万人，标在帖子上没有任何"同乡"的意思。
+ * 城市一级才有用，所以这里保留 city。代价是准确性不如省级：手机流量、
+ * 企业专线、加速器都可能让城市判偏，这一点在界面的 title 里如实写了。
  */
-function buildRegion(country?: unknown, province?: unknown, city?: unknown): string | null {
-  void city;
+export function buildRegion(country?: unknown, province?: unknown, city?: unknown): string | null {
   const countryName = typeof country === 'string' ? country.trim() : '';
   const provinceName = typeof province === 'string' ? shortenPlace(province.trim()) : '';
+  const cityName = typeof city === 'string' ? shortenPlace(city.trim()) : '';
 
-  // 国内只显示省份，去掉「中国」两个字：这一栏是给"同乡的人"看的
-  const parts = countryName === '中国' || countryName === 'China'
-    ? [provinceName]
-    : [countryName];
+  // 国内只显示省市，去掉「中国」两个字：这一栏是给"同乡的人"看的
+  if (countryName === '中国' || countryName === 'China') {
+    const parts = [provinceName, cityName !== provinceName ? cityName : ''].filter(
+      (part) => part && part !== '未知',
+    );
+    const joined = Array.from(new Set(parts)).join('·');
+    return joined ? joined.slice(0, 20) : null;
+  }
 
-  const cleaned = Array.from(new Set(parts.filter((part) => part && part !== '未知'))).join('·');
+  const parts = [countryName, provinceName, cityName].filter(
+    (part) => part && part !== '未知',
+  );
+  // 去重（Tokyo / Tokyo 只留一个），但保留国家名 —— 否则只剩「Tokyo」，
+  // 与国内那条「广东·深圳」的写法不对齐
+  const cleaned = Array.from(new Set(parts)).join('·');
   return cleaned ? cleaned.slice(0, 20) : null;
 }
 
 /**
- * 归属地查询的候选源，同时发、谁先给结果用谁。
+ * 归属地只看一个源：`api.ip.sb`。
  *
- * 只用一家的时候偏差很明显：单库对移动流量、教育网、云主机的判定经常落到
- * 省会甚至隔壁省。三家串行试的话，最坏要等三个超时（七八秒），
- * 而身份又要等这次查询 —— 发帖会被拖住。并行竞速之后等待时间
- * 只等于"最快那家的响应"，一般几百毫秒。
+ * 之前是三家并行竞速，谁快用谁 —— 快是快了，代价是同一个人的归属地会在
+ * 「广东」和「广东·深圳」之间来回跳，城市一级更是三家各说各的。
+ * 既然要精确到市，就只能固定一个源，不然连自己都对不上自己。
  *
- * 三家都支持浏览器直连（CORS），也都不需要 key。
+ * `api.ip.sb/geoip` 不需要 key、允许浏览器直连，返回里有 city 字段。
  */
 interface GeoSource {
-  id: string;
   url: string;
-  /** 单源超时：串起来最多三秒多，不会把广场首屏拖住 */
+  /** 超时上限：不让一次查询把广场首屏拖住 */
   timeout: number;
   read: (data: Record<string, unknown>) => {
     ip: unknown;
@@ -161,41 +168,17 @@ interface GeoSource {
   };
 }
 
-const GEO_SOURCES: readonly GeoSource[] = [
-  {
-    id: 'ipapi',
-    url: 'https://ipapi.co/json/?lang=zh-CN',
-    timeout: 2600,
-    read: (data) => ({
-      ip: data.ip,
-      country: data.country_name,
-      region: data.region,
-      city: data.city,
-    }),
-  },
-  {
-    id: 'ipsb',
-    url: 'https://api.ip.sb/geoip',
-    timeout: 2600,
-    read: (data) => ({
-      ip: data.ip,
-      country: data.country,
-      region: data.region,
-      city: data.city,
-    }),
-  },
-  {
-    id: 'ipwho',
-    url: 'https://ipwho.is/?lang=zh-CN',
-    timeout: 2600,
-    read: (data) => ({
-      ip: data.ip,
-      country: data.country,
-      region: data.region,
-      city: data.city,
-    }),
-  },
-];
+const GEO_SOURCE: GeoSource = {
+  url: 'https://api.ip.sb/geoip',
+  timeout: 3000,
+  read: (data) => ({
+    ip: data.ip,
+    country: data.country,
+    // ip.sb 的 region 就是省、city 就是市
+    region: data.region,
+    city: data.city,
+  }),
+};
 
 async function fetchGeo(source: GeoSource): Promise<GeoLookup | null> {
   const controller = new AbortController();
@@ -213,11 +196,11 @@ async function fetchGeo(source: GeoSource): Promise<GeoLookup | null> {
     const parsed = source.read(data);
     const region = buildRegion(parsed.country, parsed.region, parsed.city);
     const ip = typeof parsed.ip === 'string' && parsed.ip.trim() ? parsed.ip.trim() : null;
-    // 既没有 IP 也没有省份，等于这个源什么都没给，继续试下一个
+    // 既没有 IP 也没有归属地，等于这次什么都没拿到
     if (!ip && !region) return null;
     return { ip, region };
   } catch {
-    // 超时、断网、被 CORS 拦住都走这里：换下一个源
+    // 超时、断网、被 CORS 拦住都走这里：当作没有归属地
     return null;
   } finally {
     window.clearTimeout(timer);
@@ -228,30 +211,7 @@ async function lookupGeo(): Promise<GeoLookup> {
   const empty: GeoLookup = { ip: null, region: null };
   if (typeof window === 'undefined' || typeof window.fetch !== 'function') return empty;
   if (process.env.NEXT_PUBLIC_MOODBOX_NO_GEO === '1') return empty;
-
-  return new Promise<GeoLookup>((resolve) => {
-    let settled = false;
-    let outstanding = GEO_SOURCES.length;
-
-    const finish = (value: GeoLookup) => {
-      if (settled) return;
-      settled = true;
-      resolve(value);
-    };
-
-    for (const source of GEO_SOURCES) {
-      void fetchGeo(source)
-        .then((result) => {
-          // 谁先答上来就用谁；还没答的直接放弃，不必等它超时
-          if (result) finish(result);
-        })
-        .finally(() => {
-          outstanding -= 1;
-          // 全都没结果时，别让 Promise 悬着
-          if (outstanding === 0) finish(empty);
-        });
-    }
-  });
+  return (await fetchGeo(GEO_SOURCE)) ?? empty;
 }
 
 function readCache(): VisitorIdentity | null {

@@ -284,15 +284,23 @@ export function createSupabaseBackend(options: SupabaseBackendOptions = {}): Con
       await rpc('moodbox_square_delete', { p_id: id, p_token: token() });
     },
 
-    async hugPost(id: string, visitorId?: string) {
+    async hugPost(id: string, visitorId?: string, want = true) {
       /*
-       * 带 p_visitor 的签名是「一个 IP 只能抱一次」的前提；
+       * 带 p_visitor 的签名是「一个人只占一次数」的前提；
        * 库还是旧版（只有 p_id）时就退回单参数调用，先让人抱上，
-       * 只是这时候服务端没法去重。两种情况都只吞「函数签名不存在」。
+       * 只是这时候服务端既没法去重，也没法取消。
+       *
+       * `p_undo` 是取消。旧库没有这个参数 —— 传过去会被 PostgREST 判成
+       * 未知参数而整条失败，所以取消也走同一套降级：失败就当没抱过。
        */
       const post = await rpcFallback([
-        () => rawRpc<unknown>('moodbox_square_hug', { p_id: id, p_visitor: visitorId ?? null }),
-        () => rawRpc<unknown>('moodbox_square_hug', { p_id: id }),
+        () =>
+          rawRpc<unknown>('moodbox_square_hug', {
+            p_id: id,
+            p_visitor: visitorId ?? null,
+            p_undo: !want,
+          }),
+        () => rawRpc<unknown>('moodbox_square_hug', { p_id: id, p_undo: !want }),
       ]);
       return toPost(post);
     },

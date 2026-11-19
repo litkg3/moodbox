@@ -5,6 +5,7 @@ import { ClearDataProvider } from '@/components/layout/clear-data-provider';
 import { HydrationMarker } from '@/components/layout/hydration-marker';
 import { MotionPreferences } from '@/components/layout/motion-preferences';
 import { SiteHeader } from '@/components/layout/site-header';
+import { SquareEntrance } from '@/components/layout/square-entrance';
 import { ThemeProvider } from '@/components/layout/theme-provider';
 import { ToolOverlayProvider } from '@/components/layout/tool-overlay-provider';
 import { ToastProvider } from '@/components/ui/toast';
@@ -63,6 +64,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <ClearDataProvider>
                 <ToolOverlayProvider>
                   <SiteHeader />
+                  <SquareEntrance />
                   <div id="main-content" tabIndex={-1}>
                     {children}
                   </div>

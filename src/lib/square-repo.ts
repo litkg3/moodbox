@@ -1,5 +1,6 @@
 import { getDB, toStorageError } from '@/lib/db';
-import { EMPTY_USAGE, canPublish, dayKeyOf, quotaMessage, type QuotaUsage } from '@/lib/quota';
+import { readUsage, recordPost, recordReply } from '@/lib/visitor-ledger';
+import { EMPTY_USAGE, canPublish, quotaMessage, type QuotaUsage } from '@/lib/quota';
 import { createId } from '@/lib/utils';
 import type { PostStatus, SquarePost, SquareReply } from '@/types';
 
@@ -123,6 +124,8 @@ export async function createPost(draft: PostDraft): Promise<SquarePost> {
   try {
     const db = await getDB();
     await db.put('posts', post);
+    // 记一笔账：之后删掉这条，额度也不会退回来
+    if (draft.visitorId) recordPost(draft.visitorId);
     return { ...post, mine: true };
   } catch (error) {
     throw toStorageError(error);
@@ -152,46 +155,44 @@ export async function deletePost(id: string): Promise<void> {
 }
 
 /**
- * 今天已经发了多少（本机统计）。
+ * 今天已经发了几条 / 回了几条。
  *
- * 数两样东西：帖子自己（`visitorId` 对得上的）和回复（帖子里的 `replies`）。
- * 删掉的记录在 IndexedDB 里已经不存在，所以「删了重发」在本机模式下
- * 确实会退回额度 —— 这是本机模式的固有限制，文档里写清楚了，
- * 云端模式下额度由数据库统计，删帖不退。
+ * 数的是**账本**（见 `lib/visitor-ledger.ts`），不是列表 —— 删掉的帖子
+ * 不该把额度退回来。否则「发满三条 → 全删掉 → 再发三条」就是免费无限发。
  */
 export async function getQuotaUsage(visitorId?: string, now: Date = new Date()): Promise<QuotaUsage> {
   if (!visitorId) return { ...EMPTY_USAGE };
-  const today = dayKeyOf(now.toISOString());
-  try {
-    const db = await getDB();
-    const posts = await db.getAllFromIndex('posts', 'by-created');
-    let postCount = 0;
-    let replyCount = 0;
-    for (const post of posts) {
-      if (post.visitorId === visitorId && dayKeyOf(post.createdAt) === today) postCount += 1;
-      for (const reply of post.replies) {
-        if (reply.visitorId === visitorId && dayKeyOf(reply.createdAt) === today) replyCount += 1;
-      }
-    }
-    return { posts: postCount, replies: replyCount };
-  } catch (error) {
-    throw toStorageError(error);
-  }
+  return readUsage(now, visitorId);
 }
 
 /**
- * 抱一下。
+ * 抱一下 / 取消拥抱。
  *
- * 一个访客对同一条只能抱一次 —— 本机模式下这台设备就是一个访客，
- * 所以直接在帖子上记 `hugged`，第二次点不再累加（幂等返回原样）。
+ * 一个访客对同一条只占一次数 —— 本机模式下这台设备就是一个访客，
+ * 所以直接在帖子上记 `hugged`。`want=false` 时把这一次收回：
+ * 计数减一（不会掉到 0 以下），`hugged` 复位，之后再点又能抱上。
+ *
+ * 两个方向都幂等：已抱过再抱、没抱过再取消，都原样返回，不会把计数点坏。
  */
-export async function hugPost(id: string): Promise<SquarePost> {
+export async function hugPost(id: string, want = true): Promise<SquarePost> {
   try {
     const db = await getDB();
     const existing = await db.get('posts', id);
     if (!existing) throw new Error('这条帖子已经不在了。');
-    if (existing.hugged) return existing;
-    const next: SquarePost = { ...existing, hugs: existing.hugs + 1, hugged: true };
+
+    if (want) {
+      if (existing.hugged) return existing;
+      const next: SquarePost = { ...existing, hugs: existing.hugs + 1, hugged: true };
+      await db.put('posts', next);
+      return next;
+    }
+
+    if (!existing.hugged) return existing;
+    const next: SquarePost = {
+      ...existing,
+      hugs: Math.max(0, existing.hugs - 1),
+      hugged: false,
+    };
     await db.put('posts', next);
     return next;
   } catch (error) {
@@ -241,6 +242,8 @@ export async function addReply(postId: string, draft: ReplyDraft): Promise<Squar
     };
     const next: SquarePost = { ...existing, replies: [...existing.replies, reply] };
     await db.put('posts', next);
+    // 记一笔账：删掉这条回复也退不回来
+    if (draft.visitorId) recordReply(draft.visitorId);
     return {
       ...next,
       mine: Boolean(draft.visitorId && existing.visitorId === draft.visitorId),

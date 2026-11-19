@@ -14,6 +14,7 @@ import {
   setPostStatus,
 } from '@/lib/square-repo';
 import { createStory, deleteStory, listStories, updateStory } from '@/lib/stories-repo';
+import { RESET_LEDGER_FOR_TESTS } from '@/lib/visitor-ledger';
 
 /**
  * 内容层（故事集 / 树洞广场）。
@@ -36,6 +37,8 @@ async function resetContentStores(): Promise<void> {
 
 beforeEach(async () => {
   await resetContentStores();
+  // 配额账本在 localStorage 上，用例之间必须清掉，否则前面的发满了会拦住后面的
+  RESET_LEDGER_FOR_TESTS();
 });
 
 describe('治愈故事集', () => {
@@ -231,5 +234,60 @@ describe('树洞广场', () => {
     for (let index = 0; index < 5; index += 1) {
       await expect(createPost({ content: `匿名第 ${index + 1} 条。` })).resolves.toBeTruthy();
     }
+  });
+});
+
+describe('删帖不退额度', () => {
+  it('自己删掉帖子之后，今天的额度不会退回来', async () => {
+    const ids: string[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      const post = await createPost({ content: `第 ${index + 1} 条。`, visitorId: 'key-recycle' });
+      ids.push(post.id);
+    }
+    for (const id of ids) await deleteOwnPost(id, 'key-recycle');
+
+    // 列表空了，但今天已经发过三次 —— 再发要等明天
+    expect(await listPosts('key-recycle')).toHaveLength(0);
+    await expect(
+      createPost({ content: '删了重发也是发。', visitorId: 'key-recycle' }),
+    ).rejects.toThrow(/今天已经发满 3 条/);
+  });
+
+  it('自己删掉回复之后，回复额度同样不退', async () => {
+    const post = await createPost({ content: '来聊。', visitorId: 'key-host' });
+    for (let index = 0; index < 20; index += 1) {
+      const next = await addReply(post.id, { content: `第 ${index + 1} 句。`, visitorId: 'key-talker' });
+      await deleteOwnReply(post.id, next.replies[next.replies.length - 1]!.id, 'key-talker');
+    }
+    expect(await getQuotaUsage('key-talker')).toEqual({ posts: 0, replies: 20 });
+    await expect(
+      addReply(post.id, { content: '第 21 句。', visitorId: 'key-talker' }),
+    ).rejects.toThrow(/今天已经回复满 20 条/);
+  });
+});
+
+describe('取消拥抱', () => {
+  it('抱过之后可以取消，计数减回去；再点又能抱上', async () => {
+    const post = await createPost({ content: '抱一下试试。', visitorId: 'key-hug' });
+    const hugged = await hugPost(post.id, true);
+    expect(hugged.hugged).toBe(true);
+    expect(hugged.hugs).toBe(1);
+
+    const undone = await hugPost(post.id, false);
+    expect(undone.hugged).toBe(false);
+    expect(undone.hugs).toBe(0);
+
+    const again = await hugPost(post.id, true);
+    expect(again.hugged).toBe(true);
+    expect(again.hugs).toBe(1);
+  });
+
+  it('没抱过就取消、抱过再抱，都不会把计数点坏', async () => {
+    const post = await createPost({ content: '幂等检查。', visitorId: 'key-idem' });
+    const undone = await hugPost(post.id, false);
+    expect(undone.hugs).toBe(0);
+    await hugPost(post.id, true);
+    const twice = await hugPost(post.id, true);
+    expect(twice.hugs).toBe(1);
   });
 });

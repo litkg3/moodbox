@@ -16,6 +16,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { CrisisNoticeDialog } from '@/components/square/crisis-notice-dialog';
+import { HugIcon } from '@/components/square/hug-icon';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Dialog } from '@/components/ui/dialog';
@@ -23,7 +24,7 @@ import { LoadingBar } from '@/components/ui/loading-bar';
 import { useToast } from '@/components/ui/toast';
 import { useAdmin } from '@/lib/admin';
 import { describeBackend } from '@/lib/backend';
-import { useSquare, squareStore, useQuotaUsage } from '@/lib/content-stores';
+import { useSquare, squareStore, useCanRenameToday, useQuotaUsage } from '@/lib/content-stores';
 import { scanForCrisis } from '@/lib/crisis';
 import { formatClock, formatRelativeDay } from '@/lib/date';
 import { NICKNAME_MAX, readNickname, saveNickname } from '@/lib/nickname';
@@ -31,6 +32,7 @@ import { quotaHint, quotaMessage, quotaState } from '@/lib/quota';
 import { MAX_REPLY_LENGTH, charLength, sortPostsForView, type SquareSortMode } from '@/lib/square-repo';
 import { describeSensitive, scanSensitive } from '@/lib/sensitive';
 import { resolveVisitor, type VisitorIdentity } from '@/lib/visitor';
+import { recordNicknameChange } from '@/lib/visitor-ledger';
 import type { SquarePost, SquareReply } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -39,6 +41,9 @@ const PAGE_SIZE = 10;
 
 /** 评论默认只露最新两条，点「回复」再展开全部。 */
 const REPLY_PEEK = 2;
+
+/** 拥抱的冷却时长：够挡住手滑连点，又不至于让人觉得按钮坏了。 */
+const HUG_COOLDOWN_MS = 700;
 
 type PendingAction =
   | { kind: 'post'; content: string; nickname: string }
@@ -98,6 +103,24 @@ export function SquareView() {
   const [nickname, setNickname] = useState('');
   const [nicknameOpen, setNicknameOpen] = useState(false);
   const [nicknameDraft, setNicknameDraft] = useState('');
+  /**
+   * 一天只能改一次昵称。
+   *
+   * 拦在这里而不是只在按钮上置灰：按钮置灰容易被看漏，点下去才被拒
+   * 又显得莫名其妙。现在是「点得动，但点了会告诉你今天已经改过」。
+   */
+  const canRenameToday = useCanRenameToday();
+  /*
+   * 能不能开这个弹窗。
+   *
+   * 直接读 hook 的值不够：改完昵称那一刻，账本已经写了，但 hook 的快照
+   * 要等下一次重渲染才更新，同一帧里连点两下还是能开出来。所以本地也存一份，
+   * 提交时立刻置 false —— 与账本两边各自把门，哪边先到都拦得住。
+   */
+  const [canRename, setCanRename] = useState(canRenameToday);
+  useEffect(() => {
+    setCanRename(canRenameToday);
+  }, [canRenameToday]);
   useEffect(() => {
     setNickname(readNickname());
   }, []);
@@ -124,10 +147,10 @@ export function SquareView() {
   const draftScan = useMemo(() => scanSensitive(draft.content), [draft.content]);
 
   /**
-   * 今天的额度：每个访客每天最多 3 条帖子。
+   * 今天的额度：每个访客每天最多 3 条帖子、20 条回复。
    *
-   * 这里只是把「还能发几条」摆在按钮旁边，真正的拦截在 `requestPublish`
-   * 与后端（云端是数据库函数）里 —— 界面上的数字是提示，不是边界。
+   * 数字来自账本（`lib/visitor-ledger.ts`），按「发过几次」算而不是
+   * 「还剩几条」—— 删掉自己的帖子不会把额度退回来。
    */
   const usage = useQuotaUsage();
   const postQuota = quotaState('post', usage);
@@ -241,10 +264,28 @@ export function SquareView() {
     setComposeOpen(true);
   }
 
+  /** 打开改昵称：今天改过就不再开弹窗，直接说清楚。 */
+  function requestRename() {
+    if (!canRename) {
+      showToast('今天已经改过一次昵称了，明天再来改吧。', 'caution');
+      return;
+    }
+    setNicknameDraft(nickname);
+    setNicknameOpen(true);
+  }
+
   function commitNickname() {
+    if (!canRename) {
+      showToast('今天已经改过一次昵称了，明天再来改吧。', 'caution');
+      setNicknameOpen(false);
+      return;
+    }
     const saved = saveNickname(nicknameDraft);
     setNickname(saved);
     setNicknameOpen(false);
+    // 记一笔：今天这一次用掉了。改多少字都只算一次。
+    recordNicknameChange(visitor?.key);
+    setCanRename(false);
     showToast(saved ? `记住了，以后发帖默认叫「${saved}」。` : '已经改回匿名代号。');
   }
 
@@ -336,10 +377,15 @@ export function SquareView() {
     }
   }
 
-  /** 云端模式下拥抱要发请求，失败必须说出来，不能静默吞掉。 */
-  async function handleHug(postId: string) {
+  /**
+   * 拥抱 / 取消拥抱。
+   *
+   * 云端模式下要发请求，失败必须说出来，不能静默吞掉。
+   * `next` 是目标状态：true 表示要抱上，false 表示要收回。
+   */
+  async function handleHug(postId: string, next: boolean) {
     try {
-      await squareStore.hug(postId);
+      await squareStore.hug(postId, next);
     } catch (hugError) {
       showToast(
         hugError instanceof Error ? hugError.message : '没能抱住，请稍后再试。',
@@ -374,14 +420,16 @@ export function SquareView() {
             </div>
             <button
               type="button"
-              onClick={() => {
-                setNicknameDraft(nickname);
-                setNicknameOpen(true);
-              }}
-              className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border border-[rgba(141,133,152,0.22)] bg-white/70 px-2.5 py-1 text-[11px] text-ink-soft transition-colors hover:border-[rgba(201,182,232,0.6)] hover:text-ink"
+              onClick={requestRename}
+              className={cn(
+                'ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border px-4 py-2 text-[12.5px] transition-colors',
+                canRename
+                  ? 'border-[rgba(201,182,232,0.55)] bg-white/80 text-ink-soft hover:border-[rgba(201,182,232,0.85)] hover:text-ink'
+                  : 'border-[rgba(141,133,152,0.2)] bg-white/45 text-ink-ghost',
+              )}
             >
-              <PenLine size={11} strokeWidth={1.8} aria-hidden="true" />
-              修改
+              <PenLine size={13} strokeWidth={1.8} aria-hidden="true" />
+              修改昵称
             </button>
           </div>
 
@@ -499,7 +547,7 @@ export function SquareView() {
                   isAdmin={isAdmin}
                   canDelete={isAdmin || Boolean(post.mine)}
                   working={working}
-                  onHug={() => void handleHug(post.id)}
+                  onHug={(next) => void handleHug(post.id, next)}
                   onReply={(content) => requestReply(post.id, content)}
                   onDelete={() => setDeleteTarget(post)}
                   onDeleteReply={(replyId) => void handleDeleteReply(post.id, replyId)}
@@ -619,7 +667,7 @@ export function SquareView() {
         open={nicknameOpen}
         onClose={() => setNicknameOpen(false)}
         title="改个昵称"
-        description="昵称会记在这台设备上，之后发帖默认用它。留空就回到「匿名·XXXX」。"
+        description="昵称会记在这台设备上，之后发帖默认用它。一天只能改一次，留空就回到「匿名·XXXX」。"
         width="sm"
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -713,7 +761,7 @@ function PinnedNotice() {
       <div className="min-w-0">
         <p className="text-[10.5px] tracking-[0.16em] text-lavender-deep">置顶 · 广场说明</p>
         <p className="mt-1 text-[11.5px] leading-[1.9] text-ink-faint">
-          只收心里的话。广告、引流、联系方式与攻击他人的内容会被删除；也请别留下真实姓名、住址和电话。
+          🈲 禁止广告、引流、留下联系方式、攻击他人等违规内容；请勿发布姓名、住址、电话等隐私信息，保护好自己～
         </p>
       </div>
     </aside>
@@ -739,7 +787,8 @@ function PostCard({
   /** 管理员，或这条帖子就是自己发的 */
   canDelete: boolean;
   working: boolean;
-  onHug: () => void;
+  /** 抱一下 / 取消拥抱，`next` 是目标状态 */
+  onHug: (next: boolean) => void;
   onReply: (content: string) => void;
   onDelete: () => void;
   onDeleteReply: (replyId: string) => void;
@@ -751,6 +800,15 @@ function PostCard({
   const [replyText, setReplyText] = useState('');
   /** 每抱一次加一；大于 0 时播放一次拥抱动画，播完归零 */
   const [burst, setBurst] = useState(0);
+  /**
+   * 拥抱的冷却。
+   *
+   * 抱可以反复点（抱了能取消、取消了还能再抱），但一秒钟能戳七八下的手
+   * 会让计数一路往上跳，还会把「抱住你了」的光效叠成一团。
+   * 按钮不做 disabled（disabled 会把已抱的高亮一起灰掉），
+   * 只在这段时间里忽略点击。
+   */
+  const [hugCooling, setHugCooling] = useState(false);
   // 回复同样过滤：命中了就不出现在列表里
   const visibleReplies = useMemo(
     () => post.replies.filter((reply) => !scanSensitive(reply.content).hit),
@@ -824,42 +882,41 @@ function PostCard({
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {/*
-          一个 IP 对同一条只能抱一次：抱过之后按钮变成「已抱」，并禁用。
-          `post.hugged` 是服务端算的（按匿名指纹去重），不是本地点一下就算 ——
-          刷新、换标签页都不会重新变成可抱。
+          拥抱：可以点第二次取消。
+          所以按钮不 disabled，只用冷却挡住手滑连点（见 hugCooling）。
+          图标是自绘的「两条胳膊环住一颗心」，不是那颗心 —— 心只表示「喜欢」。
         */}
         <button
           type="button"
           onClick={() => {
-            if (hugged) return;
-            onHug();
-            setBurst((value) => value + 1);
+            if (hugCooling) return;
+            setHugCooling(true);
+            window.setTimeout(() => setHugCooling(false), HUG_COOLDOWN_MS);
+            if (!hugged) setBurst((value) => value + 1);
+            onHug(!hugged);
           }}
-          disabled={hugged}
+          aria-pressed={hugged}
           aria-label={
-            hugged ? `你已经抱过这条心事了，共 ${post.hugs} 个拥抱` : `抱抱这条心事，目前 ${post.hugs} 个拥抱`
+            hugged
+              ? `已抱过这条心事，再点一下取消。目前 ${post.hugs} 个拥抱`
+              : `抱抱这条心事，目前 ${post.hugs} 个拥抱`
           }
-          title={hugged ? '一个 IP 对同一条只能抱一次' : undefined}
           className={cn(
             'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11.5px] transition-all duration-400',
             hugged
-              ? 'cursor-default border-[rgba(201,182,232,0.6)] bg-[rgba(201,182,232,0.22)] text-ink'
+              ? 'border-[rgba(201,182,232,0.6)] bg-[rgba(201,182,232,0.22)] text-ink'
               : 'border-[rgba(141,133,152,0.2)] text-ink-faint hover:border-[rgba(201,182,232,0.5)] hover:text-ink',
+            hugCooling && 'opacity-80',
           )}
         >
-          {/* 抱下去的那一下要让手有反馈：心先跳一下，再弹一层光 */}
+          {/* 抱下去的那一下要让手有反馈：图标先放大一下，再弹一层光 */}
           <motion.span
             key={burst}
-            animate={burst > 0 ? { scale: [1, 1.4, 1] } : { scale: 1 }}
+            animate={burst > 0 ? { scale: [1, 1.35, 1] } : { scale: 1 }}
             transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
             className="inline-flex"
           >
-            <Heart
-              size={13}
-              strokeWidth={1.7}
-              aria-hidden="true"
-              className={cn('transition-colors duration-400', hugged && 'fill-current')}
-            />
+            <HugIcon size={13} strokeWidth={1.7} filled={hugged} />
           </motion.span>
           {hugged ? `已抱 · ${post.hugs}` : post.hugs > 0 ? post.hugs : '抱抱'}
         </button>

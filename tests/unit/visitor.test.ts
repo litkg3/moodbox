@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { identityFromSeed, visitorKey, visitorSuffix } from '@/lib/visitor';
+import { buildRegion, identityFromSeed, visitorKey, visitorSuffix } from '@/lib/visitor';
 
 /**
  * 匿名身份的纯函数部分。
@@ -39,5 +39,25 @@ describe('匿名访客身份', () => {
     const identity = identityFromSeed('device:xyz', null, 'device');
     expect(identity.region).toBeNull();
     expect(identity.alias.startsWith('匿名·')).toBe(true);
+  });
+});
+
+describe('归属地拼装', () => {
+  it('国内拼成「省·市」，市与省同名时只留一个', () => {
+    expect(buildRegion('中国', '广东省', '深圳市')).toBe('广东·深圳');
+    expect(buildRegion('中国', '北京市', '北京市')).toBe('北京');
+  });
+
+  it('直辖市只有省一级时也能用', () => {
+    expect(buildRegion('中国', '上海市', '')).toBe('上海');
+  });
+
+  it('国外保留国家名，不带「中国」这种多余前缀', () => {
+    expect(buildRegion('Japan', 'Tokyo', 'Tokyo')).toBe('Japan·Tokyo');
+  });
+
+  it('什么都没拿到时返回 null', () => {
+    expect(buildRegion(undefined, undefined, undefined)).toBeNull();
+    expect(buildRegion('中国', '未知', '未知')).toBeNull();
   });
 });

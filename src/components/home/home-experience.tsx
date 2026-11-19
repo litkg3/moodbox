@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { motion, useReducedMotion } from 'motion/react';
 import { MessageCircleHeart } from 'lucide-react';
 import { EmotionPanel } from '@/components/emotion/emotion-panel';
+import { enterSquare } from '@/components/layout/square-entrance';
 import { EmotionSky } from '@/components/emotion/emotion-sky';
 import { useToast } from '@/components/ui/toast';
 import { HOME_BLESSING_LINES, SLOGAN } from '@/data/emotions';
@@ -115,9 +116,14 @@ export function HomeExperience() {
           </motion.p>
 
           <motion.div {...fade(0.68)} className="pointer-events-auto mt-7 sm:mt-8">
+            {/*
+              点下去先留一个信号，广场页据此放一段「进门」的转场。
+              导航照常走，不 preventDefault —— 该多快还是多快。
+            */}
             <Link
               href="/square"
               prefetch={false}
+              onClick={enterSquare}
               className="group mb-btn-warm inline-flex h-10 items-center gap-2 rounded-full px-5 text-[12.5px] tracking-[0.06em] transition-all duration-500 hover:brightness-[1.02] sm:h-11 sm:px-6"
             >
               <MessageCircleHeart

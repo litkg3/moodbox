@@ -1,7 +1,7 @@
 /**
  * 广场的每日发布配额。
  *
- * 规则：同一个访客（一个 IP 派生出来的匿名标识）在同一天里
+ * 规则：同一个访客（本机派生的匿名标识）在同一天里
  * 最多发 3 条帖子、20 条回复。
  *
  * 三个设计要点：
@@ -11,7 +11,9 @@
  *    （本地时间 0 点重置）一句话就能说清，也符合"每天"这个直觉。
  *
  * 2. **删帖不退额度。** 否则「发满三条 → 全删掉 → 再发三条」就是免费无限发。
- *    额度按「今天发出过多少条」计，不按「现在还剩多少条」计。
+ *    但「数现在还剩几条」做不到这一点 —— 删掉的那条已经不在列表里了。
+ *    所以用量单独记一本账（`lib/visitor-ledger.ts`）：发一次记一笔，
+ *    删帖不会把它抹掉。评论同理。
  *
  * 3. **这层只是提示，真正的边界在服务端。** 本机模式下 IndexedDB 里的数据
  *    用户自己就能改；云端模式下由 `moodbox_square_create` / `_reply`
@@ -111,10 +113,16 @@ export function quotaMessage(kind: QuotaKind): string {
   return `今天已经回复满 ${DAILY_REPLY_LIMIT} 条了。说得太多也累，明天 0 点之后再来吧。`;
 }
 
-/** 一句话展示剩余额度，用在输入框下面。 */
+/**
+ * 一句话展示剩余额度，只在**还发得出去**的时候显示。
+ *
+ * 用完之后这里就是空的 —— 页面上不出现「今天已经用完了」这类字样，
+ * 拦截只在按下的那一刻用一个 toast 说明。额度用尽时，弹窗底部本来就会
+ * 换成那条红字提示（见 `quotaMessage`），同一句话不必说两遍。
+ */
 export function quotaHint(kind: QuotaKind, usage: QuotaUsage): string {
   const state = quotaState(kind, usage);
+  if (!state.allowed) return '';
   const unit = kind === 'post' ? '条帖子' : '条回复';
-  if (!state.allowed) return `今天的 ${state.limit} ${unit}已经用完了，明天 0 点重置。`;
-  return `今天还能发 ${state.remaining} ${unit}（每天 ${state.limit} 条）。`;
+  return `今天还能发 ${state.remaining} ${unit}`;
 }
