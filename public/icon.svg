@@ -1,52 +1,39 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- 与页头站标同一只卡通盒子：一颗紫球认不出是「盒子」，方形小盒才认得出 -->
+  <!-- 与页头站标同一只粉色小盒：等轴测的盒身 + 口朝上 + 后面掀起的盖板 -->
   <defs>
-    <linearGradient id="lid" x1="0.2" y1="0" x2="0.55" y2="1">
-      <stop offset="0" stop-color="#FCF9FF"/>
-      <stop offset="1" stop-color="#DCCBF3"/>
+    <linearGradient id="left" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#FBD5E4"/>
+      <stop offset="1" stop-color="#F0AEC8"/>
     </linearGradient>
-    <linearGradient id="body" x1="0.12" y1="0" x2="0.82" y2="1">
-      <stop offset="0" stop-color="#F5EEFD"/>
-      <stop offset="0.52" stop-color="#DDCCF3"/>
-      <stop offset="1" stop-color="#BFA6E4"/>
+    <linearGradient id="right" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E68FB2"/>
+      <stop offset="1" stop-color="#CE7099"/>
     </linearGradient>
-    <radialGradient id="halo" cx="50%" cy="46%" r="52%">
-      <stop offset="0" stop-color="#C9B6E8" stop-opacity="0.34"/>
-      <stop offset="1" stop-color="#C9B6E8" stop-opacity="0"/>
-    </radialGradient>
+    <linearGradient id="inner" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#DF85AA"/>
+      <stop offset="1" stop-color="#F0AECB"/>
+    </linearGradient>
+    <linearGradient id="lid" x1="0.15" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#FDE0EC"/>
+      <stop offset="1" stop-color="#F5B3CD"/>
+    </linearGradient>
   </defs>
 
-  <rect width="64" height="64" rx="14" fill="#FBF7F3"/>
-  <rect width="64" height="64" rx="14" fill="url(#halo)"/>
+  <rect width="64" height="64" rx="14" fill="#FFF4F8"/>
 
   <!-- 落地阴影 -->
-  <ellipse cx="32" cy="57.6" rx="15" ry="3.2" fill="#8E76B8" opacity="0.16"/>
+  <ellipse cx="32" cy="56.6" rx="16" ry="3.3" fill="#C0718F" opacity="0.18"/>
 
   <!-- 盒身 -->
-  <rect x="11" y="26.8" width="42" height="29.4" rx="7.2" fill="url(#body)"/>
+  <path d="M9.2 34.8 32 45.4v12.4L9.2 47.2Z" fill="url(#left)"/>
+  <path d="M32 45.4l22.8-10.6v12.4L32 57.8Z" fill="url(#right)"/>
+  <path d="M9.2 34.8 32 24.2l22.8 10.6L32 45.4Z" fill="url(#inner)"/>
 
-  <!-- 盖子 -->
-  <rect x="6.5" y="15.8" width="51" height="15.2" rx="5.6" fill="url(#lid)"/>
+  <!-- 盒口前沿的亮边 -->
+  <path d="M9.2 34.8 32 45.36l22.8-10.56" stroke="#FFFFFF" stroke-width="1.4" stroke-linecap="round" opacity="0.6" fill="none"/>
+  <path d="M32 45.8v11.4" stroke="#FFFFFF" stroke-width="1.1" stroke-linecap="round" opacity="0.4"/>
 
-  <!-- 盖沿与盒身的缝 -->
-  <path d="M9.2 30.4h45.6" stroke="#A98FD2" stroke-width="1.9" stroke-linecap="round" opacity="0.4"/>
-
-  <!-- 盖沿高光 -->
-  <path d="M13.2 20.6c5.2-2.2 12.8-2.6 17.2-1.8" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" opacity="0.85"/>
-
-  <!-- 盒身高光 -->
-  <path d="M17.4 35c1.6-1.6 3.8-2.4 5.2-2.6" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" opacity="0.6"/>
-
-  <!-- 眼睛 -->
-  <g fill="#6C5694" opacity="0.72">
-    <circle cx="24.8" cy="41.2" r="3"/>
-    <circle cx="39.2" cy="41.2" r="3"/>
-  </g>
-  <g fill="#FFFFFF" opacity="0.9">
-    <circle cx="23.8" cy="40.2" r="1"/>
-    <circle cx="38.2" cy="40.2" r="1"/>
-  </g>
-
-  <!-- 小嘴 -->
-  <path d="M29.4 47.4c1.8 1.5 3.4 1.5 5.2 0" stroke="#6C5694" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.5"/>
+  <!-- 掀起的盖板 -->
+  <path d="M9.8 34.2 31.8 23.4l8.4 4-4.4-17.6c-.4-1.6-2.4-2.2-3.8-1.2L12.2 23.2c-2.2 1.4-3.2 4.2-2.6 6.8.2 1.4 1.2 2.8 2.6 3.4Z" fill="url(#lid)"/>
+  <path d="M11.2 32.8 31.8 22.8l6.8 3.2-.4-2.2-6.4-3-19.8 10.2c-1.6.8-2.4 2.8-2 4.6.8-1.4 2-2.4 3.2-2.8Z" fill="#DE8FB3" opacity="0.45"/>
 </svg>
