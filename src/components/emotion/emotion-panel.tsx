@@ -234,13 +234,17 @@ function EmotionPanelContent({
           <BookOpen size={14} strokeWidth={1.7} aria-hidden="true" />
           看个小故事
         </button>
+        {/*
+          这颗按钮本质上就是「出去」。开心球上写「我感觉好一点了」是反的 ——
+          人本来就是好的，没「好一点」可言，所以那里改成一句祝词。
+        */}
         <button
           type="button"
           onClick={onClose}
           className="mb-deep-btn inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-[12.5px] tracking-[0.04em] transition-colors"
         >
           <Sun size={14} strokeWidth={1.7} aria-hidden="true" />
-          我感觉好一点了
+          {emotion.id === 'joy' ? '天天开心' : '我感觉好一点了'}
         </button>
       </div>
 
