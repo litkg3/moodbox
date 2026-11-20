@@ -128,9 +128,6 @@ export function BreatheView() {
         <h1 className="mt-3 font-display text-[26px] font-light leading-tight tracking-[0.06em] text-ink sm:text-[34px]">
           呼吸放松
         </h1>
-        <p className="mt-3 max-w-[46ch] text-pretty text-[13.5px] leading-[1.9] text-ink-faint sm:text-sm">
-          跟着圆环走几十秒。不用做得很标准，走神了也没关系，回来就好。
-        </p>
       </header>
 
       <div className="flex flex-col items-center">

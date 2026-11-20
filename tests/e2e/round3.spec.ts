@@ -266,6 +266,24 @@ test('心事信箱：在卡片里写一封并封存', async ({ page }) => {
   await expect(box.getByText('未拆').first()).toBeVisible();
 });
 
+/* ---------------- 呼吸放松的页头 ---------------- */
+
+/*
+ * 页头只留标题。
+ *
+ * 原来标题下面还有一句「跟着圆环走几十秒。不用做得很标准，走神了也没关系，回来就好。」
+ * 按需求删掉了：这个页面本来就不需要人读说明，圆环自己会说话。
+ * 断言写成「这里不该再有以「跟着圆环」开头的说明」，
+ * 而不是断言整页只有某个字数 —— 免得以后正常加内容时误伤。
+ */
+test('呼吸放松：页头只有标题，不再有那句说明', async ({ page }) => {
+  await gotoHydrated(page, '/breathe');
+
+  await expect(page.getByRole('heading', { level: 1, name: '呼吸放松' })).toBeVisible();
+  await expect(page.getByText('跟着圆环', { exact: false })).toHaveCount(0);
+  await expect(page.getByText('回来就好', { exact: false })).toHaveCount(0);
+});
+
 /* ---------------- 心事信箱的热线文案 ---------------- */
 
 /*
