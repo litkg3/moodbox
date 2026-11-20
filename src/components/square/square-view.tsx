@@ -462,14 +462,6 @@ export function SquareView() {
             >
               <PenLine size={13} strokeWidth={1.8} aria-hidden="true" />
               修改昵称
-              <span
-                className={cn(
-                  'ml-0.5 rounded-full px-1.5 py-[1px] text-[10.5px] leading-none tracking-wide',
-                  canRename ? 'bg-[rgba(201,182,232,0.22)] text-ink-faint' : 'bg-transparent text-ink-ghost',
-                )}
-              >
-                {canRename ? `今天还剩 ${renamesLeft} 次` : '今天改完啦'}
-              </span>
             </button>
           </div>
 
@@ -663,7 +655,7 @@ export function SquareView() {
             留空就用「{myName}」这个名字，之后也能在广场页改。
             {visitor?.region
               ? `您的 IP 定位显示为「${visitor.region}」，定位结果可能存在一定偏差，仅供参考。`
-              : '您发帖时会带上一个按 IP 估算的省份，定位结果可能存在一定偏差，仅供参考。'}
+              : '您发帖时会带上一个按 IP 估算的城市，定位结果可能存在一定偏差，仅供参考。'}
           </p>
           <label className="block">
             <span className="text-[12px] text-ink-soft">说点什么</span>
@@ -911,7 +903,7 @@ function PostCard({
         {post.region ? (
           <span
             className="inline-flex items-center gap-1 rounded-full bg-[rgba(141,133,152,0.1)] px-1.5 py-[1px] text-[10.5px] text-ink-ghost"
-            title="按 IP 估算，只到省份；手机流量或加速器可能让这里不准，仅供参考"
+            title="按 IP 估算，精确到市；手机流量或加速器可能让这里不准，仅供参考"
           >
             <MapPin size={10} strokeWidth={1.7} aria-hidden="true" />
             {post.region}
@@ -1098,7 +1090,7 @@ function ReplyItem({
       <div className="flex flex-wrap items-center gap-2 text-[10.5px] text-ink-ghost">
         <span className="text-ink-faint">{reply.nickname}</span>
         {reply.region ? (
-          <span className="inline-flex items-center gap-0.5 text-[10px] text-ink-ghost" title="按 IP 估算，只到省份；手机流量或加速器可能让这里不准，仅供参考">
+          <span className="inline-flex items-center gap-0.5 text-[10px] text-ink-ghost" title="按 IP 估算，精确到市；手机流量或加速器可能让这里不准，仅供参考">
             <MapPin size={9} strokeWidth={1.7} aria-hidden="true" />
             {reply.region}
           </span>

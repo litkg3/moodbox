@@ -21,13 +21,13 @@ await page.waitForTimeout(500);
 const dialog = page.getByRole('dialog', { name: '背景音乐设置' });
 console.log('--- 打开面板（未点播放）---\n' + (await dialog.innerText()));
 
-// 点一次播放，确认不会卡在“准备中”，而是稳定落到“未接入”
+// 点一次播放，确认不会卡在“准备中”，而是稳定落到“没能加载”
 await dialog.getByRole('button', { name: /播放背景音乐|暂停背景音乐/ }).click();
 await page.waitForTimeout(1200);
 const afterText = await dialog.innerText();
 console.log('--- 点击播放后 ---\n' + afterText);
 
-const ok = (afterText.includes('未接入') && afterText.includes('/audio/long-day.mp3')) || afterText.includes('播放中');
+const ok = (afterText.includes('没能加载') && afterText.includes('/audio/long-day.mp3')) || afterText.includes('播放中');
 console.log(ok ? 'RESULT: PASS（音源可用则播放，缺失则明确告知）' : 'RESULT: FAIL');
 
 await page.screenshot({ path: '.shots/audio-missing.png', clip: { x: 860, y: 0, width: 420, height: 360 } });

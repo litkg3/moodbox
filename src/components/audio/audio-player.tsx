@@ -42,11 +42,12 @@ export function AudioPlayer() {
 
   return (
     <div ref={wrapperRef} className="relative">
+      {/* preload="auto"：进页面就开始拉流，点击时直接出声，不必等到点了才下载 */}
       <audio
         ref={audioRef}
         src={AUDIO_TRACK.src}
         loop={AUDIO_TRACK.loop}
-        preload="metadata"
+        preload="auto"
         onError={onAudioError}
         onPlaying={onAudioPlaying}
         onPause={onAudioPause}
@@ -61,7 +62,7 @@ export function AudioPlayer() {
           isPlaying
             ? '背景音乐播放中，点击调节'
             : isMissing
-              ? '背景音乐暂未接入，点击查看说明'
+              ? '背景音乐没能加载，点击查看说明'
               : '打开背景音乐'
         }
         className={cn(
@@ -138,7 +139,7 @@ export function AudioPlayer() {
                   : isLoading
                     ? '准备中'
                     : isMissing
-                      ? '未接入'
+                      ? '没能加载'
                       : status === 'error'
                         ? '卡住了'
                         : status === 'paused'
@@ -184,7 +185,7 @@ export function AudioPlayer() {
                 音频文件 <code className="rounded bg-white/70 px-1 py-[1px] text-[10px] text-ink-soft">
                   public{AUDIO_TRACK.src}
                 </code>{' '}
-                没有找到，换个网络再试试。
+                没能加载出来，刷新一下或换个网络再试。
               </p>
             ) : null}
           </motion.div>

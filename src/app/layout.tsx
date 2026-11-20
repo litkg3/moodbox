@@ -21,8 +21,20 @@ export const metadata: Metadata = {
   applicationName: 'Mood Box',
   authors: [{ name: 'MoodBox' }],
   keywords: ['情绪记录', '情绪管理', '快乐记忆', '情绪日历', '治愈系网站', 'MoodBox'],
+  /*
+   * 站点图标 = 页头左上角那只粉盒子（`MoodBoxMark`）。
+   * 四种尺寸各给一份：SVG 给支持的浏览器（任意缩放都清楚），
+   * 32 / 192 的 PNG 给只认位图的（Safari、部分安卓浏览器），
+   * `apple` 那份给「添加到主屏幕」，不缩放会被裁圆角。
+   */
   icons: {
-    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/icon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    shortcut: [{ url: '/icon.svg', type: 'image/svg+xml' }],
+    apple: [{ url: '/apple-icon.png', sizes: '180x180', type: 'image/png' }],
   },
   openGraph: {
     title: '情绪盒子 Mood Box · 面向青年群体的轻量情绪陪伴服务平台',

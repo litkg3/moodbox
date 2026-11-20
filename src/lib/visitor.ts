@@ -16,8 +16,12 @@
  * - `suffix`：从同一个种子里取 4 位字母数字，用作「匿名·K7Q2」的后缀；
  * - `region`：IP 归属地，精确到市（如「广东·深圳」），用于在帖子旁边标一个位置。
  *
- * 隐私说明：归属地查询只发一个 GET，不携带任何本地内容。
- * 设置 `NEXT_PUBLIC_MOODBOX_NO_GEO=1` 可以整段关掉，此时只有本机身份。
+ * 归属地**每次打开页面都重新查一遍**，不做任何缓存：换了网络（公司 → 手机热点、
+ * 北京 → 深圳出差）之后刷新一下就该显示新的城市。查询只发一个 GET，
+ * 不携带任何本地内容；设置 `NEXT_PUBLIC_MOODBOX_NO_GEO=1` 可以整段关掉。
+ *
+ * 注意缓存的是「身份」而不是「归属地」：同一次页面会话里多处调用只查一次，
+ * 但刷新页面一定会重查 —— `region` 不写进 localStorage 就是这个意思。
  */
 
 export interface VisitorIdentity {
@@ -33,9 +37,7 @@ export interface VisitorIdentity {
   source: 'ip' | 'device';
 }
 
-const CACHE_KEY = 'moodbox:visitor:v2';
 const DEVICE_KEY = 'moodbox:device:v1';
-const CACHE_TTL = 12 * 60 * 60 * 1000;
 
 /** 去掉 I/O/0/1 这些容易看错的字符，避免「这是 l 还是 1」。 */
 const SUFFIX_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -214,63 +216,46 @@ async function lookupGeo(): Promise<GeoLookup> {
   return (await fetchGeo(GEO_SOURCE)) ?? empty;
 }
 
-function readCache(): VisitorIdentity | null {
-  try {
-    const raw = window.localStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as VisitorIdentity & { at?: number };
-    if (!parsed?.key || !parsed?.suffix || !parsed?.alias) return null;
-    if (typeof parsed.at !== 'number' || Date.now() - parsed.at > CACHE_TTL) return null;
-    return {
-      key: parsed.key,
-      suffix: parsed.suffix,
-      alias: parsed.alias,
-      region: typeof parsed.region === 'string' ? parsed.region : null,
-      source: parsed.source === 'ip' ? 'ip' : 'device',
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeCache(identity: VisitorIdentity): void {
-  try {
-    window.localStorage.setItem(CACHE_KEY, JSON.stringify({ ...identity, at: Date.now() }));
-  } catch {
-    // 存不了就算了，下次再算一遍
-  }
-}
-
 let pending: Promise<VisitorIdentity> | null = null;
+/** 本次页面会话的身份；刷新页面就没了，所以每次刷新都会重查归属地 */
+let resolved: VisitorIdentity | null = null;
 
 /**
  * 拿到当前访客身份。
  *
- * 同一页面里多处调用只会真正解析一次（含网络请求）；
- * 结果按 12 小时缓存，避免每次进广场都去查 IP。
+ * 同一个页面里多处调用只解析一次（含网络请求）；**不写 localStorage**，
+ * 因此每次刷新都会用 ip.sb 的最新结果重新算一遍归属地。
  *
- * key 与 region 是分开来的：key 来自本机种子（永远稳定），region 来自网络
- * （可能为空）。这样"归属地查不到"只会让帖子少一个省份标签，
- * 不会让一个人变成另一个人。
+ * key 与 region 是分开来的：key 来自本机种子（永远稳定，换台设备才变），
+ * region 来自网络（可能为空、每次刷新都可能不同）。这样"归属地查不到"
+ * 只会让帖子少一个城市标签，不会让一个人变成另一个人。
  */
 export function resolveVisitor(): Promise<VisitorIdentity> {
   if (typeof window === 'undefined') {
     return Promise.resolve(identityFromSeed('server', null, 'device'));
   }
 
-  const cached = readCache();
-  if (cached) return Promise.resolve(cached);
+  if (resolved) return Promise.resolve(resolved);
 
   if (!pending) {
     pending = (async () => {
       const seed = readDeviceSeed();
       const geo = await lookupGeo();
       const identity = identityFromSeed(seed, geo.region, geo.ip ? 'ip' : 'device');
-      writeCache(identity);
+      resolved = identity;
       return identity;
     })().finally(() => {
       pending = null;
     });
   }
   return pending;
+}
+
+/**
+ * 只在测试里用：丢掉当前会话的身份。
+ * 正常运行时不调用 —— 想换归属地，刷新页面就够了。
+ */
+export function RESET_VISITOR_FOR_TESTS(): void {
+  resolved = null;
+  pending = null;
 }

@@ -37,9 +37,9 @@ export const DEFAULT_AUDIO_PREFERENCE: AudioPreference = {
   volume: AUDIO_TRACK.defaultVolume,
 };
 
-/** 淡入淡出的时间（毫秒） */
-export const FADE_DURATION = 1400;
-/** 点击播放后等待多久还没有成功出声，就认为音源不可用（毫秒） */
-export const PLAY_WATCHDOG_MS = 8000;
-/** 音源缺失时给用户看的说明（路径提示由播放器面板单独渲染） */
-export const AUDIO_MISSING_MESSAGE = '这段音乐还没有被放进站点里，所以暂时听不到。';
+/** 淡入淡出的时间（毫秒）：0.9s 够柔和，又不至于让人觉得「点了没反应」 */
+export const FADE_DURATION = 900;
+/** 点击播放后等待多久还没有成功出声，就认为音源不可用（毫秒）。5s 够慢网络缓冲，也不至于让人干等 */
+export const PLAY_WATCHDOG_MS = 5000;
+/** 音源加载失败时给用户看的说明（路径提示由播放器面板单独渲染） */
+export const AUDIO_MISSING_MESSAGE = '这段音乐没能加载出来，检查一下网络，稍后再试。';
