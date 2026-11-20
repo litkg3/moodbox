@@ -174,7 +174,7 @@ function EmotionPanelContent({
       {/*
         文案里提到的功能，紧跟在文案下面给一个直达按钮。
         挂在句子的正下方而不是按钮排里：它是对这句话的补充，
-        跟「看个小故事」「我感觉好一点了」不是一类动作。
+        跟「品读片刻」「我感觉好一点了」不是一类动作。
       */}
       {emotion.action ? (
         <div className="mt-2 flex justify-center">
@@ -232,7 +232,7 @@ function EmotionPanelContent({
           className="mb-deep-btn inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-[12.5px] tracking-[0.04em] transition-colors"
         >
           <BookOpen size={14} strokeWidth={1.7} aria-hidden="true" />
-          看个小故事
+          品读片刻
         </button>
         {/*
           这颗按钮本质上就是「出去」。开心球上写「我感觉好一点了」是反的 ——

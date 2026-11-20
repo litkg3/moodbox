@@ -13,15 +13,15 @@ interface StoryPanelProps {
   /**
    * 是哪个情绪球进来的。
    *
-   * 有些球带自己的故事（`emotion.story`），这时只展示那一篇：
-   * 它是为这个情绪写的，掺进通用故事里就散了。
+   * 有些球带自己的故事（`emotion.stories`），这时只在这几篇里翻：
+   * 它们是为这个情绪写的，掺进通用故事里就散了。
    * 不传或没有专属故事时，仍然从故事集里随机抽。
    */
   emotion?: Emotion;
 }
 
 /**
- * 面板里的「看个小故事」。
+ * 面板里的「品读片刻」。
  *
  * 不跳页、不开第二个弹层 —— 就在这张卡片里把内容换掉，
  * 看完可以「换一篇」或者回到刚才那句话。
@@ -31,37 +31,49 @@ export function StoryPanel({ onBack, emotion }: StoryPanelProps) {
   const [index, setIndex] = useState(() => Math.floor(Math.random() * Math.max(stories.length, 1)));
 
   /**
-   * 专属故事会被包成一条 HealingStory 再走同一套渲染，
+   * 专属故事会被包成 HealingStory 再走同一套渲染，
    * 这样标题、正文、署名的排版不用写两遍。
+   *
+   * 一颗球可以带多篇（难过、痛苦、分别都有两篇），按数组顺序读完再回到第一篇
+   * —— 散文的顺序本身就是作者排的，随机抽会把「先松开、再道谢」这样的次第打乱。
    */
-  const own = useMemo<HealingStory | null>(() => {
-    const story = emotion?.story;
-    if (!story) return null;
-    return {
-      id: `emotion_story_${emotion.id}`,
-      title: story.title,
-      content: story.content,
-      theme: story.theme,
-      author: story.author ?? '情绪盒子',
+  const own = useMemo<HealingStory[]>(() => {
+    const list = emotion?.stories ?? [];
+    if (list.length === 0) return [];
+    return list.map((item, position) => ({
+      id: `emotion_story_${emotion?.id ?? 'x'}_${position}`,
+      title: item.title,
+      content: item.content,
+      theme: item.theme,
+      author: item.author ?? '情绪盒子',
       createdAt: '',
       updatedAt: '',
       isDemo: true,
-    };
+    }));
   }, [emotion]);
 
+  const [ownIndex, setOwnIndex] = useState(0);
+
   const story = useMemo(() => {
-    if (own) return own;
+    if (own.length > 0) return own[ownIndex % own.length] ?? null;
     if (stories.length === 0) return null;
     return stories[index % stories.length] ?? null;
-  }, [own, stories, index]);
+  }, [own, ownIndex, stories, index]);
 
   const next = useCallback(() => {
-    setIndex((prev) => (stories.length <= 1 ? prev : prev + 1 + Math.floor(Math.random() * (stories.length - 1))));
-  }, [stories.length]);
+    // 专属故事按顺序轮，通用故事集随机跳（避免连着抽到同一篇）
+    if (own.length > 1) {
+      setOwnIndex((prev) => (prev + 1) % own.length);
+      return;
+    }
+    setIndex((prev) =>
+      stories.length <= 1 ? prev : prev + 1 + Math.floor(Math.random() * (stories.length - 1)),
+    );
+  }, [own.length, stories.length]);
 
-  const loading = !own && (status === 'idle' || status === 'loading');
+  const loading = own.length === 0 && (status === 'idle' || status === 'loading');
   // 只有一篇时不给「换一篇」：按下去还是同一篇，只会让人以为没反应
-  const canSwitch = !own && stories.length > 1;
+  const canSwitch = own.length > 1 || (own.length === 0 && stories.length > 1);
 
   /*
    * 正文还有没有没看完的部分。

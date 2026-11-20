@@ -793,7 +793,7 @@ function PinnedNotice() {
       <div className="min-w-0">
         <p className="text-[10.5px] tracking-[0.16em] text-lavender-deep">置顶 · 广场说明</p>
         <p className="mt-1 text-[11.5px] leading-[1.9] text-ink-faint">
-          🈲 请勿发布广告、引流信息、联系方式及攻击他人的内容；同时不要泄露个人住址、身份证号、电话号码等隐私✨
+          🈲 请勿发布广告、引流信息、联系方式及攻击他人的内容；同时不要泄露个人住址、身份证号、电话号码等隐私
         </p>
       </div>
     </aside>

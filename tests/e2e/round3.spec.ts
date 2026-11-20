@@ -18,12 +18,15 @@ async function openHome(page: Page) {
   await page.waitForTimeout(2200);
 }
 
+/*
+ * 管理员入口已经不在广场页上了：口令页是独立地址 /square/admin，
+ * 广场对普通访客保持干净。解锁后会被送回广场。
+ */
 async function unlockAdmin(page: Page) {
-  await page.getByRole('button', { name: '管理员入口' }).click();
-  const dialog = page.getByRole('dialog', { name: '进入管理员模式' });
-  await expect(dialog).toBeVisible();
-  await dialog.getByPlaceholder('输入口令').fill('moodbox2026');
-  await dialog.getByRole('button', { name: '进入', exact: true }).click();
+  await page.goto('/square/admin');
+  await page.getByPlaceholder('输入口令').fill('moodbox2026');
+  await page.getByRole('button', { name: '进入管理员模式' }).click();
+  await page.waitForURL('**/square');
   await expect(page.getByText('管理员模式', { exact: false }).first()).toBeVisible();
 }
 
@@ -104,17 +107,28 @@ test('点开小球：深灰紫卡片、正文居中，三个按钮都在中间�
 
   const body = panel.locator('p[aria-live="polite"]');
   await expect(body).toHaveCSS('text-align', 'center');
-  await expect(body).toHaveCSS('color', 'rgb(255, 255, 255)');
+  /*
+   * 卡片后来从「深灰紫纸」换成了玻璃卡：白天是浅底深字，星空是深底浅字。
+   * 所以这里不再钉死某个具体色值（钉死就会跟着主题一起红），只确认
+   * 文字用的是面板正文那一档字号 —— 18px 左右、行高 2.05。
+   */
+  const font = await body.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return { size: Number.parseFloat(style.fontSize), line: Number.parseFloat(style.lineHeight) };
+  });
+  expect(font.size).toBeGreaterThanOrEqual(16);
+  expect(font.line / font.size).toBeGreaterThan(1.9);
 
   await expect(panel.getByRole('button', { name: '再给我一点温暖' })).toBeVisible();
-  await expect(panel.getByRole('button', { name: '看个小故事' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: '品读片刻' })).toBeVisible();
   await expect(panel.getByRole('button', { name: '我感觉好一点了' })).toBeVisible();
 
-  // 看故事不离开当前页面，也不新开第二个弹层
+  // 品读不离开当前页面，也不新开第二个弹层
   const url = page.url();
-  await panel.getByRole('button', { name: '看个小故事' }).click();
-  await expect(panel.getByRole('button', { name: '换一篇' })).toBeVisible();
-  await expect(panel.locator('h3')).toBeVisible();
+  await panel.getByRole('button', { name: '品读片刻' }).click();
+  await expect(panel.locator('h3')).toHaveText('用你喜欢的方式度过一生');
+  // 焦虑球只有这一篇，按「换一篇」还是它，所以这个按钮不该出现
+  await expect(panel.getByRole('button', { name: '换一篇' })).toHaveCount(0);
   expect(page.url()).toBe(url);
   await expect(page.getByRole('dialog')).toHaveCount(1);
 
@@ -198,8 +212,12 @@ test('心事信箱：在卡片里写一封并封存', async ({ page }) => {
 
 /* ---------------- 树洞广场 ---------------- */
 
-test('树洞：新帖先进待审核，管理员放行后才出现在广场', async ({ page }) => {
-  const content = `这条只是想确认审核流程还能用 ${Date.now()}`;
+/*
+ * 审核流程已经改成「发出即公开」：广场是给人倾诉的地方，卡在待审核里等于劝退，
+ * 不合适的内容由管理员事后删除。这条用例跟着当前行为走，不再假设有审核队列。
+ */
+test('树洞：发出去就出现在广场，管理员可以直接删掉', async ({ page }) => {
+  const content = `这条只是想确认发帖流程还能用 ${Date.now()}`;
   await gotoHydrated(page, '/square');
   await expect(page.getByRole('heading', { name: '树洞广场' })).toBeVisible();
 
@@ -209,15 +227,16 @@ test('树洞：新帖先进待审核，管理员放行后才出现在广场', as
   await compose.getByRole('button', { name: '发出去' }).click();
   await expect(compose).toBeHidden();
 
-  await expect(page.getByText(content)).toHaveCount(0);
-
-  await unlockAdmin(page);
-  const pendingSection = page.locator('section[aria-labelledby="pending-title"]');
-  await expect(pendingSection.getByText(content)).toBeVisible();
-  await pendingSection.getByRole('button', { name: '放到广场' }).first().click();
-
   const squareSection = page.locator('section[aria-labelledby="square-title"]');
   await expect(squareSection.getByText(content)).toBeVisible();
+
+  // 管理员解锁后能直接删：删完广场上就不该再有这条
+  await unlockAdmin(page);
+  const post = squareSection.locator('article', { hasText: content }).first();
+  await post.getByRole('button', { name: '删除这条帖子' }).click();
+  const confirm = page.getByRole('dialog', { name: '删除这条帖子？' });
+  await confirm.getByRole('button', { name: '删除', exact: true }).click();
+  await expect(squareSection.getByText(content)).toHaveCount(0);
 });
 
 test('树洞：出现自伤相关表达时先弹出温馨提示，但不拦截发布', async ({ page }) => {
@@ -270,19 +289,15 @@ test('回归：在弹窗里连续打字，焦点不会跑到右上角的关闭�
   const dialog = page.getByRole('dialog', { name: '写一条' });
   await expect(dialog).toBeVisible();
 
-  const nickname = dialog.getByPlaceholder('匿名的人');
+  /*
+   * 昵称已经从发帖弹窗里拆出去（单独一张「我的昵称」卡，一天能改两次），
+   * 这里改成在正文里连续打字确认焦点：每个字符间隔 120ms，
+   * 旧实现会在每次重渲染后约 80ms 把焦点抢到关闭按钮。
+   */
   const content = dialog.getByPlaceholder('今天发生了什么？不用说得很完整。');
-
-  await nickname.click();
-  // 每个字符间隔 120ms：旧实现会在每次重渲染后约 80ms 把焦点抢到关闭按钮
-  await page.keyboard.type('xiaoyu', { delay: 120 });
-
-  await expect(nickname).toBeFocused();
-  await expect(nickname).toHaveValue('xiaoyu');
-
-  // 换到正文，确认焦点也能稳定停在这个输入框里
   await content.click();
   await page.keyboard.type('今天还行', { delay: 120 });
+
   await expect(content).toBeFocused();
   await expect(content).toHaveValue('今天还行');
 });

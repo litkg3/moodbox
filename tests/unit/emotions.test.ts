@@ -39,9 +39,10 @@ describe('情绪内容库', () => {
     expect(exam?.messages.join('')).not.toContain('感到痛苦说明你在进步');
   });
 
-  it('焦虑球带一篇「看个小故事」专属故事，整段不拆', () => {
+  it('焦虑球带一篇「品读片刻」专属故事，整段不拆', () => {
     const anxiety = EMOTIONS.find((emotion) => emotion.id === 'anxiety');
-    const story = anxiety?.story;
+    expect(anxiety?.stories).toHaveLength(1);
+    const story = anxiety?.stories?.[0];
     expect(story).toBeTruthy();
     expect(story?.title).toBe('用你喜欢的方式度过一生');
     // 整段：四个层次都要在同一段正文里，不能拆成 messages 那样的短句
@@ -60,16 +61,28 @@ describe('情绪内容库', () => {
     expect(story?.content.length).toBeGreaterThan(250);
   });
 
-  it('难过球与痛苦球共用同一篇随笔，四段不拆', () => {
+  it('难过球与痛苦球各带同样的两篇随笔，顺序与正文一致', () => {
     const sadness = EMOTIONS.find((emotion) => emotion.id === 'sadness');
     const pain = EMOTIONS.find((emotion) => emotion.id === 'pain');
-    expect(sadness?.story).toBeTruthy();
-    expect(pain?.story).toBeTruthy();
-    expect(sadness?.story?.title).toBe('和解式胜利');
-    // 同一段话出现在两颗球上，正文必须一模一样，否则就是改了一处忘了另一处
-    expect(pain?.story?.content).toBe(sadness?.story?.content);
+    expect(sadness?.stories).toHaveLength(2);
+    expect(pain?.stories).toHaveLength(2);
 
-    const paragraphs = sadness?.story?.content.split('\n\n') ?? [];
+    // 顺序是作者排的：先「停止反复咀嚼」，再「和解式胜利」
+    expect(sadness?.stories?.map((item) => item.title)).toEqual([
+      '不要反复咀嚼令你痛苦的事情',
+      '和解式胜利',
+    ]);
+    expect(pain?.stories?.map((item) => item.title)).toEqual([
+      '不要反复咀嚼令你痛苦的事情',
+      '和解式胜利',
+    ]);
+    // 同一段话出现在多颗球上，正文必须一模一样，否则就是改了一处忘了另一处
+    expect(pain?.stories?.[0]?.content).toBe(sadness?.stories?.[0]?.content);
+    expect(pain?.stories?.[1]?.content).toBe(sadness?.stories?.[1]?.content);
+
+    const reconcile = sadness?.stories?.[1]?.content ?? '';
+    const paragraphs = reconcile.split('\n\n');
+    expect(paragraphs).toHaveLength(4);
     expect(paragraphs).toHaveLength(4);
     const [first = '', second = '', third = '', fourth = ''] = paragraphs;
     // 起笔认输：对抗注定失败
@@ -84,9 +97,49 @@ describe('情绪内容库', () => {
     expect(fourth.endsWith('都是你灵魂的礼物。”')).toBe(true);
   });
 
-  it('只有焦虑、难过、痛苦带专属故事，别的球仍然从故事集里抽', () => {
-    const withStory = EMOTIONS.filter((emotion) => emotion.story);
-    expect(withStory.map((emotion) => emotion.id)).toEqual(['anxiety', 'sadness', 'pain']);
+  it('「不要反复咀嚼令你痛苦的事情」：四段，从深夜的自我怀疑落到 it will pass', () => {
+    const ri = EMOTIONS.find((emotion) => emotion.id === 'sadness')?.stories?.[0];
+    expect(ri?.title).toBe('不要反复咀嚼令你痛苦的事情');
+    const paragraphs = (ri?.content ?? '').split('\n\n');
+    expect(paragraphs).toHaveLength(4);
+    expect(paragraphs[0]).toContain('夜深人静时浮现在我的脑海里');
+    expect(paragraphs[0]?.endsWith('我的生活才能真正明朗起来。')).toBe(true);
+    // 第二段只放那一句引用，独立成段
+    expect(paragraphs[1]).toContain('专注于你的需要、感受和请求');
+    expect(paragraphs[2]).toContain('课题分离');
+    expect(paragraphs[2]).toContain('摆弄花草');
+    expect(paragraphs[3]).toContain('It will pass');
+    expect(paragraphs[3]?.endsWith('就事过翻篇吧。')).toBe(true);
+
+    // 三颗球共用这一篇（痛苦、难过、分别各一份），正文同源
+    for (const id of ['sadness', 'pain', 'parting'] as const) {
+      const emotion = EMOTIONS.find((item) => item.id === id);
+      expect(emotion?.stories?.[0]?.title).toBe('不要反复咀嚼令你痛苦的事情');
+      expect(emotion?.stories?.[0]?.content).toBe(ri?.content);
+    }
+  });
+
+  it('分别球多一篇道谢的随笔：三段，收在「心里住着草木」', () => {
+    const parting = EMOTIONS.find((emotion) => emotion.id === 'parting');
+    expect(parting?.stories).toHaveLength(2);
+    const thanks = parting?.stories?.[1];
+    expect(thanks?.title).toBe('生命如此神奇，竟让我遇见你');
+    const paragraphs = (thanks?.content ?? '').split('\n\n');
+    expect(paragraphs).toHaveLength(3);
+    expect(paragraphs[0]).toBe('我真诚地感谢出现在我生命中的每一个人。');
+    expect(paragraphs[1]).toContain('你们每一个人都是构成我生命的一部分');
+    expect(paragraphs[1]?.endsWith('而他竟将你们带到我身边。')).toBe(true);
+    expect(paragraphs[2]).toBe('我的心里住着草木，浇灌以光阴和泪珠。');
+  });
+
+  it('只有焦虑、难过、痛苦、分别带专属故事，别的球仍然从故事集里抽', () => {
+    const withStory = EMOTIONS.filter((emotion) => (emotion.stories?.length ?? 0) > 0);
+    expect(withStory.map((emotion) => emotion.id)).toEqual([
+      'anxiety',
+      'sadness',
+      'pain',
+      'parting',
+    ]);
   });
 
   /*
