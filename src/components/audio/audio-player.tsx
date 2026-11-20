@@ -16,12 +16,43 @@ import { cn } from '@/lib/utils';
 export function AudioPlayer() {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const { status, volume, message, toggle, setVolume, audioRef, onAudioError, onAudioPlaying, onAudioPause } =
-    useAmbientAudio();
+  const {
+    status,
+    volume,
+    message,
+    toggle,
+    setVolume,
+    audioRef,
+    onAudioError,
+    onAudioPlaying,
+    onAudioPause,
+    onAudioStalled,
+    onAudioEnded,
+  } = useAmbientAudio();
 
   const isPlaying = status === 'playing';
   const isLoading = status === 'loading';
   const isMissing = status === 'missing';
+
+  /*
+   * 进度停住的两个事件只能原生绑定。
+   *
+   * `stalled` 与 `waiting` 不冒泡，React 17 之后也不会再把它们代理到根节点，
+   * 所以 JSX 里的 onStalled / onWaiting 永远不会被调用。这里直接 addEventListener，
+   * 而且只挂一次（回调本身是稳定引用，不必进依赖数组）。
+   */
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return undefined;
+    const handle = () => onAudioStalled();
+    audio.addEventListener('stalled', handle);
+    audio.addEventListener('waiting', handle);
+    return () => {
+      audio.removeEventListener('stalled', handle);
+      audio.removeEventListener('waiting', handle);
+    };
+  }, [audioRef, onAudioStalled]);
+
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
@@ -51,6 +82,16 @@ export function AudioPlayer() {
         onError={onAudioError}
         onPlaying={onAudioPlaying}
         onPause={onAudioPause}
+        /*
+         * 卡住的两种来源：进度停住（切后台 / 断网 / 休眠唤醒）和
+         * loop 偶发失效后停在结尾。两个都接上，才有机会自己恢复。
+         *
+         * 注意：`stalled` / `waiting` 必须是**原生监听**（见下面的 effect）。
+         * React 17 起不再把事件统一代理到根节点，而这两个事件本身不冒泡，
+         * 写成 onStalled={...} 是绑不上的 —— 属性根本不会挂到元素上，
+         * 表现就是「逻辑写了、永远不触发」，比报错更难查。
+         */
+        onEnded={onAudioEnded}
         aria-hidden="true"
       />
 
@@ -174,10 +215,7 @@ export function AudioPlayer() {
             </div>
 
             <p className="mt-4 text-[11px] leading-[1.8] text-ink-ghost">
-              {message ??
-                (isPlaying
-                  ? '音乐会在站内页面之间持续播放。'
-                  : '首次访问不会自动播放，需要你亲手点开。')}
+              {message ?? (isPlaying ? '音乐会在站内页面之间持续播放。' : '点一下左边的圆钮开始播放。')}
             </p>
 
             {isMissing ? (

@@ -7,7 +7,11 @@ import {
   AUDIO_TRACK,
   DEFAULT_AUDIO_PREFERENCE,
   FADE_DURATION,
+  PLAY_ATTEMPT_TIMEOUT_MS,
   PLAY_WATCHDOG_MS,
+  STALL_JUMP_SECONDS,
+  STALL_PROBE_MS,
+  STALL_RESUME_DELAY_MS,
   type AudioPreference,
 } from '@/lib/audio-config';
 
@@ -25,6 +29,8 @@ export interface AmbientAudioControls {
   onAudioError: () => void;
   onAudioPlaying: () => void;
   onAudioPause: () => void;
+  onAudioStalled: () => void;
+  onAudioEnded: () => void;
 }
 
 function readPreference(): AudioPreference {
@@ -58,7 +64,27 @@ function isTransientPlaybackError(name: string): boolean {
   return name === 'AbortError' || name === 'NotSupportedError' || name === '';
 }
 
+/** `play()` 永远不 settle 时用来打破等待的假错误，只在本模块内部使用 */
+const GIVE_UP = 'MoodBoxGaveUp';
+
 const RETRY_DELAY_MS = 160;
+
+/** 把 promise 与超时赛跑：`play()` 偶发不 resolve，不做这层兜底会永远停在「准备中」 */
+function withTimeout<T>(task: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(GIVE_UP)), ms);
+    task.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        window.clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
+}
 
 /**
  * 背景音乐控制。
@@ -68,15 +94,29 @@ const RETRY_DELAY_MS = 160;
  * - 播放失败（例如音源尚未放置）进入 missing 状态并给出说明，不抛错、不阻塞界面；
  * - 音源缺失在 <audio> 预载元数据时就会暴露，不必等到用户点播放才发现。
  *
- * 这版针对「点了要等很久」「偶尔点了没反应」做了三件事：
+ * ## 为什么「点了会卡住」
  *
- * 1. **提前缓冲**：`<audio preload="auto">` + 首个用户手势补一次 `load()`。
- *    Safari 会无视 preload，等到手势才肯真的拉流，这一步把等待挪到点击之前；
- * 2. **不再互相打架**：播放与暂停各自持有一个「代次」，淡出结束时若代次已经变了
- *    （用户又点开了），那次 `pause()` 直接作废 —— 之前会出现「点了播放，
- *    1.4 秒后自己停住」；
- * 3. **失败重试一次**：`play()` 被 AbortError 打断是常见竞态，隔一帧再试；
- *    仍然失败才判定音源有问题。
+ * 卡住指的是：点了播放，徽标一直停在「准备中」，没有声音也没有报错。
+ * `play()` 返回的是一个可能**永远不 resolve** 的 promise —— 网络半途断了、
+ * 浏览器决定再等等、或者它被上一轮收尾挂住，都会这样，而 `play()` 不 resolve
+ * 就不会走到 catch。原来的实现只有「超时 5 秒」一条兜底，且只在自增代次
+ * 匹配时才生效，于是连点几次就能让它彻底哑掉。
+ *
+ * 现在按四层兜住，每一层都保证「一定会走到一个终态」：
+ *
+ * 1. **锁住重复点击**：一次尝试没结束之前，再点只当作「再催一下」，
+ *    不并发开第二条 `play()`；
+ * 2. **play() 本身带超时**（`PLAY_ATTEMPT_TIMEOUT_MS`）：不 resolve 就当失败，
+ *    并记下这一次是「超时」而不是「没有音源」；
+ * 3. **超时就重置元素再试**：`load()` 一次把半死的连接扔掉，
+ *    但**只在真的超时时才这么做** —— 上次的写法是「只要 error 存在就 load()」，
+ *    它会在正常播放中反复打断自己；
+ * 4. **判断缺失要看证据**：只有 `error.code` 是媒体级错误（MEDIA_ERR_*）
+ *    才算「音源不可用」。超时、被拦、被上一次打断一律不当成没有文件。
+ *
+ * 播放中还有两个卡点：进度停住（stalled / waiting 超过 `STALL_PROBE_MS`）
+ * 会先试一次重连，播放位置没动过且已经又过了一个探测窗口，就提示可以直接停掉；
+ * `loop` 偶尔不生效时，`ended` 会自己回过头重播。
  */
 export function useAmbientAudio(): AmbientAudioControls {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -103,6 +143,22 @@ export function useAmbientAudio(): AmbientAudioControls {
    * 最后仍在播放）。这份意图以用户最后一次点击为准，异步结果只负责跟上。
    */
   const wantsPlayRef = useRef(false);
+  /**
+   * 正在进行的这次尝试。
+   *
+   * `pendingRef` 防重复进入（React 状态更新是异步的，连点两下会读到同一个 false）；
+   * `resumeAtRef` 是进度位置，用来判断「卡住之后是不是真的一动不动」。
+   */
+  const pendingRef = useRef(false);
+  const resumeAtRef = useRef<number | null>(null);
+  /** 上一次点播放被我们自己按超时打断了：下一次先重置元素再播 */
+  const needReloadRef = useRef(false);
+  /** 卡顿探测：有没有已经派出去的那一次 */
+  const stallProbeRef = useRef<number | null>(null);
+  /** 这一次播放有没有走过「静默重连」；重连只做一次，第二次直接提示用户 */
+  const reconnectedRef = useRef(false);
+  /** 正在 `load()` 重连：这期间进来的 stalled 不理，否则会把自己取消掉 */
+  const reconnectingRef = useRef(false);
 
   // 读取音量偏好（不自动开启播放）
   useEffect(() => {
@@ -114,6 +170,13 @@ export function useAmbientAudio(): AmbientAudioControls {
     if (audio) audio.volume = 0;
   }, []);
 
+  const clearStallProbe = useCallback(() => {
+    if (stallProbeRef.current !== null) {
+      window.clearTimeout(stallProbeRef.current);
+      stallProbeRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       if (fadeTimerRef.current !== null) {
@@ -123,6 +186,10 @@ export function useAmbientAudio(): AmbientAudioControls {
       if (watchdogRef.current !== null) {
         window.clearTimeout(watchdogRef.current);
         watchdogRef.current = null;
+      }
+      if (stallProbeRef.current !== null) {
+        window.clearTimeout(stallProbeRef.current);
+        stallProbeRef.current = null;
       }
     };
   }, []);
@@ -168,9 +235,30 @@ export function useAmbientAudio(): AmbientAudioControls {
   const markMissing = useCallback(() => {
     const audio = audioRef.current;
     if (audio && !audio.paused) audio.pause();
+    clearStallProbe();
+    pendingRef.current = false;
     setStatus('missing');
     setEnabled(false);
     setMessage(AUDIO_MISSING_MESSAGE);
+  }, [clearStallProbe]);
+
+  /**
+   * 音源是不是**真的**不可用。
+   *
+   * 只认 `error.code`：断网或超时之后 `audio.error` 可能还挂着上一次的旧值，
+   * 拿它当判据会误报「没有文件」。NETWORK_NO_SOURCE 作为补充 —— 那是
+   * 浏览器确定「这个 src 找不到可播放的资源」。
+   */
+  const isSourceBroken = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return false;
+    // MEDIA_ERR_SRC_NOT_SUPPORTED = 4（TS 的 lib 里只声明了 NETWORK_* 常量，这里写字面量并注明）
+    const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
+    const code = audio.error?.code ?? 0;
+    return (
+      code === MEDIA_ERR_SRC_NOT_SUPPORTED ||
+      audio.networkState === HTMLMediaElement.NETWORK_NO_SOURCE
+    );
   }, []);
 
   /**
@@ -181,25 +269,38 @@ export function useAmbientAudio(): AmbientAudioControls {
     if (!audio) return false;
 
     const gen = ++generationRef.current;
+    pendingRef.current = true;
+    reconnectedRef.current = false;
     setMessage(null);
     /**
      * 已经缓冲够了就别闪「准备中」——
      * 这一下本来就是从点击到出声，多一个状态只会让人以为又要等。
      */
     if (audio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) setStatus('loading');
+    resumeAtRef.current = audio.currentTime;
     audio.volume = 0;
 
-    // 上一次加载失败过（用户可能刚把文件放进来），先重置再试
-    if (audio.error) audio.load();
+    // 上一次是被我们自己按超时打断的：连接多半已经半死，重置一次再播
+    if (needReloadRef.current) {
+      needReloadRef.current = false;
+      try {
+        audio.load();
+      } catch {
+        // 重置失败就直接播，下面还有超时兜着
+      }
+    }
 
     clearWatchdog();
     watchdogRef.current = window.setTimeout(() => {
       watchdogRef.current = null;
       if (gen !== generationRef.current) return;
       // 超时后区分「确实没有音源」和「网络慢还在缓冲」
-      if (audio.error || audio.networkState === HTMLMediaElement.NETWORK_NO_SOURCE) {
+      clearStallProbe();
+      pendingRef.current = false;
+      if (isSourceBroken()) {
         markMissing();
       } else {
+        needReloadRef.current = true;
         setStatus('error');
         setEnabled(false);
         setMessage('音乐加载得有点慢，稍后再点一次试试。');
@@ -207,14 +308,15 @@ export function useAmbientAudio(): AmbientAudioControls {
     }, PLAY_WATCHDOG_MS);
 
     try {
-      await audio.play();
+      await withTimeout(audio.play(), PLAY_ATTEMPT_TIMEOUT_MS);
     } catch (error) {
       const name = error instanceof Error ? error.name : '';
       // NotAllowedError：浏览器拦截了自动播放（本设计里只会出现在用户手势之外）
       if (name === 'NotAllowedError') {
         clearWatchdog();
         if (gen === generationRef.current) {
-          setStatus('paused');
+          pendingRef.current = false;
+              setStatus('paused');
           setEnabled(false);
           setMessage('浏览器拦截了这次播放，请再点一次音乐按钮。');
         }
@@ -228,15 +330,43 @@ export function useAmbientAudio(): AmbientAudioControls {
         await new Promise((resolve) => window.setTimeout(resolve, RETRY_DELAY_MS));
         if (gen !== generationRef.current) return false;
         try {
-          await audio.play();
-        } catch {
+          await withTimeout(audio.play(), PLAY_ATTEMPT_TIMEOUT_MS);
+        } catch (retryError) {
           clearWatchdog();
-          if (gen === generationRef.current) markMissing();
+          if (gen === generationRef.current) {
+            const retryName = retryError instanceof Error ? retryError.name : '';
+            pendingRef.current = false;
+                  if (isSourceBroken()) {
+              markMissing();
+            } else {
+              // 包括我们自己的超时：给一句「再点一次」，而不是假装还在准备
+              needReloadRef.current = retryName === GIVE_UP;
+              setStatus('error');
+              setEnabled(false);
+              setMessage('音乐没能开始播放，再点一次试试。');
+            }
+          }
           return false;
         }
       } else {
         clearWatchdog();
-        if (gen === generationRef.current) markMissing();
+        if (gen === generationRef.current) {
+          pendingRef.current = false;
+          if (isSourceBroken()) {
+            markMissing();
+          } else {
+            /*
+             * 走到这里说明「文件是好的，只是这一次没播起来」——
+             * 可能是我们的 play() 超时，也可能是浏览器自己拒了。
+             * 一律说「再点一次」，绝不说「没能加载」：后者会把一次网络抖动
+             * 说成文件不存在，用户会以为音乐坏了，再也不会去点第二次。
+             */
+            needReloadRef.current = name === GIVE_UP;
+            setStatus('error');
+            setEnabled(false);
+            setMessage('音乐没能开始播放，再点一次试试。');
+          }
+        }
         return false;
       }
     }
@@ -252,18 +382,23 @@ export function useAmbientAudio(): AmbientAudioControls {
     }
 
     clearWatchdog();
+    pendingRef.current = false;
     setStatus('playing');
     setEnabled(true);
+    setMessage(null);
     fadeTo(volumeRef.current);
     return true;
-  }, [clearWatchdog, fadeTo, markMissing]);
+  }, [clearStallProbe, clearWatchdog, fadeTo, isSourceBroken, markMissing]);
 
   const stopPlayback = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
     const gen = ++generationRef.current;
     wantsPlayRef.current = false;
+    reconnectedRef.current = false;
     clearWatchdog();
+    clearStallProbe();
+    pendingRef.current = false;
     setEnabled(false);
 
     // 还没出声（点播放后仍在准备中）：直接回到暂停，不用等淡出
@@ -280,10 +415,18 @@ export function useAmbientAudio(): AmbientAudioControls {
       audio.volume = 0;
       setStatus((prev) => (prev === 'missing' ? prev : 'paused'));
     });
-  }, [clearWatchdog, fadeTo]);
+  }, [clearStallProbe, clearWatchdog, fadeTo]);
 
   const toggle = useCallback(() => {
-    // 以「用户上一次想要什么」为准：准备中点一下就是取消，而不是再开一次
+    /*
+     * 准备中再点一下 = 取消（用户想要什么以上一次点击为准），
+     * 但不能并发开第二条 play()：那正是「卡住」的来源之一。
+     */
+    if (pendingRef.current) {
+      stopPlayback();
+      writePreference({ enabled: false, volume: volumeRef.current });
+      return;
+    }
     if (wantsPlayRef.current) {
       stopPlayback();
       writePreference({ enabled: false, volume: volumeRef.current });
@@ -316,12 +459,103 @@ export function useAmbientAudio(): AmbientAudioControls {
   }, [markMissing]);
 
   const onAudioPlaying = useCallback(() => {
+    clearStallProbe();
+    reconnectedRef.current = false;
+    pendingRef.current = false;
     setStatus('playing');
     setMessage(null);
-  }, []);
+  }, [clearStallProbe]);
 
   const onAudioPause = useCallback(() => {
     setStatus((prev) => (prev === 'missing' ? prev : 'paused'));
+  }, []);
+
+  /**
+   * 播放中进度停住了。
+   *
+   * `stalled` / `waiting` 在切后台、切网络、休眠唤醒之后都会来一发，
+   * 多数时候浏览器自己会接上。所以这里不立刻报警，而是过 `STALL_PROBE_MS`
+   * 看一眼播放位置：
+   *
+   * 1. 位置不动的**第一次** —— 先**静默**重连一次：`load()` 掉半死的连接，
+   *    把播放位置放回去再 play。这一步不打扰用户，多数情况下就恢复了；
+   * 2. 还不动 —— 之后每过一个窗口再看一眼，位置始终不动就提示
+   *    「卡住了，点一下音乐按钮可以关掉重开」。
+   *
+   * 注意这里**不看 `audio.paused`**：见过最难查的一种卡住，是 paused 已经是
+   * true 而界面还挂着「播放中」—— 拿 paused 当判据会让这条路径永远不触发。
+   * 只认「进度有没有往前走」这一件事实。
+   *
+   * 关键是**永远给用户一条明确的出路**，而不是让徽标一直挂着「播放中」却没声音。
+   */
+  const onAudioStalled = useCallback(() => {
+    /*
+     * 重连过程中 `load()` 会同步派发 `stalled`，那一次不该被当成「又卡了一次」
+     * 去取消探测 —— 否则重连之后就再也没有下文。
+     */
+    if (reconnectingRef.current) return;
+    clearStallProbe();
+    if (!wantsPlayRef.current) return;
+
+    /** 一轮探测：位置没动就重连一次，还不动就提示用户 */
+    const probe = () => {
+      stallProbeRef.current = null;
+      const audio = audioRef.current;
+      if (!audio || !wantsPlayRef.current) return;
+
+      const at = audio.currentTime;
+      const anchor = resumeAtRef.current;
+      // 位置在往前走：缓冲慢了一下而已，把锚点挪到现在，结束这一轮
+      if (anchor !== null && at > anchor + STALL_JUMP_SECONDS) {
+        resumeAtRef.current = at;
+        reconnectedRef.current = false;
+        return;
+      }
+
+      if (reconnectedRef.current) {
+        // 重连过还是不动：明确说一句，用户知道该点哪里
+        needReloadRef.current = true;
+        setStatus('error');
+        setMessage('音乐卡住了，点一下音乐按钮可以关掉重开。');
+        return;
+      }
+
+      // 第一次发现停住：静默重连，不告诉用户，再等一个窗口回来确认
+      reconnectedRef.current = true;
+      resumeAtRef.current = at;
+      reconnectingRef.current = true;
+      try {
+        audio.load();
+        audio.currentTime = at;
+        audio.volume = volumeRef.current;
+        void withTimeout(audio.play(), PLAY_ATTEMPT_TIMEOUT_MS).catch(() => {
+          // 失败就等下一轮探测，这里不打扰用户
+        });
+      } catch {
+        // 重连失败：下一轮探测会给出提示
+      } finally {
+        // 下一轮在重连**之后**排，`load()` 期间进来的 stalled 已经被上面的开关挡掉
+        reconnectingRef.current = false;
+        stallProbeRef.current = window.setTimeout(probe, STALL_PROBE_MS);
+      }
+    };
+
+    stallProbeRef.current = window.setTimeout(probe, STALL_PROBE_MS);
+  }, [clearStallProbe]);
+
+  /** `loop` 偶发不生效（尤其切过标签页之后）：自己回过头重播，别让音乐停在结尾 */
+  const onAudioEnded = useCallback(() => {
+    if (!wantsPlayRef.current) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+    window.setTimeout(() => {
+      if (audio.paused && wantsPlayRef.current) {
+        audio.currentTime = 0;
+        void withTimeout(audio.play(), PLAY_ATTEMPT_TIMEOUT_MS).catch(() => {
+          // 失败就停在这里，用户下次点播放时会走完整的重试
+        });
+      }
+    }, STALL_RESUME_DELAY_MS);
   }, []);
 
   /**
@@ -395,5 +629,7 @@ export function useAmbientAudio(): AmbientAudioControls {
     onAudioError,
     onAudioPlaying,
     onAudioPause,
+    onAudioStalled,
+    onAudioEnded,
   };
 }

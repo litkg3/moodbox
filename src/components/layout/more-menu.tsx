@@ -120,7 +120,12 @@ export function MoreMenu() {
                 })}
               </ul>
 
-              <div className="mt-2 flex items-center justify-between border-t border-[rgba(141,133,152,0.16)] px-1 pt-3">
+              {/*
+                主题与音乐一起靠右排，主题在音乐左边。
+                原来这里用 justify-between 把两者顶到两端，主题单独落在左边，
+                看起来像是「这一行的标题」。现在它们是一组工具，靠右、挨着。
+              */}
+              <div className="mt-2 flex items-center justify-end gap-2 border-t border-[rgba(141,133,152,0.16)] px-1 pt-3">
                 <ThemeToggle />
                 <AudioPlayer />
               </div>

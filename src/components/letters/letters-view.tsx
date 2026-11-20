@@ -191,7 +191,7 @@ export function LettersView({ embedded = false }: { embedded?: boolean } = {}) {
           aria-hidden="true"
         />
         <p className="text-[11.5px] leading-[1.9] text-ink-faint">
-          如果这些字里有你一个人扛不住的部分，可以试试拨打{' '}
+          如果你无法承受这些文字的重量，你可以试试拨打{' '}
           {CRISIS_RESOURCES.map((resource, index) => (
             <span key={resource.contact}>
               {index > 0 ? ' / ' : ''}
@@ -203,7 +203,7 @@ export function LettersView({ embedded = false }: { embedded?: boolean } = {}) {
               </a>
             </span>
           ))}
-          （{CRISIS_RESOURCES[0]?.note}）。
+          （24 小时免费心理援助）。
         </p>
       </div>
 

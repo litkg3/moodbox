@@ -41,5 +41,19 @@ export const DEFAULT_AUDIO_PREFERENCE: AudioPreference = {
 export const FADE_DURATION = 900;
 /** 点击播放后等待多久还没有成功出声，就认为音源不可用（毫秒）。5s 够慢网络缓冲，也不至于让人干等 */
 export const PLAY_WATCHDOG_MS = 5000;
+/**
+ * `play()` 本身多久不 resolve 就放弃这一次（毫秒）。
+ *
+ * 这个值必须**短于** PLAY_WATCHDOG_MS：先由它把「永远不 resolve 的 play()」
+ * 变成一个可处理的失败，watchdog 才有机会区分「超时」和「没有音源」。
+ * 不设这一层的话，界面会一直停在「准备中」，也就是用户说的「卡住」。
+ */
+export const PLAY_ATTEMPT_TIMEOUT_MS = 3500;
+/** 播放中进度停住后，等多久回头看一眼播放位置（毫秒） */
+export const STALL_PROBE_MS = 4000;
+/** 静默重连之后，隔多久让浏览器接着放（毫秒） */
+export const STALL_RESUME_DELAY_MS = 240;
+/** 判定「播放位置在动」的容差（秒）：小于它就算没动 */
+export const STALL_JUMP_SECONDS = 0.05;
 /** 音源加载失败时给用户看的说明（路径提示由播放器面板单独渲染） */
 export const AUDIO_MISSING_MESSAGE = '这段音乐没能加载出来，检查一下网络，稍后再试。';

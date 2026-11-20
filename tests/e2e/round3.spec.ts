@@ -86,6 +86,38 @@ test('移动端：右上角只有主页与更多，八个入口都收在更多�
   expect(overflow).toBeLessThanOrEqual(1);
 });
 
+/*
+ * 移动端「更多」面板底部那一行工具。
+ *
+ * 需求是把主题按钮放到右边、且挨在音乐按钮左边。原来两者被 justify-between
+ * 顶到两端，主题孤零零落在左边，看起来像是那一行的标题。
+ * 这里量的是**位置关系**而不是类名：主题的右边不能越过音乐的左边，
+ * 且两者都靠面板右半边 —— 布局怎么改，只要这层关系在就仍然成立。
+ */
+test('移动端更多面板：主题按钮在音乐按钮左边，且两个都靠右', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openHome(page);
+  await page.getByRole('button', { name: '更多' }).click();
+
+  const menu = page.getByRole('menu', { name: '更多功能' });
+  await expect(menu).toBeVisible();
+
+  const theme = menu.getByRole('button', { name: /切换到(星空|白日)模式/ });
+  const music = menu.getByRole('button', { name: /背景音乐|打开背景音乐/ });
+  const themeBox = await theme.boundingBox();
+  const musicBox = await music.boundingBox();
+  const menuBox = await menu.boundingBox();
+  expect(themeBox && musicBox && menuBox).toBeTruthy();
+  if (!themeBox || !musicBox || !menuBox) return;
+
+  // 主题在音乐左边：它的右边缘不越过音乐的左边缘
+  expect(themeBox.x + themeBox.width).toBeLessThanOrEqual(musicBox.x + 1);
+  // 两个都落在面板右半边
+  const middle = menuBox.x + menuBox.width / 2;
+  expect(themeBox.x).toBeGreaterThan(middle);
+  expect(musicBox.x).toBeGreaterThan(middle);
+});
+
 /* ---------------- 主题 ---------------- */
 
 test('可以在白日与星空之间手动切换，并且记住选择', async ({ page }) => {
@@ -234,6 +266,44 @@ test('心事信箱：在卡片里写一封并封存', async ({ page }) => {
   await expect(box.getByText('未拆').first()).toBeVisible();
 });
 
+/* ---------------- 心事信箱的热线文案 ---------------- */
+
+/*
+ * 心事信箱底部那句求助提示。
+ *
+ * 它常驻在卡片里（不靠关键词触发），读的人多半已经写了一段很重的话，
+ * 所以措辞改过一次：从「这些字里有你一个人扛不住的部分」换成
+ * 「如果你无法承受这些文字的重量」。这句改的是语气，不是功能，
+ * 最容易被顺手改回去，所以逐字钉住。
+ */
+test('心事信箱：底部求助提示是当前这句话，三个号码都能拨', async ({ page }) => {
+  await openHome(page);
+  await page
+    .getByRole('navigation', { name: '功能导航' })
+    .getByRole('button', { name: '心事信箱' })
+    .click();
+
+  const card = page.getByRole('dialog', { name: '心事信箱' });
+  await expect(card).toBeVisible();
+
+  await expect(
+    card.getByText('如果你无法承受这些文字的重量，你可以试试拨打', { exact: false }),
+  ).toBeVisible();
+  await expect(card.getByText('如果你无法承受这些文字的重量，你可以试试拨打', { exact: false })).toContainText(
+    '24 小时免费心理援助',
+  );
+  // 旧措辞不该留下
+  await expect(card.getByText('你一个人扛不住', { exact: false })).toHaveCount(0);
+
+  // 三个号码仍然是可拨打的 tel: 链接
+  for (const number of ['12356', '010-82951332', '400-161-9995']) {
+    await expect(card.getByRole('link', { name: number })).toHaveAttribute(
+      'href',
+      `tel:${number.replace(/-/g, '')}`,
+    );
+  }
+});
+
 /* ---------------- 树洞广场 ---------------- */
 
 /*
@@ -256,6 +326,12 @@ test('树洞：发帖框的引导语与框下的安全提示是当前这两句',
   ).toBeVisible();
   // 旧的那段「不是要拦你」已经删掉，别再被粘回来
   await expect(compose.getByText('那不是要拦你', { exact: false })).toHaveCount(0);
+  /*
+   * 昵称下面那句「这里改了名字，也算用掉一次改名机会」删掉了 ——
+   * 计数仍然照常生效，只是不再在发帖时解释规则。
+   */
+  await expect(compose.getByText('留空就用', { exact: false })).toBeVisible();
+  await expect(compose.getByText('也算用掉一次改名机会', { exact: false })).toHaveCount(0);
 });
 
 /*

@@ -694,7 +694,7 @@ export function SquareView() {
             />
           </label>
           <p className="-mt-1 text-[11px] leading-[1.85] text-ink-ghost">
-            留空就用「{myName}」这个名字。这里改了名字，也算用掉一次改名机会（一天两次），之后也能在广场页改。
+            留空就用「{myName}」这个名字。
             {visitor?.region
               ? `您的 IP 定位显示为「${visitor.region}」，定位结果可能存在一定偏差，仅供参考。`
               : '您发帖时会带上一个按 IP 估算的城市，定位结果可能存在一定偏差，仅供参考。'}

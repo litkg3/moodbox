@@ -104,17 +104,17 @@ export function HomeExperience() {
           {/* 标题与寄语：刻意做轻，不跟球抢视线 */}
           {/* 标题：品牌名一行，第二行直接说「点开一颗球」，比一句 slogan 更像是邀请 */}
           <motion.h1 {...fade(0.2)} className="flex flex-col items-center">
-            <span className="home-title-brand font-display text-[26px] font-light leading-none tracking-[0.2em] text-ink/70 sm:text-[32px]">
+            <span className="home-title-brand font-display text-[26px] font-light leading-none tracking-[0.2em] text-ink/85 sm:text-[32px]">
               MoodBox
             </span>
-            <span className="home-title-invite mt-4 font-display text-[15px] font-light leading-[1.9] tracking-[0.16em] text-ink/50 sm:mt-5 sm:text-[17.5px]">
+            <span className="home-title-invite mt-4 font-display text-[15px] font-light leading-[1.9] tracking-[0.16em] text-ink/70 sm:mt-5 sm:text-[17.5px]">
               点开一颗情绪球！
             </span>
           </motion.h1>
 
           <motion.p
             {...fade(0.45)}
-            className="mt-5 text-[10.5px] leading-[2.1] tracking-[0.05em] text-ink-ghost/75 sm:text-[11px]"
+            className="mt-5 text-[10.5px] leading-[2.1] tracking-[0.05em] text-ink-faint/90 sm:text-[11px]"
           >
             {HOME_BLESSING_LINES.map((line) => (
               <span key={line} className="block">
