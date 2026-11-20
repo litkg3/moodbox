@@ -7,6 +7,15 @@ import { expect, test, type Page } from '@playwright/test';
  * 面板里的三个按钮与故事阅读、捏爆后自动飞回、开心罐与心事信箱的卡片化。
  */
 
+/*
+ * 发帖框的占位符。
+ *
+ * 这句话本身也是文案的一部分（「让我也借着你的眼睛看这个世界」），
+ * 提成常量：三条用例都要用它定位输入框，写三遍改一次就容易漏。
+ */
+const COMPOSE_PLACEHOLDER =
+  '你可以随时和我分享你心里的感受，让我也懂你，让我也借着你的眼睛看这个世界。';
+
 async function gotoHydrated(page: Page, path: string) {
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('html[data-hydrated="true"]', { timeout: 45_000 });
@@ -127,10 +136,25 @@ test('点开小球：深灰紫卡片、正文居中，三个按钮都在中间�
   const url = page.url();
   await panel.getByRole('button', { name: '品读片刻' }).click();
   await expect(panel.locator('h3')).toHaveText('用你喜欢的方式度过一生');
-  // 焦虑球只有这一篇，按「换一篇」还是它，所以这个按钮不该出现
-  await expect(panel.getByRole('button', { name: '换一篇' })).toHaveCount(0);
   expect(page.url()).toBe(url);
   await expect(page.getByRole('dialog')).toHaveCount(1);
+
+  /*
+   * 焦虑球现在有两篇（先是「用你喜欢的方式度过一生」，再是「十大奢侈品」），
+   * 所以「换一篇」应该出现，而且按数组顺序翻 —— 不是随机抽，
+   * 抽的话这两篇的先后就白排了。
+   */
+  const switchStory = panel.getByRole('button', { name: '换一篇' });
+  await expect(switchStory).toBeVisible();
+  await switchStory.click();
+  await expect(panel.locator('h3')).toHaveText('这个时代的十大奢侈品');
+  // 序号是清单的骨架，正文里必须原样带着 1. 和 10.
+  await expect(panel.locator('[data-story-body]')).toContainText('1. 生命的觉醒和开悟');
+  await expect(panel.locator('[data-story-body]')).toContainText('10. 感染并点燃他人的希望');
+  // 到底了再翻，回到第一篇
+  await switchStory.click();
+  await expect(panel.locator('h3')).toHaveText('用你喜欢的方式度过一生');
+  expect(page.url()).toBe(url);
 
   await panel.getByRole('button', { name: '回到刚才' }).click();
   await expect(panel.getByRole('button', { name: '再给我一点温暖' })).toBeVisible();
@@ -213,6 +237,28 @@ test('心事信箱：在卡片里写一封并封存', async ({ page }) => {
 /* ---------------- 树洞广场 ---------------- */
 
 /*
+ * 广场页上的两句引导文案。
+ *
+ * 一句在发帖框里（邀请你说），一句在框下面（万一说到伤害自己）。
+ * 两句都很轻，容易被当成「随便改改的占位符」删掉，所以钉在这里：
+ * 占位符必须逐字等于页面上的那句，框下那句也不能再是原来那段解释。
+ */
+test('树洞：发帖框的引导语与框下的安全提示是当前这两句', async ({ page }) => {
+  await gotoHydrated(page, '/square');
+  await page.getByRole('button', { name: '写一条' }).click();
+
+  const compose = page.getByRole('dialog', { name: '写一条' });
+  await expect(compose.getByPlaceholder(COMPOSE_PLACEHOLDER)).toBeVisible();
+
+  // 框下的提示：只留一句「轻轻问一句，给予你帮助」
+  await expect(
+    compose.getByText('如果内容里出现了可能和伤害自己有关的表达，我们会在发送前轻轻问一句，给予你帮助。'),
+  ).toBeVisible();
+  // 旧的那段「不是要拦你」已经删掉，别再被粘回来
+  await expect(compose.getByText('那不是要拦你', { exact: false })).toHaveCount(0);
+});
+
+/*
  * 审核流程已经改成「发出即公开」：广场是给人倾诉的地方，卡在待审核里等于劝退，
  * 不合适的内容由管理员事后删除。这条用例跟着当前行为走，不再假设有审核队列。
  */
@@ -223,7 +269,7 @@ test('树洞：发出去就出现在广场，管理员可以直接删掉', async
 
   await page.getByRole('button', { name: '写一条' }).click();
   const compose = page.getByRole('dialog', { name: '写一条' });
-  await compose.getByPlaceholder('今天发生了什么？不用说得很完整。').fill(content);
+  await compose.getByPlaceholder(COMPOSE_PLACEHOLDER).fill(content);
   await compose.getByRole('button', { name: '发出去' }).click();
   await expect(compose).toBeHidden();
 
@@ -244,7 +290,7 @@ test('树洞：出现自伤相关表达时先弹出温馨提示，但不拦截�
   await page.getByRole('button', { name: '写一条' }).click();
   const compose = page.getByRole('dialog', { name: '写一条' });
   await compose
-    .getByPlaceholder('今天发生了什么？不用说得很完整。')
+    .getByPlaceholder(COMPOSE_PLACEHOLDER)
     .fill('最近真的不想活了，也不知道跟谁说。');
   await compose.getByRole('button', { name: '发出去' }).click();
 
@@ -294,7 +340,7 @@ test('回归：在弹窗里连续打字，焦点不会跑到右上角的关闭�
    * 这里改成在正文里连续打字确认焦点：每个字符间隔 120ms，
    * 旧实现会在每次重渲染后约 80ms 把焦点抢到关闭按钮。
    */
-  const content = dialog.getByPlaceholder('今天发生了什么？不用说得很完整。');
+  const content = dialog.getByPlaceholder(COMPOSE_PLACEHOLDER);
   await content.click();
   await page.keyboard.type('今天还行', { delay: 120 });
 

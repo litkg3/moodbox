@@ -704,7 +704,7 @@ export function SquareView() {
             <textarea
               value={draft.content}
               onChange={(event) => setDraft((prev) => ({ ...prev, content: event.target.value }))}
-              placeholder="今天发生了什么？不用说得很完整。"
+              placeholder="你可以随时和我分享你心里的感受，让我也懂你，让我也借着你的眼睛看这个世界。"
               rows={7}
               className="mb-field mt-2 resize-y leading-[2]"
               maxLength={1000}
@@ -729,8 +729,7 @@ export function SquareView() {
             </p>
           ) : (
             <p className="rounded-2xl border border-white/60 bg-white/40 px-4 py-3 text-[11.5px] leading-[1.9] text-ink-faint">
-              如果内容里出现了可能和伤害自己有关的表达，我们会在发送前先轻轻问一句。
-              那不是要拦你，只是不想装作没看见。
+              如果内容里出现了可能和伤害自己有关的表达，我们会在发送前轻轻问一句，给予你帮助。
             </p>
           )}
         </div>

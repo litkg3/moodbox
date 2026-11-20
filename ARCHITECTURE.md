@@ -483,7 +483,7 @@ createPost(draft)  →  status: 'pending'（硬编码，不接受外部传值）
 
 ## 九、可扩展点
 
-1. **新增情绪**：在 `EMOTION_IDS` 加 id → `data/emotions.ts` 补一条配置（含 15 条文案与坐标）→ 球体、面板、日历标记、统计、情绪测试的映射表自动适配，组件代码零改动。
+1. **新增情绪**：在 `EMOTION_IDS` 加 id → `data/emotions.ts` 补一条配置（含文案、`stories` 与坐标，文案条数同步写进 `MIN_MESSAGES_BY_EMOTION`）→ 球体、面板、日历标记、统计、情绪测试的映射表自动适配，组件代码零改动。
 2. **新增记忆心情标签**：`data/moods.ts` 增加一项即可，表单与卡片自动出现。
 3. **新增导航入口**：`lib/tools.ts` 的 `TOOL_ITEMS` 加一条（`kind` 选 `route` / `overlay` / `action`）—— 桌面顶部导航与移动端「更多」面板会同时出现它，不需要改两处。
 4. **接云端内容服务**：设置 `NEXT_PUBLIC_MOODBOX_API_BASE`，按 `lib/backend/http.ts` 顶部的契约实现 REST 服务即可，页面零改动。上线前必须把**审核与自伤识别搬到服务端**。
