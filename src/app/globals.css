@@ -1199,7 +1199,7 @@ html[data-theme='night'] .mb-btn-danger {
  * 300–450px。这时候不能再按「竖屏那套百分比」摆放 —— 上下两排会撞在一起。
  *
  * 做法是把 14 颗球按「之字形」重排进 x 方向 4 列、y 方向 3–4 行：
- * 中间那列稍微让开，给「让情绪有处安放」那两行字留出通道。
+ * 中间那列稍微让开，给「MoodBox / 点开一颗情绪球！」那两行字留出通道。
  * 球也整体缩小一档，让 4 列排得下 —— 一定要窄于屏幕，否则左右两侧会被切边。
  * 每一颗球都有独立的 x / y，全部落在 5%–95% 内，不会顶到页头和屏幕上沿。
  */
@@ -1231,14 +1231,22 @@ html[data-theme='night'] .mb-btn-danger {
  * 目标只有一个：**一颗都不少**，而且谁都不压谁。
  */
 @media (max-height: 519px) {
-  .home-stage .home-copy h1 {
-    font-size: 15px;
-    line-height: 1.6;
-    letter-spacing: 0.1em;
+  /*
+   * 标题现在是「品牌 + 一句邀请」两行，字号写在两个 span 上，
+   * 光改 h1 的 font-size 已经管不到它们 —— 矮屏得点名压到这两行上，
+   * 否则 32px 的 MoodBox 会横穿中间那条留给文字的通道。
+   */
+  .home-stage .home-copy h1 .home-title-brand {
+    font-size: 17px;
+    line-height: 1.5;
+    letter-spacing: 0.14em;
   }
 
-  .home-stage .home-copy h1 br {
-    display: none;
+  .home-stage .home-copy h1 .home-title-invite {
+    margin-top: 2px;
+    font-size: 12px;
+    line-height: 1.5;
+    letter-spacing: 0.1em;
   }
 
   .home-stage .home-copy p {

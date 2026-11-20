@@ -14,25 +14,29 @@ describe('情绪内容库', () => {
     expect(validateEmotionLibrary()).toEqual({ ok: true, problems: [] });
   });
 
-  it('焦虑球的面板短句：原来 8 条 + 允许焦虑的 2 条 + 新追加 1 条（共 11 条）', () => {
+  it('焦虑球的面板短句：原来 8 条 + 允许焦虑的 2 条 + 新追加 1 条，挪走 1 条后共 10 条', () => {
     const anxiety = EMOTIONS.find((emotion) => emotion.id === 'anxiety');
-    expect(anxiety?.messages).toHaveLength(11);
+    expect(anxiety?.messages).toHaveLength(10);
     expect(anxiety?.messages[0]).toBe('当你真心渴望某样东西时，整个宇宙都会联合起来助你实现愿望。');
-    // 新增的两条追加在末尾：一条讲「允许焦虑」，一条讲「给悬而未决留点耐心」
-    expect(anxiety?.messages[8]).toContain('允许焦虑的出现');
-    expect(anxiety?.messages[9]).toContain('悬而未决');
+    // 两条追加：一条讲「允许焦虑」，一条讲「给悬而未决留点耐心」
+    expect(anxiety?.messages.some((message) => message.includes('允许焦虑的出现'))).toBe(true);
+    expect(anxiety?.messages.some((message) => message.includes('悬而未决'))).toBe(true);
     // 最后补上的一条：世俗的标准答案 vs. 自己的人生体验
-    expect(anxiety?.messages[10]).toBe('世俗给了我们很多标准答案。可人生，是独属于自己的体验。');
+    expect(anxiety?.messages.at(-1)).toBe('世俗给了我们很多标准答案。可人生，是独属于自己的体验。');
+    // 「以渺小而坚定的信念对抗盛大而迷茫的空虚」讲的是迷茫，已经挪去迷茫球
+    expect(anxiety?.messages.join('')).not.toContain('以渺小而坚定的信念');
   });
 
-  it('备考球在原来 14 条之后追加了 2 条（共 16 条）', () => {
+  it('备考球：原来 14 条 + 追加 2 条 - 删掉「感到痛苦说明你在进步」，共 15 条', () => {
     const exam = EMOTIONS.find((emotion) => emotion.id === 'exam');
-    expect(exam?.messages).toHaveLength(16);
-    expect(exam?.messages[14]).toBe('恰同学少年，风华正茂！');
-    expect(exam?.messages[15]).toContain('愿意反复靠近一件事');
+    expect(exam?.messages).toHaveLength(15);
+    expect(exam?.messages[13]).toBe('恰同学少年，风华正茂！');
+    expect(exam?.messages[14]).toContain('愿意反复靠近一件事');
     // 追加不是替换：原来那条「得偿所愿」和「impossible」都得在
     expect(exam?.messages).toContain('祝你得偿所愿！');
     expect(exam?.messages.some((message) => message.includes("I'm possible"))).toBe(true);
+    // 这句被点名删掉：备考的痛苦不该被一句「说明你在进步」带过
+    expect(exam?.messages.join('')).not.toContain('感到痛苦说明你在进步');
   });
 
   it('焦虑球带一篇「看个小故事」专属故事，整段不拆', () => {
@@ -56,9 +60,33 @@ describe('情绪内容库', () => {
     expect(story?.content.length).toBeGreaterThan(250);
   });
 
-  it('只有焦虑球带专属故事，别的球仍然从故事集里抽', () => {
+  it('难过球与痛苦球共用同一篇随笔，四段不拆', () => {
+    const sadness = EMOTIONS.find((emotion) => emotion.id === 'sadness');
+    const pain = EMOTIONS.find((emotion) => emotion.id === 'pain');
+    expect(sadness?.story).toBeTruthy();
+    expect(pain?.story).toBeTruthy();
+    expect(sadness?.story?.title).toBe('和解式胜利');
+    // 同一段话出现在两颗球上，正文必须一模一样，否则就是改了一处忘了另一处
+    expect(pain?.story?.content).toBe(sadness?.story?.content);
+
+    const paragraphs = sadness?.story?.content.split('\n\n') ?? [];
+    expect(paragraphs).toHaveLength(4);
+    const [first = '', second = '', third = '', fourth = ''] = paragraphs;
+    // 起笔认输：对抗注定失败
+    expect(first).toContain('注定失败的战争');
+    expect(first).toContain('和解式胜利');
+    // 第二段：白熊效应
+    expect(second).toContain('白熊效应');
+    // 第三段：悉达多与并肩而坐
+    expect(third.startsWith('悉达多说')).toBe(true);
+    expect(third).toContain('并肩而坐');
+    // 收尾：让这阵风穿过你
+    expect(fourth.endsWith('都是你灵魂的礼物。”')).toBe(true);
+  });
+
+  it('只有焦虑、难过、痛苦带专属故事，别的球仍然从故事集里抽', () => {
     const withStory = EMOTIONS.filter((emotion) => emotion.story);
-    expect(withStory.map((emotion) => emotion.id)).toEqual(['anxiety']);
+    expect(withStory.map((emotion) => emotion.id)).toEqual(['anxiety', 'sadness', 'pain']);
   });
 
   /*
@@ -76,6 +104,16 @@ describe('情绪内容库', () => {
     expect(joy?.messages.join('')).not.toContain('把这份开心存进盒子里');
   });
 
+  it('孤独球末句改成「与自己相处」', () => {
+    const loneliness = EMOTIONS.find((emotion) => emotion.id === 'loneliness');
+    expect(loneliness?.messages).toHaveLength(7);
+    expect(loneliness?.messages.at(-1)).toBe(
+      '人生的底色，本就是独自前行；人生的常态，是学会与自己相处。',
+    );
+    // 「独处」只允许留在前面那条「不妨学会独处」里，末句不能再是它
+    expect(loneliness?.messages.at(-1)).not.toContain('学会与自己独处');
+  });
+
   it('难过球换成一组「接受情绪」的短句（8 条）', () => {
     const sadness = EMOTIONS.find((emotion) => emotion.id === 'sadness');
     expect(sadness?.messages).toHaveLength(8);
@@ -84,12 +122,14 @@ describe('情绪内容库', () => {
     expect(sadness?.messages.join('')).not.toContain('难过的时候不用急着变好');
   });
 
-  it('迷茫球换成一组「向内建立」的短句（15 条）', () => {
+  it('迷茫球换成一组「向内建立」的短句，并接住从焦虑球挪来的那条（16 条）', () => {
     const lost = EMOTIONS.find((emotion) => emotion.id === 'lost');
-    expect(lost?.messages).toHaveLength(15);
+    expect(lost?.messages).toHaveLength(16);
     expect(lost?.messages[0]).toBe('生命的意义在于活出自我，而不是成为别人眼中的你。');
     expect(lost?.messages.at(-1)).toBe('迷茫是自我认知的开始！');
     expect(lost?.messages.join('')).not.toContain('雾不会一直这么浓');
+    // 从焦虑球挪过来的那一条：夹在末句之前，说的是「对抗空虚」
+    expect(lost?.messages[14]).toBe('以渺小而坚定的信念对抗盛大而迷茫的空虚。');
   });
 
   it('分别球换成一组「阶段性陪伴」的短句（12 条）', () => {
@@ -126,14 +166,18 @@ describe('情绪内容库', () => {
    * 按下去还是同一句，只会让人以为按钮坏了。条数写死在这里，
    * 以后有人顺手补几条时，会先被这条测试提醒「面板行为要一起看」。
    */
-  it('委屈、麻木与烦躁各只留一句', () => {
+  it('委屈与麻木各只留一句，烦躁留两句', () => {
     const wronged = EMOTIONS.find((emotion) => emotion.id === 'wronged');
     const numbness = EMOTIONS.find((emotion) => emotion.id === 'numbness');
     const irritation = EMOTIONS.find((emotion) => emotion.id === 'irritation');
     expect(wronged?.messages).toEqual(['去树洞广场诉说你的委屈吧，会有人安慰你的！']);
     expect(numbness?.messages).toEqual(['宁要痛苦，不要麻木。']);
-    // 烦躁球这一句指向页头的「呼吸放松」，旧的那 15 条一句都不该留下
-    expect(irritation?.messages).toEqual(['当你感到烦躁时，不妨试试主页的“呼吸放松”。']);
+    // 烦躁球：新补的「出去走走」在前，指向页头「呼吸放松」的那句在后，
+    // 旧的那 15 条一句都不该留下
+    expect(irritation?.messages).toEqual([
+      '出去走走，让风带走你的烦躁。',
+      '当你感到烦躁时，不妨试试主页的“呼吸放松”。',
+    ]);
     expect(irritation?.messages.join('')).not.toContain('你现在很想摔东西吧');
   });
 

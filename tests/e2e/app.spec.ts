@@ -37,7 +37,7 @@ test('首页展示品牌、寄语、树洞入口与全部情绪球', async ({ pa
   await openHome(page);
 
   await expect(page.locator('p', { hasText: BLESSING }).first()).toBeVisible();
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('让情绪有处安放');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('点开一颗情绪球');
   await expect(page.getByRole('link', { name: '情绪盒子 MoodBox 首页' })).toBeVisible();
 
   const orbs = page.getByRole('button', { name: /：/ });

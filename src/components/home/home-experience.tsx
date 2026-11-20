@@ -102,13 +102,14 @@ export function HomeExperience() {
       <div className="pointer-events-none relative z-10 flex min-h-[100dvh] flex-col items-center justify-center px-5 pb-24 pt-[96px] lg:pb-28 lg:pt-[108px]">
         <div className="home-copy flex w-full max-w-[440px] flex-col items-center text-center">
           {/* 标题与寄语：刻意做轻，不跟球抢视线 */}
-          <motion.h1
-            {...fade(0.2)}
-            className="font-display text-[19px] font-light leading-[1.9] tracking-[0.16em] text-ink/55 sm:text-[23px] sm:leading-[1.85]"
-          >
-            让情绪有处安放
-            <br />
-            <span className="text-ink/40">让快乐有迹可循。</span>
+          {/* 标题：品牌名一行，第二行直接说「点开一颗球」，比一句 slogan 更像是邀请 */}
+          <motion.h1 {...fade(0.2)} className="flex flex-col items-center">
+            <span className="home-title-brand font-display text-[26px] font-light leading-none tracking-[0.2em] text-ink/70 sm:text-[32px]">
+              MoodBox
+            </span>
+            <span className="home-title-invite mt-4 font-display text-[15px] font-light leading-[1.9] tracking-[0.16em] text-ink/50 sm:mt-5 sm:text-[17.5px]">
+              点开一颗情绪球！
+            </span>
           </motion.h1>
 
           <motion.p
