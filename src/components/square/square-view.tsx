@@ -29,16 +29,15 @@ import {
   squareStore,
   useCanRenameToday,
   useQuotaUsage,
-  useRenamesLeftToday,
 } from '@/lib/content-stores';
 import { scanForCrisis } from '@/lib/crisis';
 import { formatClock, formatRelativeDay } from '@/lib/date';
-import { NICKNAME_MAX, readNickname, saveNickname } from '@/lib/nickname';
+import { NICKNAME_MAX, readNickname } from '@/lib/nickname';
 import { quotaHint, quotaMessage, quotaState } from '@/lib/quota';
 import { MAX_REPLY_LENGTH, charLength, sortPostsForView, type SquareSortMode } from '@/lib/square-repo';
 import { describeSensitive, scanSensitive } from '@/lib/sensitive';
 import { resolveVisitor, type VisitorIdentity } from '@/lib/visitor';
-import { recordNicknameChange } from '@/lib/visitor-ledger';
+import { changeNickname } from '@/lib/visitor-ledger';
 import type { SquarePost, SquareReply } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -122,8 +121,10 @@ export function SquareView() {
    * 又显得莫名其妙。现在是「点得动，但点了会告诉你今天已经改完」。
    */
   const canRenameToday = useCanRenameToday();
-  /** 今天还剩几次（2 → 1 → 0），按钮下面那行小字用它，改完就能看见少了一次 */
-  const renamesLeft = useRenamesLeftToday();
+  /*
+   * 剩余次数不再显示在按钮旁边（「不显示、不提示」是明确要求），
+   * 只有真的改了名字那一刻，才在 toast 里提一句还剩几次。
+   */
   /*
    * 能不能开这个弹窗。
    *
@@ -221,13 +222,40 @@ export function SquareView() {
     return identity;
   }
 
-  async function publishPost(content: string, nickname: string) {
+  /**
+   * 发帖时顺手改的名字也要算进「一天两次」。
+   *
+   * 只比「现在记住的昵称」和「这次要用的昵称」：一样就什么都不动；
+   * 真正变了下才走 `changeNickname`（写名字 + 记账同一处），
+   * 次数用完就退回原来记住的那个名字、并说清楚为什么。
+   * 返回这一次实际用的名字。
+   */
+  function settleDraftNickname(requested: string): string {
+    const typed = requested.trim().slice(0, NICKNAME_MAX);
+    if (typed === nickname) return nickname;
+    const result = changeNickname(typed, visitor?.key);
+    if (result.ok) {
+      setNickname(result.nickname);
+      showToast(
+        result.remaining > 0
+          ? `以后就用「${result.nickname || '匿名代号'}」这个名字了，今天还能再改 ${result.remaining} 次。`
+          : `以后就用「${result.nickname || '匿名代号'}」这个名字了，今天两次昵称机会已经用完。`,
+        result.remaining > 0 ? 'calm' : 'caution',
+      );
+      return result.nickname;
+    }
+    showToast('今天的两次昵称机会已经用完了，这条先用原来的名字发出去。', 'caution');
+    return nickname;
+  }
+
+  async function publishPost(content: string, requestedNickname: string) {
     setWorking(true);
     try {
       const me = await ensureIdentity();
+      const author = settleDraftNickname(requestedNickname);
       await squareStore.publish({
         content,
-        nickname,
+        nickname: author,
         alias: me.alias,
         visitorId: me.key,
         region: me.region ?? null,
@@ -262,7 +290,8 @@ export function SquareView() {
       showToast(describeSensitive(sensitive), 'caution');
       return;
     }
-    // 对话框里没填就落回「记住的昵称」，最后才是匿名代号
+    // 对话框里没填就落回「记住的昵称」，最后才是匿名代号。
+    // 真的换了名字的话，`publishPost` 会把这一次算进「一天两次」。
     const author = draft.nickname.trim() || nickname;
     if (scanForCrisis(content).flagged) {
       setPendingAction({ kind: 'post', content, nickname: author });
@@ -294,14 +323,20 @@ export function SquareView() {
       setNicknameOpen(false);
       return;
     }
-    const saved = saveNickname(nicknameDraft);
+    // 写名字 + 记一次账，两件事在 `changeNickname` 里一起做完（不会再漏记）
+    const result = changeNickname(nicknameDraft, visitor?.key);
+    if (!result.ok) {
+      // 账本说用完了：同一帧连点两下时，本地那道闸门可能还没关上
+      setNicknameOpen(false);
+      setCanRename(false);
+      showToast('今天的两次昵称机会已经用完了，明天再来吧。', 'caution');
+      return;
+    }
+    const saved = result.nickname;
     setNickname(saved);
     setNicknameOpen(false);
-    // 记一笔：今天的一次用掉了。改多少字都只算一次。
-    recordNicknameChange(visitor?.key);
     // 账本已经写了，这里再压一道本地闸门，挡住同一帧里的连点
-    // 用账本状态推：上面刚记完一笔，`useCanRenameToday` 的重渲染可能还没到
-    setCanRename(canRenameToday && renamesLeft - 1 > 0);
+    setCanRename(result.remaining > 0);
     showToast(saved ? `记住了，以后你就是「${saved}」啦～` : '已经改回匿名代号啦～');
   }
 
@@ -311,6 +346,13 @@ export function SquareView() {
       const me = await ensureIdentity();
       await squareStore.reply(postId, {
         content,
+        /*
+         * 回复也要带上记住的昵称。
+         *
+         * 以前这里没传 nickname，于是回复一直落回「匿名·XXXX」——
+         * 改过名字、自己也看得见新名字，一回复又是匿名的，像换了个人。
+         */
+        nickname,
         alias: me.alias,
         visitorId: me.key,
         region: me.region ?? null,
@@ -652,7 +694,7 @@ export function SquareView() {
             />
           </label>
           <p className="-mt-1 text-[11px] leading-[1.85] text-ink-ghost">
-            留空就用「{myName}」这个名字，之后也能在广场页改。
+            留空就用「{myName}」这个名字。这里改了名字，也算用掉一次改名机会（一天两次），之后也能在广场页改。
             {visitor?.region
               ? `您的 IP 定位显示为「${visitor.region}」，定位结果可能存在一定偏差，仅供参考。`
               : '您发帖时会带上一个按 IP 估算的城市，定位结果可能存在一定偏差，仅供参考。'}

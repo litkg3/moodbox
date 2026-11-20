@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   RESET_LEDGER_FOR_TESTS,
   canRenameToday,
+  changeNickname,
   readRenameCount,
   readUsage,
   renamesLeftToday,
@@ -75,6 +76,45 @@ describe('访客账本', () => {
     expect(canRenameToday(new Date(), 'visitor-a')).toBe(false);
     expect(canRenameToday(new Date(), 'visitor-b')).toBe(true);
     expect(renamesLeftToday(new Date(), 'visitor-b')).toBe(2);
+  });
+
+  /*
+   * 「写一条」弹窗里顺手改名字，以前是不记账的 —— 名字变了，次数没扣，
+   * 等于每天能改无数次。现在写入与记账合成一个函数，这里把几条性质钉住。
+   */
+  it('changeNickname：改了就扣一次，名字真的存下去', () => {
+    const first = changeNickname('小鱼', 'visitor-a');
+    expect(first).toEqual({ ok: true, nickname: '小鱼', remaining: 1 });
+    expect(window.localStorage.getItem('moodbox:square-nickname:v1')).toBe('小鱼');
+    expect(renamesLeftToday(new Date(), 'visitor-a')).toBe(1);
+
+    const second = changeNickname('小雨', 'visitor-a');
+    expect(second).toEqual({ ok: true, nickname: '小雨', remaining: 0 });
+    expect(renamesLeftToday(new Date(), 'visitor-a')).toBe(0);
+  });
+
+  it('changeNickname：两次用完之后一个字都不写，旧名字保持不动', () => {
+    changeNickname('小鱼', 'visitor-a');
+    changeNickname('小雨', 'visitor-a');
+    const third = changeNickname('小周', 'visitor-a');
+    expect(third).toEqual({ ok: false, remaining: 0 });
+    // 关键：被拒的那一次不能把本机记住的名字改掉
+    expect(window.localStorage.getItem('moodbox:square-nickname:v1')).toBe('小雨');
+    expect(readRenameCount(new Date(), 'visitor-a')).toBe(2);
+  });
+
+  it('changeNickname：留空 = 回到匿名，同样算一次', () => {
+    changeNickname('小鱼', 'visitor-a');
+    const cleared = changeNickname('', 'visitor-a');
+    expect(cleared).toEqual({ ok: true, nickname: '', remaining: 0 });
+    expect(window.localStorage.getItem('moodbox:square-nickname:v1')).toBeNull();
+  });
+
+  it('改昵称的次数与发帖次数互不串账', () => {
+    recordPost('visitor-a');
+    changeNickname('小鱼', 'visitor-a');
+    expect(readUsage(new Date(), 'visitor-a')).toEqual({ posts: 1, replies: 0 });
+    expect(renamesLeftToday(new Date(), 'visitor-a')).toBe(1);
   });
 
   it('旧账本里的 nickname: true 算作已用一次，只剩一次机会', () => {

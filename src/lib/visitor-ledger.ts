@@ -24,6 +24,7 @@
  * ```
  */
 
+import { NICKNAME_MAX, saveNickname } from '@/lib/nickname';
 import { EMPTY_USAGE, dayKey, type QuotaKind, type QuotaUsage } from '@/lib/quota';
 
 const STORAGE_KEY = 'moodbox:square-ledger:v1';
@@ -153,6 +154,30 @@ let activeVisitorId: string | undefined;
 export function setLedgerVisitor(visitorId: string | undefined): void {
   activeVisitorId = visitorId;
   notify();
+}
+
+export type ChangeNicknameResult =
+  | { ok: true; nickname: string; remaining: number }
+  | { ok: false; remaining: number };
+
+/**
+ * 改昵称的唯一入口：写入 + 记账，两件事绑在一起。
+ *
+ * 以前这两步是分开的（组件里先 `saveNickname` 再 `recordNicknameChange`），
+ * 于是「写一条」弹窗里顺手改了个昵称，名字变了、次数没扣 —— 等于每天能改无数次。
+ * 现在只留这一个函数，任何调用方都没有「只存不记」或「只记不存」的余地。
+ *
+ * 返回 `ok: false` 表示今天两次用完了，此时一个字都不写。
+ */
+export function changeNickname(value: string, visitorId?: string): ChangeNicknameResult {
+  const id = visitorId || activeVisitorId;
+  const used = readRenameCount(new Date(), id);
+  if (used >= RENAMES_PER_DAY) {
+    return { ok: false, remaining: 0 };
+  }
+  const saved = saveNickname(value.slice(0, NICKNAME_MAX));
+  recordNicknameChange(id);
+  return { ok: true, nickname: saved, remaining: Math.max(0, RENAMES_PER_DAY - used - 1) };
 }
 
 /**
