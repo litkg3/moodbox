@@ -491,33 +491,65 @@ export function QuizView() {
         </p>
       </header>
 
-      {/* 进度 */}
-      <div className="mb-7 flex items-center gap-2" aria-hidden="true">
-        {questions.map((item, index) => (
-          <span
-            key={item.id}
-            className={cn(
-              'h-[3px] flex-1 rounded-full transition-colors duration-500',
-              index < step ? 'bg-[rgba(142,118,184,0.65)]' : 'bg-[rgba(141,133,152,0.18)]',
-            )}
-          />
-        ))}
+      {/*
+        进度。
+
+        原来是六段几乎同色的小横线：做完的和没做的分不出来，当前在第几段
+        也看不出来。现在三种状态各有各的样子 ——
+        做完的填满品牌色、当前这一段更高更亮、没做的留一道浅底。
+      */}
+      <div
+        className="mb-6 flex items-end gap-2"
+        role="progressbar"
+        aria-valuemin={1}
+        aria-valuemax={total}
+        aria-valuenow={step + 1}
+        aria-valuetext={`第 ${step + 1} 题，共 ${total} 题`}
+      >
+        {questions.map((item, index) => {
+          const done = index < step;
+          const current = index === step;
+          return (
+            <span
+              key={item.id}
+              className={cn(
+                'flex-1 rounded-full transition-all duration-500',
+                done && 'h-[5px] bg-[linear-gradient(90deg,#c9b6e8,#8e76b8)]',
+                current &&
+                  'h-[5px] bg-[linear-gradient(90deg,#8e76b8,#c9b6e8)] shadow-[0_0_10px_-2px_rgba(142,118,184,0.9)]',
+                !done && !current && 'h-[3px] bg-[rgba(141,133,152,0.16)]',
+              )}
+              aria-hidden="true"
+            />
+          );
+        })}
       </div>
 
-      <div className="mb-4 flex items-baseline justify-between">
+      <div className="mb-4 flex items-baseline justify-between gap-3">
         <span className="text-[11px] tracking-[0.16em] text-ink-ghost">
           第 {step + 1} / {total} 题
+          {step > 0 && answers[questions[step - 1]?.id ?? ''] ? (
+            <span className="ml-2 text-lavender-deep/80">上一题已经选好了</span>
+          ) : null}
         </span>
-        {step > 0 ? (
-          <button
-            type="button"
-            onClick={() => setStep(step - 1)}
-            className="inline-flex items-center gap-1 text-[11.5px] text-ink-faint transition-colors hover:text-ink"
-          >
-            <ArrowLeft size={12} strokeWidth={1.7} aria-hidden="true" />
-            上一题
-          </button>
-        ) : null}
+        {/*
+          返回入口一直都在，只是原来在第一题时整颗按钮不渲染，
+          界面上就"没有返回"。现在换成常驻的「上一题」，第一题时置灰。
+        */}
+        <button
+          type="button"
+          onClick={() => setStep(Math.max(0, step - 1))}
+          disabled={step === 0}
+          className={cn(
+            'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11.5px] transition-colors',
+            step === 0
+              ? 'cursor-default text-ink-ghost/50'
+              : 'text-ink-faint hover:bg-white/60 hover:text-ink',
+          )}
+        >
+          <ArrowLeft size={12} strokeWidth={1.7} aria-hidden="true" />
+          上一题
+        </button>
       </div>
 
       <AnimatePresence mode="wait">

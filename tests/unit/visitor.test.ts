@@ -27,18 +27,30 @@ describe('匿名访客身份', () => {
     expect(visitorKey('1.2.3.4')).not.toBe(visitorKey('1.2.3.5'));
   });
 
-  it('拼出来的昵称是「匿名·XXXX」，并保留归属地', () => {
+  it('默认昵称是一个软名，不再带编号', () => {
     const identity = identityFromSeed('1.2.3.4', '广东·深圳', 'ip');
-    expect(identity.alias).toBe(`匿名·${identity.suffix}`);
-    expect(identity.alias).toHaveLength(7);
+    // 不是「匿名·K7Q2」这种工单号：没有分隔点、没有大写字母数字串
+    expect(identity.alias).not.toMatch(/·/);
+    expect(identity.alias).not.toMatch(/^匿名/);
+    expect(identity.alias.length).toBeGreaterThanOrEqual(2);
+    expect(identity.alias.length).toBeLessThanOrEqual(8);
+    // 同一种子永远同名，能认出自己发过的帖子
+    expect(identityFromSeed('1.2.3.4', null, 'device').alias).toBe(identity.alias);
     expect(identity.region).toBe('广东·深圳');
     expect(identity.source).toBe('ip');
+  });
+
+  it('软名随种子变化，不会所有人都叫同一个名字', () => {
+    const names = new Set(
+      ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((seed) => identityFromSeed(seed, null, 'device').alias),
+    );
+    expect(names.size).toBeGreaterThanOrEqual(3);
   });
 
   it('拿不到归属地时不是报错，只是 region 为空', () => {
     const identity = identityFromSeed('device:xyz', null, 'device');
     expect(identity.region).toBeNull();
-    expect(identity.alias.startsWith('匿名·')).toBe(true);
+    expect(identity.alias).toBeTruthy();
   });
 });
 
@@ -50,6 +62,12 @@ describe('归属地拼装', () => {
 
   it('直辖市只有省一级时也能用', () => {
     expect(buildRegion('中国', '上海市', '')).toBe('上海');
+  });
+
+  it('接口只给英文城市名时转成中文', () => {
+    expect(buildRegion('China', 'Beijing', 'Beijing')).toBe('北京');
+    // 省份是英文、城市有对照：城市转中文，省份原样保留（不猜）
+    expect(buildRegion('中国', 'Guangdong', 'Shenzhen')).toBe('Guangdong·深圳');
   });
 
   it('国外保留国家名，不带「中国」这种多余前缀', () => {

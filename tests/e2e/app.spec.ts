@@ -104,12 +104,15 @@ test('情绪足迹里能看到当天收藏的快乐', async ({ page }) => {
   await expect(page.getByRole('button', { name: /1 份快乐记忆/ }).first()).toBeVisible();
 });
 
-test('可以导出全部数据为 JSON 备份', async ({ page }) => {
+test('可以导出全部数据为一份备份文件', async ({ page }) => {
   const jar = await openJar(page);
 
   await jar.getByText('备份与隐私').click();
+  // 展开有过渡动画，按钮要等它真的可见再点，否则会被判成「不可点」
+  const exportButton = jar.getByRole('button', { name: '导出备份', exact: true });
+  await expect(exportButton).toBeVisible({ timeout: 5000 });
   const downloadPromise = page.waitForEvent('download');
-  await jar.getByRole('button', { name: '导出全部数据' }).click();
+  await exportButton.click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/^moodbox-backup-\d{4}-\d{2}-\d{2}\.json$/);
 });

@@ -16,6 +16,7 @@ export type ToolKey =
   | 'quiz'
   | 'square'
   | 'about'
+  | 'settings'
   | 'clear';
 
 export type ToolKind = 'route' | 'overlay' | 'action';
@@ -38,7 +39,11 @@ export const TOOL_ITEMS: readonly ToolItem[] = [
   { key: 'quiz', label: '情绪测试', kind: 'route', href: '/quiz', hint: '六个问题，看看此刻的你' },
   { key: 'square', label: '树洞广场', kind: 'route', href: '/square', hint: '小球装不下的时候，来这里说说' },
   { key: 'about', label: '关于', kind: 'route', href: '/about', hint: '这个盒子为什么存在' },
-  { key: 'clear', label: '清空数据', kind: 'action', hint: '删除这台设备上的全部记录' },
+  /*
+   * 「清空数据」原本和「关于」并排、同一个颜色，看起来像一个普通入口。
+   * 现在它收进设置面板，用危险色单独摆在一栏，还要再确认一次。
+   */
+  { key: 'settings', label: '设置', kind: 'action', hint: '主题、音乐与数据' },
 ] as const;
 
 export const ALL_TOOLS: readonly ToolItem[] = TOOL_ITEMS;

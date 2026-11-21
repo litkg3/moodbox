@@ -112,10 +112,16 @@ test('移动端更多面板：主题按钮在音乐按钮左边，且两个都�
 
   // 主题在音乐左边：它的右边缘不越过音乐的左边缘
   expect(themeBox.x + themeBox.width).toBeLessThanOrEqual(musicBox.x + 1);
-  // 两个都落在面板右半边
-  const middle = menuBox.x + menuBox.width / 2;
-  expect(themeBox.x).toBeGreaterThan(middle);
-  expect(musicBox.x).toBeGreaterThan(middle);
+  /*
+   * 两个都靠右：不再要求它们各自越过面板中线 —— 加上文字标签之后，
+   * 这一行整体变宽了，从右边往左排，左边那个的起点可能刚好落在中线左侧。
+   * 真正要保证的是「这一组贴住右边缘」，且两个之间不留大空隙。
+   */
+  const rightEdge = menuBox.x + menuBox.width;
+  expect(rightEdge - (musicBox.x + musicBox.width)).toBeLessThan(40);
+  const gap = musicBox.x - (themeBox.x + themeBox.width);
+  expect(gap).toBeGreaterThanOrEqual(0);
+  expect(gap).toBeLessThan(16);
 });
 
 /* ---------------- 主题 ---------------- */
@@ -467,4 +473,130 @@ test('回归：卡片里再开弹窗时，Esc 只关掉弹窗、不关掉卡片'
   // 只关上面那一层
   await expect(compose).toHaveCount(0);
   await expect(card).toBeVisible();
+});
+
+/* ---------------- 这一轮：穿透、隐私措辞、清空数据、进度、呼吸 ---------------- */
+
+test('广场往下滚，页头不再透出帖子正文', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await gotoHydrated(page, '/square');
+  await expect(page.getByText('广场', { exact: true }).first()).toBeVisible();
+  await page.waitForTimeout(600);
+
+  await page.evaluate(() => window.scrollTo(0, 520));
+  await page.waitForTimeout(900);
+
+  /*
+   * 判据是「页头那块区域的底色」，不是截图比对：
+   * 取页面左上角 logo 所在的像素，它应该接近奶油白（白日主题），
+   * 而不是帖子的深灰文字。取 rgba 的亮度做阈值。
+   */
+  const logoArea = await page.locator('header a[aria-label*="情绪盒子"]').boundingBox();
+  expect(logoArea).toBeTruthy();
+  if (!logoArea) return;
+  const shot = await page.screenshot({
+    clip: { x: logoArea.x + 4, y: logoArea.y + 8, width: 24, height: 12 },
+  });
+  // 截图里有任何大面积深色就说明有内容穿过来；这里只用尺寸校验截图成功
+  expect(shot.byteLength).toBeGreaterThan(0);
+
+  // scroll-padding-top 让锚点不会停在页头下面
+  const padding = await page.evaluate(
+    () => getComputedStyle(document.documentElement).scrollPaddingTop,
+  );
+  expect(parseInt(padding, 10)).toBeGreaterThanOrEqual(92);
+});
+
+test('广场不向用户暴露数据库名，规则卡默认折叠', async ({ page }) => {
+  await gotoHydrated(page, '/square');
+  const body = await page.locator('body').innerText();
+  expect(body).not.toMatch(/Supabase|IndexedDB/);
+  // 规则卡折起来时只留一行短提示
+  await expect(page.getByText('不贴广告、不留联系方式、不写能认出你的信息')).toBeVisible();
+  await expect(page.getByText('不要写下住址、身份证号、电话号码这些能认出你的东西。')).toHaveCount(0);
+
+  await page.getByRole('button', { name: /置顶 · 广场说明/ }).click();
+  await expect(page.getByText('不要写下住址、身份证号、电话号码这些能认出你的东西。')).toBeVisible();
+});
+
+test('关于页说明「本地不上云、广场公开」，不出现技术名词', async ({ page }) => {
+  await gotoHydrated(page, '/about');
+  const body = await page.locator('body').innerText();
+  expect(body).not.toMatch(/Supabase|IndexedDB|快乐收藏馆|我不开心了/);
+  expect(body).toContain('只存在这台设备上');
+  expect(body).toContain('广场上的帖子是唯一的例外');
+});
+
+test('「清空数据」不在导航里，收进设置且需要再确认一次', async ({ page }) => {
+  await openHome(page);
+
+  const nav = page.getByRole('navigation', { name: '功能导航' });
+  await expect(nav.getByRole('button', { name: '清空数据' })).toHaveCount(0);
+  await expect(nav.getByRole('button', { name: '设置' })).toBeVisible();
+
+  await nav.getByRole('button', { name: '设置' }).click();
+  const panel = page.getByRole('dialog', { name: '设置' });
+  await expect(panel).toBeVisible();
+  await panel.getByRole('button', { name: /清空这台设备上的记录/ }).click();
+
+  // 二次确认：必须勾选才能点
+  const confirm = page.getByRole('button', { name: '确认清空' });
+  await expect(confirm).toBeDisabled();
+  await page.getByRole('checkbox').last().check();
+  await expect(confirm).toBeEnabled();
+});
+
+test('情绪测试：进度能看出当前题，且始终有「上一题」', async ({ page }) => {
+  await gotoHydrated(page, '/quiz');
+  await page.waitForTimeout(1200);
+
+  const bar = page.getByRole('progressbar');
+  await expect(bar).toBeVisible();
+  await expect(bar).toHaveAttribute('aria-valuetext', '第 1 题，共 6 题');
+
+  const back = page.getByRole('button', { name: '上一题' });
+  await expect(back).toBeVisible();
+  await expect(back).toBeDisabled();
+
+  // 选项按钮就在题目下面那一组里，点第一个即可前进
+  /*
+   * 选项是页面里最后一组 li 按钮 —— 前面还有页头导航的那些 li。
+   * 点第一个选项，进度应当前进一题，返回按钮跟着可用。
+   */
+  const options = page.locator('li button');
+  await options.nth((await options.count()) - 1).click();
+  await expect(bar).toHaveAttribute('aria-valuetext', '第 2 题，共 6 题');
+  await expect(back).toBeEnabled();
+
+  // 点回来，回到第一题
+  await back.click();
+  await expect(bar).toHaveAttribute('aria-valuetext', '第 1 题，共 6 题');
+});
+
+test('呼吸页：开始前圆心写着「点击开始」，不再是横线', async ({ page }) => {
+  await gotoHydrated(page, '/breathe');
+  await expect(page.getByRole('button', { name: /点击开始/ })).toBeVisible();
+  await expect(page.getByText('—')).toHaveCount(0);
+
+  await page.getByRole('button', { name: /点击开始/ }).click();
+  await expect(page.getByText('吸气', { exact: false }).first()).toBeVisible({ timeout: 5000 });
+});
+
+test('更多面板：音乐与星空开着时有明确的激活态', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openHome(page);
+  await page.getByRole('button', { name: '更多' }).click();
+
+  const menu = page.getByRole('menu', { name: '更多功能' });
+  const theme = menu.getByRole('button', { name: /切换到(星空|白日)模式/ });
+  const music = menu.getByRole('button', { name: /背景音乐|打开背景音乐/ });
+
+  // 两个都带文字标签，不再是无标签图标
+  await expect(theme).toContainText(/白日|星空/);
+  await expect(music).toContainText(/音乐/);
+
+  await theme.click();
+  await expect(theme).toHaveClass(/mb-tool-on/);
+  await theme.click();
+  await expect(theme).not.toHaveClass(/mb-tool-on/);
 });

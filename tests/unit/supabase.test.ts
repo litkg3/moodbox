@@ -285,7 +285,7 @@ describe('后端选择：环境变量决定走哪条路', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', '');
     const localMod = await import('@/lib/backend');
     expect(localMod.getContentBackend().mode).toBe('local');
-    expect(localMod.describeBackend().label).toMatch(/本机/);
+    expect(localMod.describeBackend().label).toMatch(/只存在这台设备/);
 
     vi.resetModules();
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://demo-project.supabase.co');
@@ -293,9 +293,14 @@ describe('后端选择：环境变量决定走哪条路', () => {
     const cloudMod = await import('@/lib/backend');
     expect(cloudMod.getContentBackend().mode).toBe('supabase');
     const described = cloudMod.describeBackend();
-    expect(described.label).toMatch(/Supabase/);
-    // 界面不再展示项目 ref，只说明"信箱与开心罐仍在本机"
-    expect(described.detail).toBe('心事信箱与开心罐仍然只在这台设备上。');
+    /*
+     * 界面上不能再出现 Supabase / IndexedDB 这类词：
+     * 用户只需要知道「别人看不看得见」。
+     */
+    expect(described.label).not.toMatch(/Supabase|IndexedDB/);
+    expect(described.detail).not.toMatch(/Supabase|IndexedDB/);
+    expect(described.label).toMatch(/都能看见/);
+    expect(described.detail).toMatch(/只在这台设备上/);
 
     vi.unstubAllEnvs();
     vi.resetModules();

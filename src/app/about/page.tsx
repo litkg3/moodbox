@@ -22,12 +22,12 @@ const STEPS = [
   {
     step: '03',
     title: '收藏一件快乐',
-    body: '生活里那些很小的好事——刚好的阳光、一碗温着的汤——可以写下来，放进快乐收藏馆。',
+    body: '生活里那些很小的好事——刚好的阳光、一碗温着的汤——可以写下来，放进开心罐。',
   },
   {
     step: '04',
     title: '在低落时重新遇见',
-    body: '点开「我不开心了」，盒子会随机拿出一份你曾经收藏的快乐。那些快乐没有消失，只是等你回来。',
+    body: '低落的时候点开开心罐，盒子会随机拿出一份你曾经收进去的快乐。那些快乐没有消失，只是等你回来。',
   },
 ];
 
@@ -62,7 +62,7 @@ export default function AboutPage() {
           同时，我们也想处理一个常被忽略的时刻：当一个人很低落的时候，
           最需要的往往不是新的建议，而是被提醒——
           「你曾经也是快乐的，那些事情真的发生过。」
-          于是快乐收藏馆和「我不开心了」构成了这个产品真正的闭环。
+          于是「收藏一件快乐」和「低落时重新遇见它」构成了这个产品真正的闭环。
         </p>
       </Section>
 
@@ -94,15 +94,21 @@ export default function AboutPage() {
             <Database size={16} strokeWidth={1.6} className="mt-[2px] shrink-0 text-ink-faint" />
             <div className="space-y-3 text-[12.5px] leading-[2] text-ink-soft/90">
               <p>
-                所有快乐记忆、图片与情绪记录都保存在你自己浏览器的 IndexedDB 里，
-                <strong className="font-medium text-ink">不会上传到任何服务器</strong>，
-                也没有账号系统。换一台设备，就看不到这一台设备上的记录。
+                你收藏的快乐、记下的情绪、封信与时光信，
+                <strong className="font-medium text-ink">只存在这台设备上</strong>，
+                不会上传到任何服务器，也不需要注册账号。
               </p>
               <p>
-                这也意味着：清除网站数据、使用无痕窗口、卸载浏览器，都可能让记录消失。
-                建议在「快乐收藏馆 → 备份与隐私」里定期导出一份 JSON 备份。
+                <strong className="font-medium text-ink">广场上的帖子是唯一的例外</strong>：
+                发出去就是公开的，任何人都看得见，也可能被聚合到广场列表里。
+                默认不会带位置，只有你自己勾选时才会显示一个按网络估算的大致城市。
+                昵称与署名都是你自己起的显示名，不带账号身份。
               </p>
-              <p>图片会先在本地压缩，再以二进制形式存进数据库，不会塞进 localStorage。</p>
+              <p>
+                本地记录也有代价：清除网站数据、使用无痕窗口、换一台设备，记录都会消失。
+                建议在开心罐的「备份与隐私」里定期导出一份备份文件。
+              </p>
+              <p>图片会先在本地压缩，再以二进制形式存进设备，不会因为备份而变大。</p>
             </div>
           </div>
         </div>
@@ -147,11 +153,11 @@ export default function AboutPage() {
       <Section index="06" title="关于这个作品">
         <p>
           情绪盒子是一个参赛作品，使用 Next.js（App Router）、React、TypeScript 与 Tailwind CSS 构建，
-          动画由 Motion for React 与 CSS 关键帧共同完成，数据层基于浏览器原生 IndexedDB。
+          动画由 Motion for React 与 CSS 关键帧共同完成，记录保存在浏览器本地，广场内容由轻量后端承载。
           全站不依赖任何远程字体、图片或第三方统计脚本。
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
-          {['Next.js', 'React 19', 'TypeScript', 'Tailwind CSS', 'Motion', 'IndexedDB', 'date-fns'].map(
+          {['Next.js', 'React 19', 'TypeScript', 'Tailwind CSS', 'Motion', 'date-fns'].map(
             (tag) => (
               <span
                 key={tag}

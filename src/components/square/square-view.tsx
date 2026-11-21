@@ -57,7 +57,7 @@ const REPLY_PEEK = 2;
 const HUG_COOLDOWN_MS = 1200;
 
 type PendingAction =
-  | { kind: 'post'; content: string; nickname: string }
+  | { kind: 'post'; content: string; nickname: string; shareRegion: boolean }
   | { kind: 'reply'; postId: string; content: string; nickname: string };
 
 /** 广场的两种排序方式：按时间（默认）与按热度 */
@@ -98,7 +98,14 @@ export function SquareView() {
   }, []);
 
   const [composeOpen, setComposeOpen] = useState(false);
-  const [draft, setDraft] = useState({ content: '', nickname: '' });
+  /*
+   * `shareRegion` 默认 false。
+   *
+   * 之前位置是自动带的：帖子旁边直接出现「合肥」「北京」，和顶上那条
+   * 「不要泄露隐私」摆在一起自相矛盾。现在改成发帖时主动勾选才写进这条帖子，
+   * 不勾就什么都不带。
+   */
+  const [draft, setDraft] = useState({ content: '', nickname: '', shareRegion: false });
   const [crisisOpen, setCrisisOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [working, setWorking] = useState(false);
@@ -141,7 +148,7 @@ export function SquareView() {
   }, []);
 
   /** 展示与发帖都走这个名字：自己设过就用它，否则用「匿名·XXXX」。 */
-  const myName = nickname || visitor?.alias || '匿名的人';
+  const myName = nickname || visitor?.alias || '安静的人';
 
   /**
    * 管理员解锁 / 退出时重新拉一次列表。
@@ -238,8 +245,8 @@ export function SquareView() {
       setNickname(result.nickname);
       showToast(
         result.remaining > 0
-          ? `以后就用「${result.nickname || '匿名代号'}」这个名字了，今天还能再改 ${result.remaining} 次。`
-          : `以后就用「${result.nickname || '匿名代号'}」这个名字了，今天两次昵称机会已经用完。`,
+          ? `以后就用「${result.nickname || myName}」这个名字了，今天还能再改 ${result.remaining} 次。`
+          : `以后就用「${result.nickname || myName}」这个名字了，今天两次昵称机会已经用完。`,
         result.remaining > 0 ? 'calm' : 'caution',
       );
       return result.nickname;
@@ -248,7 +255,7 @@ export function SquareView() {
     return nickname;
   }
 
-  async function publishPost(content: string, requestedNickname: string) {
+  async function publishPost(content: string, requestedNickname: string, shareRegion: boolean) {
     setWorking(true);
     try {
       const me = await ensureIdentity();
@@ -258,11 +265,11 @@ export function SquareView() {
         nickname: author,
         alias: me.alias,
         visitorId: me.key,
-        region: me.region ?? null,
+        region: shareRegion ? (me.region ?? null) : null,
         needsSupport: scanForCrisis(content).flagged,
       });
       setComposeOpen(false);
-      setDraft({ content: '', nickname: '' });
+      setDraft({ content: '', nickname: '', shareRegion: false });
       showToast('发出去了，广场上已经能看到。');
     } catch (publishError) {
       showToast(
@@ -290,20 +297,25 @@ export function SquareView() {
       showToast(describeSensitive(sensitive), 'caution');
       return;
     }
-    // 对话框里没填就落回「记住的昵称」，最后才是匿名代号。
+    // 对话框里没填就落回「记住的昵称」，最后才是随手起的那个软名。
     // 真的换了名字的话，`publishPost` 会把这一次算进「一天两次」。
     const author = draft.nickname.trim() || nickname;
     if (scanForCrisis(content).flagged) {
-      setPendingAction({ kind: 'post', content, nickname: author });
+      setPendingAction({
+        kind: 'post',
+        content,
+        nickname: author,
+        shareRegion: draft.shareRegion,
+      });
       setCrisisOpen(true);
       return;
     }
-    void publishPost(content, author);
+    void publishPost(content, author, draft.shareRegion);
   }
 
   /** 打开写一条：昵称预先填好，想改这一次的可以就地改。 */
   function openCompose() {
-    setDraft({ content: '', nickname });
+    setDraft({ content: '', nickname, shareRegion: false });
     setComposeOpen(true);
   }
 
@@ -337,7 +349,7 @@ export function SquareView() {
     setNicknameOpen(false);
     // 账本已经写了，这里再压一道本地闸门，挡住同一帧里的连点
     setCanRename(result.remaining > 0);
-    showToast(saved ? `记住了，以后你就是「${saved}」啦～` : '已经改回匿名代号啦～');
+    showToast(saved ? `记住了，以后你就是「${saved}」啦～` : '已经改回原来那个名字啦～');
   }
 
   async function publishReply(postId: string, content: string) {
@@ -355,7 +367,8 @@ export function SquareView() {
         nickname,
         alias: me.alias,
         visitorId: me.key,
-        region: me.region ?? null,
+        // 位置只在发帖时由发帖人主动选择，回复一律不带
+        region: null,
         needsSupport: scanForCrisis(content).flagged,
       });
       showToast('回复已经送达。');
@@ -398,7 +411,8 @@ export function SquareView() {
     setCrisisOpen(false);
     setPendingAction(null);
     if (!action) return;
-    if (action.kind === 'post') await publishPost(action.content, action.nickname);
+    if (action.kind === 'post')
+      await publishPost(action.content, action.nickname, action.shareRegion);
     else await publishReply(action.postId, action.content);
   }
 
@@ -694,11 +708,31 @@ export function SquareView() {
             />
           </label>
           <p className="-mt-1 text-[11px] leading-[1.85] text-ink-ghost">
-            留空就用「{myName}」这个名字。
-            {visitor?.region
-              ? `您的 IP 定位显示为「${visitor.region}」，定位结果可能存在一定偏差，仅供参考。`
-              : '您发帖时会带上一个按 IP 估算的城市，定位结果可能存在一定偏差，仅供参考。'}
+            留空就用「{myName}」这个名字，之后也能在广场页改。
           </p>
+
+          {/*
+            位置是可选的一栏，默认不勾。
+            这里不写"您的 IP 显示为……"，而是先说清楚勾了会发生什么、
+            不勾也完全没问题 —— 广场顶上那条就是"别泄露隐私"。
+          */}
+          {visitor?.region ? (
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/60 bg-white/40 px-4 py-3">
+              <input
+                type="checkbox"
+                checked={draft.shareRegion}
+                onChange={(event) =>
+                  setDraft((prev) => ({ ...prev, shareRegion: event.target.checked }))
+                }
+                className="mt-[3px] h-4 w-4 shrink-0 accent-[#8e76b8]"
+              />
+              <span className="text-[11.5px] leading-[1.85] text-ink-faint">
+                在这条下面标一个大致位置
+                <span className="text-ink-ghost">（约 {visitor.region}，按网络估算，可能有偏差）</span>
+                。不勾也完全没关系，大部分人都不勾。
+              </span>
+            </label>
+          ) : null}
           <label className="block">
             <span className="text-[12px] text-ink-soft">说点什么</span>
             <textarea
@@ -740,7 +774,7 @@ export function SquareView() {
         open={nicknameOpen}
         onClose={() => setNicknameOpen(false)}
         title="改个昵称"
-        description="昵称会记在这台设备上，之后发帖默认用它。一天能改两次，留空就回到「匿名·XXXX」。"
+        description="昵称会记在这台设备上，之后发帖默认用它。一天能改两次，留空就回到随手起的那个名字。"
         width="sm"
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -761,7 +795,7 @@ export function SquareView() {
             onKeyDown={(event) => {
               if (event.key === 'Enter') commitNickname();
             }}
-            placeholder={visitor?.alias ?? '匿名的人'}
+            placeholder={visitor?.alias ?? '安静的人'}
             className="mb-field mt-2"
             maxLength={NICKNAME_MAX}
             autoFocus
@@ -803,40 +837,68 @@ export function SquareView() {
 /**
  * 广场顶部那条「置顶」。
  *
- * 单独画成一个卡片、单独画一个图钉图标，而不是塞在正文里当一行灰字：
- * 它是这一页唯一的规则说明，得让人一眼看见，又不至于像横幅广告。
+ * 单独画成一个卡片、单独画一个图钉图标，而不是塞在正文里当一行灰字。
  * 图标是现画的（一张纸 + 一颗图钉），与站内其他线性图标的笔触对齐。
+ *
+ * 默认是折起来的：这张卡片占掉首屏三行，第一条帖子得往下滚才看得见，
+ * 而真要发帖的人本来就得点「写一条」。折起来只留一行标题，
+ * 想看规则点开就行。
  */
 function PinnedNotice() {
+  const [open, setOpen] = useState(false);
+
   return (
     <aside
       aria-label="广场说明"
-      className="mb-4 flex items-start gap-3 rounded-[20px] border border-[rgba(201,182,232,0.42)] bg-[rgba(201,182,232,0.13)] px-4 py-3.5"
+      className="mb-4 rounded-[20px] border border-[rgba(201,182,232,0.42)] bg-[rgba(201,182,232,0.13)] px-4 py-3"
     >
-      <span className="mt-[1px] shrink-0 text-lavender-deep">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M7.6 4.4h8.8a1.7 1.7 0 0 1 1.7 1.7v10.6a1.7 1.7 0 0 1-1.7 1.7H7.6a1.7 1.7 0 0 1-1.7-1.7V6.1a1.7 1.7 0 0 1 1.7-1.7Z"
-            stroke="currentColor"
-            strokeWidth="1.3"
-            opacity="0.82"
-          />
-          <path
-            d="M9.2 9.1h5.6M9.2 12h5.6M9.2 14.9h3.4"
-            stroke="currentColor"
-            strokeWidth="1.3"
-            strokeLinecap="round"
-            opacity="0.6"
-          />
-          <circle cx="12" cy="3.1" r="1.4" fill="currentColor" opacity="0.9" />
-        </svg>
-      </span>
-      <div className="min-w-0">
-        <p className="text-[10.5px] tracking-[0.16em] text-lavender-deep">置顶 · 广场说明</p>
-        <p className="mt-1 text-[11.5px] leading-[1.9] text-ink-faint">
-          🈲 请勿发布广告、引流信息、联系方式及攻击他人的内容；同时不要泄露个人住址、身份证号、电话号码等隐私
-        </p>
-      </div>
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 text-left"
+      >
+        <span className="mt-[1px] shrink-0 text-lavender-deep">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M7.6 4.4h8.8a1.7 1.7 0 0 1 1.7 1.7v10.6a1.7 1.7 0 0 1-1.7 1.7H7.6a1.7 1.7 0 0 1-1.7-1.7V6.1a1.7 1.7 0 0 1 1.7-1.7Z"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              opacity="0.82"
+            />
+            <path
+              d="M9.2 9.1h5.6M9.2 12h5.6M9.2 14.9h3.4"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinecap="round"
+              opacity="0.6"
+            />
+            <circle cx="12" cy="3.1" r="1.4" fill="currentColor" opacity="0.9" />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-1.5 text-[10.5px] tracking-[0.16em] text-lavender-deep">
+            置顶 · 广场说明
+            <ChevronDown
+              size={12}
+              strokeWidth={1.8}
+              aria-hidden="true"
+              className={cn('transition-transform duration-300', open && 'rotate-180')}
+            />
+          </p>
+          {open ? (
+            <div className="mt-1.5 space-y-1.5 text-[11.5px] leading-[1.9] text-ink-faint">
+              <p>请勿发布广告、引流信息、联系方式及攻击他人的内容。</p>
+              <p>不要写下住址、身份证号、电话号码这些能认出你的东西。</p>
+              <p>这里的话大家都能看见，所以位置只在你主动填写时才会出现。</p>
+            </div>
+          ) : (
+            <p className="mt-1 truncate text-[11.5px] leading-[1.9] text-ink-faint">
+              不贴广告、不留联系方式、不写能认出你的信息
+            </p>
+          )}
+        </div>
+      </button>
     </aside>
   );
 }
@@ -944,7 +1006,7 @@ function PostCard({
         {post.region ? (
           <span
             className="inline-flex items-center gap-1 rounded-full bg-[rgba(141,133,152,0.1)] px-1.5 py-[1px] text-[10.5px] text-ink-ghost"
-            title="按 IP 估算，精确到市；手机流量或加速器可能让这里不准，仅供参考"
+            title="发帖的人自己选择公开的大致位置，按网络估算，不一定准"
           >
             <MapPin size={10} strokeWidth={1.7} aria-hidden="true" />
             {post.region}
@@ -1131,7 +1193,7 @@ function ReplyItem({
       <div className="flex flex-wrap items-center gap-2 text-[10.5px] text-ink-ghost">
         <span className="text-ink-faint">{reply.nickname}</span>
         {reply.region ? (
-          <span className="inline-flex items-center gap-0.5 text-[10px] text-ink-ghost" title="按 IP 估算，精确到市；手机流量或加速器可能让这里不准，仅供参考">
+          <span className="inline-flex items-center gap-0.5 text-[10px] text-ink-ghost" title="回复的人自己选择公开的大致位置，按网络估算，不一定准">
             <MapPin size={9} strokeWidth={1.7} aria-hidden="true" />
             {reply.region}
           </span>

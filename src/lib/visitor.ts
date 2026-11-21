@@ -1,5 +1,7 @@
 'use client';
 
+import { softNickname } from '@/lib/nickname';
+
 /**
  * 匿名访客身份。
  *
@@ -13,8 +15,10 @@
  *
  * - `key`：由本机种子派生的稳定哈希（16 位十六进制），只在本地与提交时使用，
  *   云端也只会把它再哈希一次存进 `visitor_hash`，不会展示给任何人；
- * - `suffix`：从同一个种子里取 4 位字母数字，用作「匿名·K7Q2」的后缀；
- * - `region`：IP 归属地，精确到市（如「广东·深圳」），用于在帖子旁边标一个位置。
+ * - `suffix`：从同一个种子里取 4 位字母数字，只在内部做短标识，界面不再展示；
+ * - `alias`：由种子派生的软名（「安静的云」），没设昵称时用它，比编号更像人；
+ * - `region`：IP 归属地，精确到市（如「广东·深圳」），**只用于「可选」的位置标注**：
+ *   默认不显示、不随帖子保存，用户发帖时主动勾选才会带上。
  *
  * 归属地**每次打开页面都重新查一遍**，不做任何缓存：换了网络（公司 → 手机热点、
  * 北京 → 深圳出差）之后刷新一下就该显示新的城市。查询只发一个 GET，
@@ -27,9 +31,9 @@
 export interface VisitorIdentity {
   /** 稳定标识，用于判断「这条是不是我发的」，不要展示 */
   key: string;
-  /** 4 位字母数字后缀，用于「匿名·K7Q2」 */
+  /** 4 位字母数字后缀，仅内部去重/调试用，界面不展示 */
   suffix: string;
-  /** 展示用昵称：匿名·K7Q2 */
+  /** 展示用软名：形如「安静的云」，由本机种子派生，不是编号 */
   alias: string;
   /** IP 归属地（市级，如「广东·深圳」），拿不到时为 null */
   region: string | null;
@@ -81,7 +85,7 @@ export function identityFromSeed(
   return {
     key: visitorKey(seed),
     suffix,
-    alias: `匿名·${suffix}`,
+    alias: softNickname(seed),
     region,
     source,
   };
@@ -119,6 +123,45 @@ function shortenPlace(name: string): string {
   return name.replace(/(维吾尔自治区|壮族自治区|回族自治区|特别行政区|自治区|省|市)$/u, '') || name;
 }
 
+/** 接口常见英文城市名 → 中文。只收直辖市与常见误报，不求全。 */
+const CHINA_CITY_CN: Record<string, string> = {
+  beijing: '北京',
+  shanghai: '上海',
+  tianjin: '天津',
+  chongqing: '重庆',
+  guangzhou: '广州',
+  shenzhen: '深圳',
+  hangzhou: '杭州',
+  nanjing: '南京',
+  chengdu: '成都',
+  wuhan: '武汉',
+  xian: "西安",
+  'xi’an': "西安",
+  suzhou: '苏州',
+  changsha: '长沙',
+  hefei: '合肥',
+  zhengzhou: '郑州',
+  qingdao: '青岛',
+  dalian: '大连',
+  xiamen: '厦门',
+  fuzhou: '福州',
+  kunming: '昆明',
+  nanning: '南宁',
+  harbin: '哈尔滨',
+  shenyang: '沈阳',
+  jinan: '济南',
+  taiyuan: '太原',
+  shijiazhuang: '石家庄',
+  nanchang: '南昌',
+  guiyang: '贵阳',
+  lanzhou: '兰州',
+  urumqi: '乌鲁木齐',
+  haikou: '海口',
+  shantou: '汕头',
+  dongguan: '东莞',
+  foshan: '佛山',
+};
+
 /**
  * 拼成「省·市」，没有市就只写省。
  *
@@ -133,7 +176,14 @@ export function buildRegion(country?: unknown, province?: unknown, city?: unknow
 
   // 国内只显示省市，去掉「中国」两个字：这一栏是给"同乡的人"看的
   if (countryName === '中国' || countryName === 'China') {
-    const parts = [provinceName, cityName !== provinceName ? cityName : ''].filter(
+    /*
+     * 接口有时只给英文城市名（Beijing / Shanghai）。中文界面里突然蹦出一个
+     * 英文地名很出戏，所以先过一遍常见对照，认不出来的才保留原文。
+     */
+    const localizedProvince = CHINA_CITY_CN[provinceName.toLowerCase()] ?? provinceName;
+    const localizedCity = CHINA_CITY_CN[cityName.toLowerCase()] ?? cityName;
+    // 直辖市省政府同名（Beijing / Beijing），去重后只剩一个「北京」
+    const parts = [localizedProvince, localizedCity !== localizedProvince ? localizedCity : ''].filter(
       (part) => part && part !== '未知',
     );
     const joined = Array.from(new Set(parts)).join('·');

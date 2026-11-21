@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
 import { MoreHorizontal } from 'lucide-react';
 import { AudioPlayer } from '@/components/audio/audio-player';
-import { useClearData } from '@/components/layout/clear-data-provider';
+import { SettingsPanel } from '@/components/layout/settings-panel';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { TOOL_ICONS } from '@/components/layout/tool-icons';
 import { useToolOverlay } from '@/components/layout/tool-overlay-provider';
@@ -21,8 +21,8 @@ import { cn } from '@/lib/utils';
  */
 export function MoreMenu() {
   const [open, setOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const pathname = usePathname();
-  const requestClear = useClearData();
   const { openTool } = useToolOverlay();
 
   useEffect(() => {
@@ -40,7 +40,7 @@ export function MoreMenu() {
       openTool(item.key);
       return;
     }
-    if (item.key === 'clear') requestClear();
+    if (item.key === 'settings') setSettingsOpen(true);
   }
 
   return (
@@ -122,17 +122,20 @@ export function MoreMenu() {
 
               {/*
                 主题与音乐一起靠右排，主题在音乐左边。
-                原来这里用 justify-between 把两者顶到两端，主题单独落在左边，
-                看起来像是「这一行的标题」。现在它们是一组工具，靠右、挨着。
+
+                手机上这两个按钮只剩图标，以前完全看不出状态：音乐在放也像个
+                没按的按钮。现在两个都带文字标签（「星空」「音乐中」），
+                并且开着的时候有明确的激活态 —— 底色、描边、字色一起变。
               */}
               <div className="mt-2 flex items-center justify-end gap-2 border-t border-[rgba(141,133,152,0.16)] px-1 pt-3">
-                <ThemeToggle />
-                <AudioPlayer />
+                <ThemeToggle withLabel />
+                <AudioPlayer compact />
               </div>
             </motion.div>
           </>
         ) : null}
       </AnimatePresence>
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

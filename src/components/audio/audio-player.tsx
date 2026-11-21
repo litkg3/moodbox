@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
  * 挂载在根布局中，因此站内路由切换时音频不会被卸载，可以连续播放。
  * 音源缺失时会明确告知用户，而不是假装在播放。
  */
-export function AudioPlayer() {
+export function AudioPlayer({ compact = false }: { compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const {
@@ -110,6 +110,14 @@ export function AudioPlayer() {
           'mb-glass-soft group flex h-10 items-center gap-2 rounded-full pl-3 pr-3.5 transition-all duration-500 sm:h-11',
           'hover:bg-white/65',
           isPlaying ? 'text-ink' : 'text-ink-faint',
+          /*
+           * 窄屏「更多」面板里的那份：按钮缩成图标 + 文字。
+           * 播放中换成实底 + 描边的激活态，标签也变成「音乐中」，
+           * 否则在手机上根本看不出到底有没有响。
+           */
+          compact &&
+            'h-9 gap-1.5 whitespace-nowrap px-3 text-[11.5px] tracking-[0.04em]',
+          compact && isPlaying && 'mb-tool-on text-lavender-deep',
         )}
       >
         <span className="relative grid h-5 w-5 place-items-center">
@@ -125,23 +133,32 @@ export function AudioPlayer() {
             />
           ) : null}
         </span>
-        <span className="hidden items-end gap-[2px] sm:flex" aria-hidden="true">
-          {[0, 1, 2].map((bar) => (
-            <span
-              key={bar}
-              className={cn(
-                'w-[2px] rounded-full bg-lavender-deep/60 transition-all duration-500',
-                isPlaying ? 'animate-pulse' : 'opacity-40',
-              )}
-              style={{
-                height: isPlaying ? `${6 + bar * 3}px` : '4px',
-                animationDelay: `${bar * 160}ms`,
-              }}
-            />
-          ))}
-        </span>
-        <span className="hidden text-[11px] tracking-[0.16em] text-ink-faint sm:inline">
-          {isPlaying ? '音乐中' : '音乐'}
+        {/* 播放中的三根小竖条：比起只在悬停时才动，这个是一直看得见的信号 */}
+        {!compact ? (
+          <span className="hidden items-end gap-[2px] sm:flex" aria-hidden="true">
+            {[0, 1, 2].map((bar) => (
+              <span
+                key={bar}
+                className={cn(
+                  'w-[2px] rounded-full bg-lavender-deep/60 transition-all duration-500',
+                  isPlaying ? 'animate-pulse' : 'opacity-40',
+                )}
+                style={{
+                  height: isPlaying ? `${6 + bar * 3}px` : '4px',
+                  animationDelay: `${bar * 160}ms`,
+                }}
+              />
+            ))}
+          </span>
+        ) : null}
+        <span
+          className={cn(
+            'text-[11px] tracking-[0.16em] text-ink-faint',
+            compact ? 'inline tracking-[0.04em]' : 'hidden sm:inline',
+            compact && isPlaying && 'text-lavender-deep',
+          )}
+        >
+          {isPlaying ? '音乐中' : isLoading ? '准备中' : isMissing ? '没能加载' : '音乐'}
         </span>
       </button>
 

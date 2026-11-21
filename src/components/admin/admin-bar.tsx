@@ -56,7 +56,7 @@ export function AdminBar({
       } else {
         setError(
           serverVerified
-            ? '口令不对。这次是由 Supabase 校验的，必须和数据库里配置的 admin_token 一致。'
+            ? '口令不对。这次是由服务端校验的，请输入配置里设定的那个口令。'
             : '口令不对。可以看看 README 里的演示口令。',
         );
       }
@@ -97,7 +97,7 @@ export function AdminBar({
       title="进入管理员模式"
       description={
         serverVerified
-          ? '口令会送到 Supabase 校验，前端绕不过去。'
+          ? '口令会交给服务端校验，在页面上绕不过去。'
           : '演示用的本地口令，不是真实的权限系统。'
       }
       width="sm"

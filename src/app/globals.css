@@ -87,6 +87,17 @@ html {
   -webkit-tap-highlight-color: transparent;
   scroll-behavior: smooth;
   color-scheme: light;
+  /*
+   * 锚点跳转（#comments、跳过链接等）停在固定页头下面，而不是被标题挡住。
+   * 页头在滚动后约 60px 高，这里多留一段呼吸感，值覆盖 PageShell 的 pt。
+   */
+  scroll-padding-top: 104px;
+}
+
+@media (min-width: 1024px) {
+  html {
+    scroll-padding-top: 116px;
+  }
 }
 
 html[data-theme='night'] {
@@ -501,23 +512,58 @@ html[data-theme='night'] .mb-chip {
   background: rgba(255, 255, 255, 0.06);
 }
 
-/* 页头滚动后的那层薄幕 */
+/*
+ * 页头滚动后的底。
+ *
+ * 原来是中段 44% 的渐变，整条横带有半截是透的：帖子正文与抱抱按钮会穿过
+ * logo 和导航。后来改成 97%/95%，截图里仍能看到一行发灰的帖头压在
+ * logo 底下 —— 只要还有一点透明度，滚动时就一定看得见。
+ * 这里干脆改成与底色完全一致的实底（含夜间），用一条极淡的下边线收口。
+ */
 .mb-header-veil {
+  /*
+   * 上面是实底，最底下留 10px 渐隐。
+   *
+   * 只留一点点：页头缩到 `py-2` 之后总高比它下面那层留白矮，中间会露出
+   * 一条缝 —— 渐隐负责把这条缝接上去，内容看起来是「滑进页头底下」，
+   * 而不是被一刀切断。渐隐以上必须完全不透明。
+   */
   background: linear-gradient(
     180deg,
-    rgba(252, 248, 244, 0.88) 0%,
-    rgba(252, 248, 244, 0.44) 62%,
-    rgba(252, 248, 244, 0) 100%
+    var(--color-cream) 0%,
+    var(--color-cream) calc(100% - 10px),
+    color-mix(in srgb, var(--color-cream) 0%, transparent) 100%
   );
 }
 
 html[data-theme='night'] .mb-header-veil {
   background: linear-gradient(
     180deg,
-    rgba(8, 7, 18, 0.9) 0%,
-    rgba(8, 7, 18, 0.5) 62%,
-    rgba(8, 7, 18, 0) 100%
+    var(--color-cream) 0%,
+    var(--color-cream) calc(100% - 10px),
+    color-mix(in srgb, var(--color-cream) 0%, transparent) 100%
   );
+}
+
+/*
+ * 工具按钮的「已开启」态。
+ *
+ * 窄屏下主题与音乐只剩两个图标，不加这层分不出是开着还是没开。
+ * 用品牌薰衣草做一层实底 + 描边，和未开启的玻璃底拉开距离，
+ * 又不像开关（switch）那样生硬。
+ */
+.mb-tool-on {
+  background: linear-gradient(155deg, rgba(201, 182, 232, 0.42) 0%, rgba(201, 182, 232, 0.24) 100%);
+  border: 1px solid rgba(142, 118, 184, 0.5);
+  box-shadow:
+    0 8px 20px -16px rgba(110, 85, 155, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+html[data-theme='night'] .mb-tool-on {
+  background: linear-gradient(155deg, rgba(201, 180, 239, 0.24) 0%, rgba(201, 180, 239, 0.12) 100%);
+  border: 1px solid rgba(201, 180, 239, 0.42);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
 /* 导航里被选中的那一颗 */

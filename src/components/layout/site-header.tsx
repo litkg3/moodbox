@@ -31,9 +31,15 @@ export function SiteHeader() {
   }, []);
 
   return (
+    /*
+     * `items-center` + 固定最小高度：页头自己撑出一块确定的高度，
+     * 底下的实底就不会比内容矮半截 —— 否则滚动时缩小了内边距，
+     * 页头底部会露出一条能看见正文的缝。
+     */
     <header
       className={cn(
-        'fixed inset-x-0 top-0 z-50 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]',
+        'fixed inset-x-0 top-0 z-50 flex min-h-[60px] items-center',
+        'transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]',
         scrolled ? 'py-2' : 'py-3 sm:py-3.5',
       )}
     >

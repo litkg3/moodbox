@@ -56,25 +56,30 @@ export function describeBackend(): {
 } {
   const backend = getContentBackend();
 
+  /*
+   * 面向用户的措辞只回答一件事：「我写的东西，别人看得见吗？」
+   * 以前这里写的是「已接入 Supabase 数据库」「存在 IndexedDB 里」——
+   * 技术名词对用户没有任何帮助，还会和关于页的「不会上传」直接打架。
+   */
   if (backend.mode === 'supabase') {
     return {
       mode: 'supabase',
-      label: '树洞广场已接入 Supabase 数据库',
-      detail: '心事信箱与开心罐仍然只在这台设备上。',
+      label: '广场上的帖子所有人都能看见',
+      detail: '你发的帖子会公开发布，带大致位置（如果你自己选了）。其余记录仍只在这台设备上。',
     };
   }
 
   if (backend.mode === 'http') {
     return {
       mode: 'http',
-      label: '云端内容服务',
-      detail: '内容由自建接口提供。',
+      label: '广场上的帖子所有人都能看见',
+      detail: '其余记录仍只在这台设备上。',
     };
   }
 
   return {
     mode: 'local',
-    label: '仅保存在本机浏览器',
-    detail: '广场内容存在这台设备的 IndexedDB 里，换设备就看不到了。',
+    label: '这些帖子只存在这台设备上',
+    detail: '换一台设备就看不到了，别人也看不见。',
   };
 }

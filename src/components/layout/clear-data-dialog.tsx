@@ -56,7 +56,7 @@ export function ClearDataDialog({ open, onClose }: ClearDataDialogProps) {
         onClose();
       }}
       title="清空这台设备上的记录"
-      description="这一步没有撤销。如果你只是想整理，可以先去「快乐收藏馆」逐条删除。"
+      description="这一步没有撤销。如果你只是想整理，可以在开心罐里逐条删除。"
       width="sm"
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -91,7 +91,7 @@ export function ClearDataDialog({ open, onClose }: ClearDataDialogProps) {
             aria-hidden="true"
           />
           <p className="text-[11.5px] leading-[1.85] text-[#8a6360]">
-            删除后无法恢复，导出备份也没办法救回来 —— 除非你之前导出过 JSON 文件。
+            删除后无法恢复。除非你之前导出过备份文件，否则找不回来。
           </p>
         </div>
 

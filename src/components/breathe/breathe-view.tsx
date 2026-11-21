@@ -153,11 +153,16 @@ export function BreatheView() {
         <div className="relative grid h-[268px] w-[268px] place-items-center sm:h-[320px] sm:w-[320px]">
           <span
             aria-hidden="true"
-            className="absolute inset-0 rounded-full border border-[rgba(201,182,232,0.28)]"
+            className="absolute inset-0 rounded-full border border-[rgba(201,182,232,0.5)]"
           />
+          {/*
+            外圈这道虚线的存在感很关键：它告诉人「圆环会涨到这里」。
+            原来 0.3 的雾蓝压在雾面背景上几乎看不见，现在提亮并加到 1.5px，
+            虚线本身也稍微放长，隔着屏幕也读得出来。
+          */}
           <span
             aria-hidden="true"
-            className="absolute inset-[10%] rounded-full border border-dashed border-[rgba(159,179,206,0.3)]"
+            className="absolute inset-[10%] rounded-full border-[1.5px] border-dashed border-[rgba(159,179,206,0.62)]"
           />
 
           <div
@@ -171,19 +176,41 @@ export function BreatheView() {
             }}
           />
 
+          {/*
+            未开始时圆心不显示倒计时。
+            原来这里是一根「—」占位，在雾面圆里看起来像渲染没完成。
+            现在换成一句「点击开始」，圆环本身也能点 —— 不用再去找下面的按钮。
+          */}
           <div className="relative z-10 flex flex-col items-center">
-            <span className="mb-breath-label text-[10.5px] uppercase tracking-[0.4em] text-ink-ghost">
-              {running ? phase.label : '准备好'}
-            </span>
-            <span
-              className="mt-2 font-display text-[38px] font-light leading-none tabular-nums text-ink sm:text-[44px]"
-              aria-hidden="true"
-            >
-              {running ? remaining : '—'}
-            </span>
-            <span className="mb-breath-hint mt-2 text-[10.5px] tracking-[0.14em] text-ink-faint">
-              {running ? '秒' : mode.hint}
-            </span>
+            {running ? (
+              <>
+                <span className="mb-breath-label text-[10.5px] uppercase tracking-[0.4em] text-ink-ghost">
+                  {phase.label}
+                </span>
+                <span
+                  className="mt-2 font-display text-[38px] font-light leading-none tabular-nums text-ink sm:text-[44px]"
+                  aria-hidden="true"
+                >
+                  {remaining}
+                </span>
+                <span className="mb-breath-hint mt-2 text-[10.5px] tracking-[0.14em] text-ink-faint">
+                  秒
+                </span>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setRunning(true)}
+                className="group flex flex-col items-center rounded-full px-4 py-2"
+              >
+                <span className="font-display text-[15px] tracking-[0.16em] text-ink transition-colors group-hover:text-lavender-deep">
+                  点击开始
+                </span>
+                <span className="mt-1.5 text-[10.5px] tracking-[0.12em] text-ink-faint">
+                  {mode.hint}
+                </span>
+              </button>
+            )}
           </div>
         </div>
 

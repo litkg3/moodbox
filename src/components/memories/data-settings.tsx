@@ -157,7 +157,7 @@ export function DataSettings({ compact = false }: { compact?: boolean } = {}) {
           <span>
             <span className="block text-[13px] tracking-[0.05em] text-ink">备份与隐私</span>
             <span className="mt-0.5 block text-[11px] text-ink-ghost">
-              数据只在这台设备上 · 可导出 JSON 备份
+              只存在这台设备 · 可以导出备份
             </span>
           </span>
         </span>
@@ -179,9 +179,10 @@ export function DataSettings({ compact = false }: { compact?: boolean } = {}) {
             <div className="flex gap-3 rounded-2xl bg-white/45 px-4 py-3.5">
               <ShieldCheck size={16} strokeWidth={1.6} className="mt-[2px] shrink-0 text-ink-faint" />
               <p className="text-[11.5px] leading-[1.9] text-ink-faint">
-                你的快乐记忆与情绪记录默认保存在当前浏览器与设备中（IndexedDB），不会上传到任何服务器。
-                清除浏览器网站数据、使用无痕模式或更换设备，都可能导致记录丢失，建议定期导出备份。
-                导入采用合并方式，不会覆盖你已有的记录。
+                你收藏的快乐与记下的情绪只存在这台设备上，不会上传到任何服务器，也没有账号。
+                广场上发的帖子是例外：它公开，谁都能看见。
+                清除浏览器网站数据、使用无痕模式或更换设备，都可能导致记录丢失，建议定期导出一份备份。
+                导入备份采用合并方式，不会覆盖你已有的记录。
               </p>
             </div>
 
@@ -207,7 +208,7 @@ export function DataSettings({ compact = false }: { compact?: boolean } = {}) {
             <div className="mt-6 flex flex-wrap gap-2.5">
               <Button variant="glass" size="sm" onClick={() => void handleExport()} disabled={busy !== null}>
                 {busy === 'export' ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} strokeWidth={1.6} />}
-                导出全部数据
+                导出备份
               </Button>
 
               <Button
