@@ -127,6 +127,14 @@ test('移动端更多面板：主题按钮在音乐按钮左边，且两个都�
 /* ---------------- 主题 ---------------- */
 
 test('可以在白日与星空之间手动切换，并且记住选择', async ({ page }) => {
+  /*
+   * 先把偏好写成「白日」再进页面。
+   *
+   * 两个原因：主题会被记住（上一条用例可能停在星空）；跟随系统时，
+   * 22:00–05:00 会自动切星空 —— 否则这条用例只在白天绿。
+   */
+  await page.goto('/');
+  await page.evaluate(() => window.localStorage.setItem('moodbox-theme', 'day'));
   await openHome(page);
 
   const root = page.locator('html');
@@ -584,6 +592,9 @@ test('呼吸页：开始前圆心写着「点击开始」，不再是横线', as
 
 test('更多面板：音乐与星空开着时有明确的激活态', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  // 同一条用例要在「没开」和「开了」之间来回切，所以先把主题钉成白日
+  await page.goto('/');
+  await page.evaluate(() => window.localStorage.setItem('moodbox-theme', 'day'));
   await openHome(page);
   await page.getByRole('button', { name: '更多' }).click();
 

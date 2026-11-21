@@ -152,8 +152,7 @@ export default function AboutPage() {
 
       <Section index="06" title="关于这个作品">
         <p>
-          情绪盒子是一个参赛作品，使用 Next.js（App Router）、React、TypeScript 与 Tailwind CSS 构建，
-          动画由 Motion for React 与 CSS 关键帧共同完成，记录保存在浏览器本地，广场内容由轻量后端承载。
+          记录保存在浏览器本地，广场内容由轻量后端承载。
           全站不依赖任何远程字体、图片或第三方统计脚本。
         </p>
         <div className="mt-5 flex flex-wrap gap-2">

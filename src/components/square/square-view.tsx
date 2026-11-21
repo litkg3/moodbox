@@ -712,9 +712,8 @@ export function SquareView() {
           </p>
 
           {/*
-            位置是可选的一栏，默认不勾。
-            这里不写"您的 IP 显示为……"，而是先说清楚勾了会发生什么、
-            不勾也完全没问题 —— 广场顶上那条就是"别泄露隐私"。
+            位置是可选的一栏，默认不勾：勾上就在这条下面显示一行 IP 估算的城市。
+            文案只留一句，不解释原理、不劝说 —— 布局本身已经说明了它是可选项。
           */}
           {visitor?.region ? (
             <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/60 bg-white/40 px-4 py-3">
@@ -727,9 +726,7 @@ export function SquareView() {
                 className="mt-[3px] h-4 w-4 shrink-0 accent-[#8e76b8]"
               />
               <span className="text-[11.5px] leading-[1.85] text-ink-faint">
-                在这条下面标一个大致位置
-                <span className="text-ink-ghost">（约 {visitor.region}，按网络估算，可能有偏差）</span>
-                。不勾也完全没关系，大部分人都不勾。
+                显示 IP 定位 · <span className="text-ink-ghost">「{visitor.region}」</span>
               </span>
             </label>
           ) : null}
