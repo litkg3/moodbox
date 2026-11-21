@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatDayClock,
   formatRelativeDay,
   formatShortDate,
   isValidDateKey,
@@ -30,6 +31,29 @@ describe('日期工具', () => {
   it('toDateKey 使用本地时区，不会因为 UTC 偏移跨天', () => {
     const local = new Date(2026, 2, 5, 0, 30);
     expect(toDateKey(local)).toBe('2026-03-05');
+  });
+
+  /*
+   * 广场上那个「当天发的显示昨天」：ISO 串前十位是 UTC 日期，
+   * 东八区 0–8 点发的内容会被算到前一天。formatDayClock 必须按本地算。
+   */
+  it('凌晨发的帖子算今天，不会被 UTC 日期带到昨天', () => {
+    const now = new Date();
+    const early = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 30);
+    expect(formatDayClock(early.toISOString())).toBe('今天 0:30');
+  });
+
+  it('昨天深夜的帖子仍然写成「昨天」', () => {
+    const now = new Date();
+    const late = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 20);
+    expect(formatDayClock(late.toISOString())).toBe('昨天 23:20');
+  });
+
+  it('更早的帖子写具体日期，格式与发帖时间一致', () => {
+    const now = new Date();
+    const old = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 3, 9, 5);
+    const text = formatDayClock(old.toISOString());
+    expect(text).toMatch(/月\d+日 9:05$/);
   });
 
   it('拒绝不存在的日期与错误格式', () => {

@@ -71,11 +71,17 @@ export function formatClock(iso: string): string {
   return format(date, 'H:mm', { locale: zhCN });
 }
 
-/** 带日期的 24 小时制时间，用于回复等需要精确到分钟的场景。 */
-export function formatClockWithDay(iso: string): string {
+/**
+ * 帖子、回复、信的落款：今天 23:07 / 昨天 21:14 / 11月20日 09:12。
+ *
+ * 这里不能用 `iso.slice(0, 10)` 当日：ISO 串的前十位是 UTC 日期。
+ * 东八区凌晨 0–8 点发的内容，UTC 还停在昨天，于是当天刚发的帖子
+ * 会显示成「昨天」—— 这正是广场上那个时间错乱。
+ */
+export function formatDayClock(iso: string): string {
   const date = new Date(iso);
   if (!isValid(date)) return '';
-  return format(date, 'M月d日 H:mm', { locale: zhCN });
+  return `${formatRelativeDay(toDateKey(date))} ${format(date, 'H:mm', { locale: zhCN })}`;
 }
 
 export const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'] as const;

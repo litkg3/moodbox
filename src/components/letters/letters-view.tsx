@@ -9,7 +9,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import { useLetters, lettersStore } from '@/lib/content-stores';
 import { CRISIS_RESOURCES } from '@/lib/crisis';
-import { formatClock, formatRelativeDay } from '@/lib/date';
+import { formatDayClock } from '@/lib/date';
 import type { HeartLetter } from '@/types';
 
 /**
@@ -158,8 +158,7 @@ export function LettersView({ embedded = false }: { embedded?: boolean } = {}) {
                   {letter.sealed ? '未拆' : '已拆开'}
                   <span aria-hidden="true">·</span>
                   <span>
-                    {formatRelativeDay(letter.createdAt.slice(0, 10))}{' '}
-                    {formatClock(letter.createdAt)}
+                    {formatDayClock(letter.createdAt)}
                   </span>
                 </div>
 
@@ -269,7 +268,7 @@ export function LettersView({ embedded = false }: { embedded?: boolean } = {}) {
         title="一封拆开的信"
         description={
           reading
-            ? `写于 ${formatRelativeDay(reading.createdAt.slice(0, 10))} ${formatClock(reading.createdAt)}`
+            ? `写于 ${formatDayClock(reading.createdAt)}`
             : undefined
         }
         width="md"

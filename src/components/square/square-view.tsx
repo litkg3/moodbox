@@ -31,7 +31,7 @@ import {
   useQuotaUsage,
 } from '@/lib/content-stores';
 import { scanForCrisis } from '@/lib/crisis';
-import { formatClock, formatRelativeDay } from '@/lib/date';
+import { formatDayClock } from '@/lib/date';
 import { NICKNAME_MAX, readNickname } from '@/lib/nickname';
 import { quotaHint, quotaMessage, quotaState } from '@/lib/quota';
 import { MAX_REPLY_LENGTH, charLength, sortPostsForView, type SquareSortMode } from '@/lib/square-repo';
@@ -834,68 +834,40 @@ export function SquareView() {
 /**
  * 广场顶部那条「置顶」。
  *
- * 单独画成一个卡片、单独画一个图钉图标，而不是塞在正文里当一行灰字。
+ * 单独画成一个卡片、单独画一个图钉图标，而不是塞在正文里当一行灰字：
+ * 它是这一页唯一的规则说明，得让人一眼看见，又不至于像横幅广告。
  * 图标是现画的（一张纸 + 一颗图钉），与站内其他线性图标的笔触对齐。
- *
- * 默认是折起来的：这张卡片占掉首屏三行，第一条帖子得往下滚才看得见，
- * 而真要发帖的人本来就得点「写一条」。折起来只留一行标题，
- * 想看规则点开就行。
  */
 function PinnedNotice() {
-  const [open, setOpen] = useState(false);
-
   return (
     <aside
       aria-label="广场说明"
-      className="mb-4 rounded-[20px] border border-[rgba(201,182,232,0.42)] bg-[rgba(201,182,232,0.13)] px-4 py-3"
+      className="mb-4 flex items-start gap-3 rounded-[20px] border border-[rgba(201,182,232,0.42)] bg-[rgba(201,182,232,0.13)] px-4 py-3.5"
     >
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-3 text-left"
-      >
-        <span className="mt-[1px] shrink-0 text-lavender-deep">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d="M7.6 4.4h8.8a1.7 1.7 0 0 1 1.7 1.7v10.6a1.7 1.7 0 0 1-1.7 1.7H7.6a1.7 1.7 0 0 1-1.7-1.7V6.1a1.7 1.7 0 0 1 1.7-1.7Z"
-              stroke="currentColor"
-              strokeWidth="1.3"
-              opacity="0.82"
-            />
-            <path
-              d="M9.2 9.1h5.6M9.2 12h5.6M9.2 14.9h3.4"
-              stroke="currentColor"
-              strokeWidth="1.3"
-              strokeLinecap="round"
-              opacity="0.6"
-            />
-            <circle cx="12" cy="3.1" r="1.4" fill="currentColor" opacity="0.9" />
-          </svg>
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-1.5 text-[10.5px] tracking-[0.16em] text-lavender-deep">
-            置顶 · 广场说明
-            <ChevronDown
-              size={12}
-              strokeWidth={1.8}
-              aria-hidden="true"
-              className={cn('transition-transform duration-300', open && 'rotate-180')}
-            />
-          </p>
-          {open ? (
-            <div className="mt-1.5 space-y-1.5 text-[11.5px] leading-[1.9] text-ink-faint">
-              <p>请勿发布广告、引流信息、联系方式及攻击他人的内容。</p>
-              <p>不要写下住址、身份证号、电话号码这些能认出你的东西。</p>
-              <p>这里的话大家都能看见，所以位置只在你主动填写时才会出现。</p>
-            </div>
-          ) : (
-            <p className="mt-1 truncate text-[11.5px] leading-[1.9] text-ink-faint">
-              不贴广告、不留联系方式、不写能认出你的信息
-            </p>
-          )}
-        </div>
-      </button>
+      <span className="mt-[1px] shrink-0 text-lavender-deep">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M7.6 4.4h8.8a1.7 1.7 0 0 1 1.7 1.7v10.6a1.7 1.7 0 0 1-1.7 1.7H7.6a1.7 1.7 0 0 1-1.7-1.7V6.1a1.7 1.7 0 0 1 1.7-1.7Z"
+            stroke="currentColor"
+            strokeWidth="1.3"
+            opacity="0.82"
+          />
+          <path
+            d="M9.2 9.1h5.6M9.2 12h5.6M9.2 14.9h3.4"
+            stroke="currentColor"
+            strokeWidth="1.3"
+            strokeLinecap="round"
+            opacity="0.6"
+          />
+          <circle cx="12" cy="3.1" r="1.4" fill="currentColor" opacity="0.9" />
+        </svg>
+      </span>
+      <div className="min-w-0">
+        <p className="text-[10.5px] tracking-[0.16em] text-lavender-deep">置顶 · 广场说明</p>
+        <p className="mt-1 text-[11.5px] leading-[1.9] text-ink-faint">
+          🈲 请勿发布广告、引流信息、联系方式及攻击他人的内容；同时不要泄露个人住址、身份证号、电话号码等隐私
+        </p>
+      </div>
     </aside>
   );
 }
@@ -974,12 +946,14 @@ function PostCard({
    * 评论默认只露最新两条。
    *
    * 一条热帖可能挂着几十条回复，全铺开会把下面的帖子挤到屏幕外，
-   * 滑半天也翻不到下一条。点「回复」时顺手展开全部 —— 想说话的人
-   * 通常也想知道前面都说了什么，不必再多一次「查看全部」的点击。
+   * 滑半天也翻不到下一条。
+   *
+   * 展开状态不单独存一份，直接跟着输入框走：点「回复」一起展开，
+   * 再点一次收起。之前另开了 `repliesExpanded` 且从不置回 false，
+   * 于是第二次点「回复」把框收起时，评论仍然全是摊开的。
    */
-  const [repliesExpanded, setRepliesExpanded] = useState(false);
   const shownReplies =
-    !repliesExpanded && visibleReplies.length > REPLY_PEEK
+    !replyOpen && visibleReplies.length > REPLY_PEEK
       ? visibleReplies.slice(-REPLY_PEEK)
       : visibleReplies;
 
@@ -1011,7 +985,7 @@ function PostCard({
         ) : null}
         <span aria-hidden="true">·</span>
         <span>
-          {formatRelativeDay(post.createdAt.slice(0, 10))} {formatClock(post.createdAt)}
+          {formatDayClock(post.createdAt)}
         </span>
         {post.isDemo ? (
           <span className="rounded-full bg-[rgba(141,133,152,0.12)] px-2 py-0.5 tracking-[0.1em]">
@@ -1081,11 +1055,7 @@ function PostCard({
 
         <button
           type="button"
-          onClick={() => {
-            setReplyOpen((prev) => !prev);
-            // 打开输入框的同时把折叠的评论放出来
-            setRepliesExpanded(true);
-          }}
+          onClick={() => setReplyOpen((prev) => !prev)}
           className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(141,133,152,0.2)] px-3 py-1.5 text-[11.5px] text-ink-faint transition-colors hover:text-ink"
         >
           <MessageCircle size={13} strokeWidth={1.7} aria-hidden="true" />
@@ -1196,7 +1166,7 @@ function ReplyItem({
           </span>
         ) : null}
         <span aria-hidden="true">·</span>
-        <span>{formatClock(reply.createdAt)}</span>
+        <span>{formatDayClock(reply.createdAt)}</span>
         {canDelete ? (
           <button
             type="button"

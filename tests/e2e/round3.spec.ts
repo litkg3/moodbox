@@ -515,16 +515,13 @@ test('广场往下滚，页头不再透出帖子正文', async ({ page }) => {
   expect(parseInt(padding, 10)).toBeGreaterThanOrEqual(92);
 });
 
-test('广场不向用户暴露数据库名，规则卡默认折叠', async ({ page }) => {
+test('广场不向用户暴露数据库名，置顶说明是原样一整行', async ({ page }) => {
   await gotoHydrated(page, '/square');
   const body = await page.locator('body').innerText();
   expect(body).not.toMatch(/Supabase|IndexedDB/);
-  // 规则卡折起来时只留一行短提示
-  await expect(page.getByText('不贴广告、不留联系方式、不写能认出你的信息')).toBeVisible();
-  await expect(page.getByText('不要写下住址、身份证号、电话号码这些能认出你的东西。')).toHaveCount(0);
-
-  await page.getByRole('button', { name: /置顶 · 广场说明/ }).click();
-  await expect(page.getByText('不要写下住址、身份证号、电话号码这些能认出你的东西。')).toBeVisible();
+  await expect(
+    page.getByText('🈲 请勿发布广告、引流信息、联系方式及攻击他人的内容；同时不要泄露个人住址、身份证号、电话号码等隐私'),
+  ).toBeVisible();
 });
 
 test('关于页说明「本地不上云、广场公开」，不出现技术名词', async ({ page }) => {
@@ -610,4 +607,65 @@ test('更多面板：音乐与星空开着时有明确的激活态', async ({ pa
   await expect(theme).toHaveClass(/mb-tool-on/);
   await theme.click();
   await expect(theme).not.toHaveClass(/mb-tool-on/);
+});
+
+/* ---------------- 这一轮：时间显示与回复展开 ---------------- */
+
+test('刚发的帖子写「今天」，回复也带日期而不是只有几点', async ({ page }) => {
+  const content = `时间显示检查 ${Date.now()}`;
+  await gotoHydrated(page, '/square');
+  await page.getByRole('button', { name: '写一条' }).click();
+  const compose = page.getByRole('dialog', { name: '写一条' });
+  await compose.getByPlaceholder(COMPOSE_PLACEHOLDER).fill(content);
+  await compose.getByRole('button', { name: '发出去' }).click();
+  await expect(compose).toBeHidden();
+
+  const section = page.locator('section[aria-labelledby="square-title"]');
+  const post = section.locator('article', { hasText: content }).first();
+  const header = post.locator('header').first();
+  /*
+   * 关键是「今天」。以前这里取 ISO 串前十位当日 —— 那是 UTC 日期，
+   * 本地凌晨 0–8 点发的内容会落到昨天，正是那个 bug。
+   */
+  await expect(header).toContainText('今天');
+  await expect(header).not.toContainText('昨天');
+
+  // 回复一条，回复的时间也要带「今天」这样的日期
+  await post.getByRole('button', { name: /^(回复|\d+ 条回复)$/ }).click();
+  await post.getByLabel('回复内容').fill('收到，这条是回复的时间检查');
+  await post.getByRole('button', { name: '发送' }).click();
+  await expect(post.getByText('收到，这条是回复的时间检查')).toBeVisible();
+  const replyItem = post.locator('li', { hasText: '收到，这条是回复的时间检查' }).first();
+  await expect(replyItem).toContainText('今天');
+});
+
+test('回复：点开看全部，再点一次收起回最新两条', async ({ page }) => {
+  const content = `展开与收起检查 ${Date.now()}`;
+  await gotoHydrated(page, '/square');
+  await page.getByRole('button', { name: '写一条' }).click();
+  const compose = page.getByRole('dialog', { name: '写一条' });
+  await compose.getByPlaceholder(COMPOSE_PLACEHOLDER).fill(content);
+  await compose.getByRole('button', { name: '发出去' }).click();
+  await expect(compose).toBeHidden();
+
+  const section = page.locator('section[aria-labelledby="square-title"]');
+  const post = section.locator('article', { hasText: content }).first();
+
+  for (const text of ['第一条回复', '第二条回复', '第三条回复']) {
+    await post.getByRole('button', { name: /^(回复|\d+ 条回复)$/ }).click();
+    await post.getByLabel('回复内容').fill(text);
+    await post.getByRole('button', { name: '发送' }).click();
+    await expect(post.getByText(text, { exact: true })).toBeVisible();
+  }
+
+  // 收起状态下只留最新两条
+  await post.getByRole('button', { name: /^(回复|\d+ 条回复)$/ }).click();
+  await expect(post.getByLabel('回复内容')).toBeVisible();
+  await expect(post.getByText('第一条回复', { exact: true })).toBeVisible();
+
+  // 再点一次：输入框收起，评论也回到最新两条
+  await post.getByRole('button', { name: /^(回复|\d+ 条回复)$/ }).click();
+  await expect(post.getByLabel('回复内容')).toHaveCount(0);
+  await expect(post.getByText('第一条回复', { exact: true })).toHaveCount(0);
+  await expect(post.getByText('第三条回复', { exact: true })).toBeVisible();
 });
