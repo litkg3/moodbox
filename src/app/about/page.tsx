@@ -12,7 +12,7 @@ const STEPS = [
   {
     step: '01',
     title: '选择一个情绪',
-    body: '首页漂浮着十一颗颜色不同的球。没有下拉菜单，也没有分值量表，你只需要走近看起来像此刻的那一颗。',
+    body: '首页漂浮着十二颗颜色不同的球。没有下拉菜单，也没有分值量表，你只需要走近看起来像此刻的那一颗。',
   },
   {
     step: '02',
@@ -151,12 +151,9 @@ export default function AboutPage() {
       </Section>
 
       <Section index="06" title="关于这个作品">
-        <p>
-          记录保存在浏览器本地，广场内容由轻量后端承载。
-          全站不依赖任何远程字体、图片或第三方统计脚本。
-        </p>
+        <p>记录保存在浏览器本地，广场内容由轻量后端承载。</p>
         <div className="mt-5 flex flex-wrap gap-2">
-          {['Next.js', 'React 19', 'TypeScript', 'Tailwind CSS', 'Motion', 'date-fns'].map(
+          {['Next.js', 'React 19', 'TypeScript', 'Tailwind CSS', 'Motion', 'date-fns', 'PostgreSQL'].map(
             (tag) => (
               <span
                 key={tag}

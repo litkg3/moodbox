@@ -2,7 +2,7 @@
 
 > 让情绪有处安放，让快乐有迹可循。
 
-一个安静的地方，用来放情绪和快乐。11 颗情绪球，点开是一段不说教的回应；小确幸收进开心罐，低落时再遇见。
+一个安静的地方，用来放情绪和快乐。12 颗情绪球飘在首页，点开是一段不说教的回应；小确幸收进开心罐，低落时再遇见。
 
 **它不是心理测评，也不要求你「变好」。它更接近一个抽屉。**
 
@@ -12,15 +12,15 @@
 
 | 模块 | 一句话 |
 | --- | --- |
-| 情绪球 | 11 种情绪，点击得到一段陪伴；也可以捏爆，2 秒后自己飘回来 |
-| 品读片刻 | 面板里就地换成一篇随笔，按作者排的次序翻 |
+| 情绪球 | 12 颗：焦虑、难过、孤独、开心、痛苦、备考、烦躁、疲惫、迷茫、委屈、麻木、分别 |
+| 品读片刻 | 球面板里就地换成一篇随笔，按作者排的次序翻 |
 | 开心罐 | 把小事收成纸条，卡片内完成；备份从这里导出 |
 | 心事信箱 | 写 → 封存 → 拆开 → 销毁，常驻求助热线 |
 | 情绪足迹 | 手账式月视图，底部并入「这一周」 |
 | 呼吸放松 | 4-4-6 舒缓 / 4-7-8 助眠，圆环随呼吸缩放 |
 | 情绪测试 | 6 个问题，只给一个猜测，不写进任何记录 |
-| 树洞广场 | 匿名短帖，先审核后展示；可拥抱、可回复；可选显示 IP 定位 |
-| 白日 / 星空 | 跟随系统或手动锁定，组件完全同一套 |
+| 树洞广场 | 匿名短帖，发出即公开；可拥抱、可回复；位置可选 |
+| 白日 / 星空 | 跟随系统或手动锁定，同一套组件两套配色 |
 | 背景音乐 | 不自动播放，可淡化、循环、跨页不断 |
 
 ---
@@ -41,13 +41,13 @@ npm run test:e2e             # Playwright（默认端口 3107）
 
 Node.js ≥ 20。
 
-**可选**：想让广场跨设备共享，配 `NEXT_PUBLIC_SUPABASE_URL` 与 `NEXT_PUBLIC_SUPABASE_ANON_KEY` 后重新构建——这两个值是构建期内联的，只重启不生效。步骤见 [`SUPABASE.md`](./SUPABASE.md)，建表脚本在 `supabase/schema.sql`。不配也能完整运行，广场数据留在本机。
+**可选**：想让广场跨设备共享，配 `NEXT_PUBLIC_SUPABASE_URL` 与 `NEXT_PUBLIC_SUPABASE_ANON_KEY` 后重新构建——这两个值在构建期内联，只重启不生效。建表脚本在 `supabase/schema.sql`，步骤见 [`SUPABASE.md`](./SUPABASE.md)。不配也能完整运行，广场数据留在本机。
 
 ---
 
 ## 技术栈
 
-Next.js 15（App Router） · React 19 · TypeScript（strict） · Tailwind CSS v4 · Motion · IndexedDB（idb） · Supabase（可选） · Vitest + Playwright
+Next.js 15（App Router） · React 19 · TypeScript（strict） · Tailwind CSS v4 · Motion · IndexedDB（idb） · Supabase / PostgreSQL（广场，可选） · Vitest + Playwright
 
 没有 UI 组件库、状态管理库和 CSS-in-JS：双主题靠一份 CSS 变量表。
 
@@ -57,7 +57,7 @@ Next.js 15（App Router） · React 19 · TypeScript（strict） · Tailwind CSS
 
 | 路由 | 页面 |
 | --- | --- |
-| `/` | 主页（情绪天空） |
+| `/` | 主页（情绪天空，12 颗球） |
 | `/calendar` | 情绪足迹 |
 | `/breathe` | 呼吸放松 |
 | `/quiz` | 情绪测试 |
@@ -71,8 +71,8 @@ Next.js 15（App Router） · React 19 · TypeScript（strict） · Tailwind CSS
 
 ## 数据
 
-- 快乐记忆、情绪记录、信件、捏爆状态默认**只存在这台设备**，没有账号，没有云同步。
-- 例外是**广场帖子**：发出去即公开，别人都看得见；默认不带位置，勾选「显示 IP 定位」才显示一个按网络估算的城市。
+- 情绪记录、记忆、信件、捏爆状态默认**只存在这台设备**，没有账号，没有云同步。
+- 例外是**广场帖子**：发出去即公开；默认不带位置，勾选「显示 IP 定位」才显示一个按网络估算的城市。
 - 管理员口令在本地模式下只做前端校验，不是权限系统；接上 Supabase 后才变成服务端校验。
 - 自伤识别是一组关键词，只负责「轻轻问一句」，不拦截、不诊断。
 
@@ -86,7 +86,7 @@ Next.js 15（App Router） · React 19 · TypeScript（strict） · Tailwind CSS
 src/
 ├── app/            # 7 个路由 + globals.css（主题 token、玻璃、球体材质）
 ├── components/     # home / emotion / jar / letters / square / calendar / breathe / quiz / layout / ui
-├── data/           # 情绪与文案、随笔、故事、演示数据
+├── data/           # 12 颗情绪球的内容与文案、随笔、故事、演示数据
 ├── hooks/          # 全局快照、音频、浮层行为、Blob URL
 ├── lib/            # IndexedDB 仓储、后端契约（本地 / Supabase / REST）、导出导入、危机识别
 └── types/

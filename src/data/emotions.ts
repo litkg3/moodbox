@@ -106,7 +106,8 @@ const GRATITUDE_ESSAY = `我真诚地感谢出现在我生命中的每一个人�
  * 3. 新增情绪时，只需在 `EMOTION_IDS` 中加入新 id，并在此文件补一条配置，
  *    情绪球舞台、面板、日历标记会自动适配，无需改动组件代码。
  */
-export const EMOTIONS: readonly Emotion[] = [  {
+export const EMOTIONS: readonly Emotion[] = [
+  {
     id: 'anxiety',
     label: '焦虑',
     latin: 'Anxiety',

@@ -501,7 +501,7 @@ export function SquareView() {
             挤在一起，看不出这里能改。现在给它一块自己的地方，
             名字放大、右上一个明确的按钮。
           */}
-          <div className="mt-4 flex items-center gap-3 rounded-[18px] border border-white/75 bg-white/55 px-4 py-2.5">
+          <div className="mt-4 flex items-center gap-3 rounded-[18px] border border-white/80 bg-white/66 px-4 py-2.5">
             <div className="min-w-0">
               <p className="text-[10px] tracking-[0.2em] text-ink-ghost">我的昵称</p>
               <p className="mt-0.5 truncate text-[13.5px] text-ink">{myName}</p>
@@ -512,8 +512,8 @@ export function SquareView() {
               className={cn(
                 'ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border px-4 py-2 text-[12.5px] transition-colors',
                 canRename
-                  ? 'border-[rgba(201,182,232,0.55)] bg-white/80 text-ink-soft hover:border-[rgba(201,182,232,0.85)] hover:text-ink'
-                  : 'border-[rgba(141,133,152,0.2)] bg-white/45 text-ink-ghost',
+                  ? 'border-[rgba(201,182,232,0.55)] bg-white/88 text-ink-soft hover:border-[rgba(201,182,232,0.85)] hover:text-ink'
+                  : 'border-[rgba(141,133,152,0.2)] bg-white/60 text-ink-ghost',
               )}
             >
               <PenLine size={13} strokeWidth={1.8} aria-hidden="true" />
@@ -565,7 +565,7 @@ export function SquareView() {
             点一下就是切换，不需要再点第二次确认。
           */}
           <div
-            className="ml-auto inline-flex items-center gap-0.5 rounded-full border border-white/70 bg-white/45 p-0.5"
+            className="ml-auto inline-flex items-center gap-0.5 rounded-full border border-white/80 bg-white/62 p-0.5"
             role="group"
             aria-label="排序方式"
           >
@@ -583,7 +583,7 @@ export function SquareView() {
                 className={cn(
                   'rounded-full px-2.5 py-1 text-[11px] tracking-[0.02em] transition-colors',
                   sort === value
-                    ? 'bg-white/85 text-ink shadow-[0_1px_2px_rgba(90,72,120,0.08)]'
+                    ? 'bg-white/92 text-ink shadow-[0_1px_2px_rgba(90,72,120,0.08)]'
                     : 'text-ink-ghost hover:text-ink',
                 )}
               >
@@ -602,7 +602,7 @@ export function SquareView() {
             {[0, 1, 2].map((index) => (
               <div
                 key={index}
-                className="h-[128px] animate-pulse rounded-[22px] border border-white/50 bg-white/30"
+                className="h-[128px] animate-pulse rounded-[22px] border border-white/60 bg-white/46"
               />
             ))}
           </div>
@@ -650,7 +650,7 @@ export function SquareView() {
               <button
                 type="button"
                 onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/55 px-5 py-2.5 text-[12px] text-ink-soft transition-colors hover:border-[rgba(201,182,232,0.6)] hover:text-ink"
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/80 bg-white/66 px-5 py-2.5 text-[12px] text-ink-soft transition-colors hover:border-[rgba(201,182,232,0.6)] hover:text-ink"
               >
                 查看更多
                 <ChevronDown size={13} strokeWidth={1.8} aria-hidden="true" />
@@ -716,7 +716,7 @@ export function SquareView() {
             文案只留一句，不解释原理、不劝说 —— 布局本身已经说明了它是可选项。
           */}
           {visitor?.region ? (
-            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/60 bg-white/40 px-4 py-3">
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/75 bg-white/58 px-4 py-3">
               <input
                 type="checkbox"
                 checked={draft.shareRegion}
@@ -759,7 +759,7 @@ export function SquareView() {
               {quotaMessage('post')}
             </p>
           ) : (
-            <p className="rounded-2xl border border-white/60 bg-white/40 px-4 py-3 text-[11.5px] leading-[1.9] text-ink-faint">
+            <p className="rounded-2xl border border-white/75 bg-white/58 px-4 py-3 text-[11.5px] leading-[1.9] text-ink-faint">
               如果内容里出现了可能和伤害自己有关的表达，我们会在发送前轻轻问一句，给予你帮助。
             </p>
           )}
@@ -842,7 +842,7 @@ function PinnedNotice() {
   return (
     <aside
       aria-label="广场说明"
-      className="mb-4 flex items-start gap-3 rounded-[20px] border border-[rgba(201,182,232,0.42)] bg-[rgba(201,182,232,0.13)] px-4 py-3.5"
+      className="mb-4 flex items-start gap-3 rounded-[20px] border border-[rgba(201,182,232,0.5)] bg-[rgba(201,182,232,0.2)] px-4 py-3.5"
     >
       <span className="mt-[1px] shrink-0 text-lavender-deep">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -971,7 +971,7 @@ function PostCard({
   }
 
   return (
-    <article className="rounded-[22px] border border-white/70 bg-white/50 p-5 transition-colors duration-500 hover:bg-white/60 sm:p-6">
+    <article className="rounded-[22px] border border-white/80 bg-white/66 p-5 transition-colors duration-500 hover:bg-white/74 sm:p-6">
       <header className="flex flex-wrap items-center gap-2 text-[11px] text-ink-ghost">
         <span className="text-ink-faint">{post.nickname}</span>
         {post.region ? (
