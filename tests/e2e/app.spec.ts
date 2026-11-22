@@ -128,20 +128,22 @@ test('键盘可以访问情绪球并打开面板', async ({ page }) => {
   await expect(page.getByRole('dialog', { name: /开心/ })).toBeVisible();
 });
 
-test('中央玻璃泡泡：桌面端罩住文字并真的模糊，手机端不出现', async ({ page }) => {
+test('中央液态玻璃气泡：桌面端罩住文字并真的模糊，手机端不出现', async ({ page }) => {
   await openHome(page);
 
-  const skin = page.locator('.mb-bubble-skin');
-  await expect(skin).toBeVisible();
+  const veil = page.locator('.mb-bubble-veil');
+  const blob = page.locator('.mb-blob');
+  await expect(veil).toBeVisible();
+  await expect(blob).toBeVisible();
 
-  // 文字整块落在泡泡里，而不是溢出到玻璃外面
+  // 文字整块落在气泡里，而不是溢出到玻璃外面
   const bubble = await page.locator('.mb-bubble').boundingBox();
-  const skinBox = await skin.boundingBox();
+  const veilBox = await veil.boundingBox();
   const title = await page.getByRole('heading', { level: 1 }).boundingBox();
-  expect(bubble && skinBox && title).toBeTruthy();
-  expect(skinBox!.width).toBeGreaterThan(bubble!.width);
-  expect(skinBox!.x).toBeLessThan(title!.x);
-  expect(skinBox!.x + skinBox!.width).toBeGreaterThan(title!.x + title!.width);
+  expect(bubble && veilBox && title).toBeTruthy();
+  expect(veilBox!.width).toBeGreaterThan(bubble!.width);
+  expect(veilBox!.x).toBeLessThan(title!.x);
+  expect(veilBox!.x + veilBox!.width).toBeGreaterThan(title!.x + title!.width);
 
   /*
    * 模糊必须真的生效。
@@ -149,10 +151,12 @@ test('中央玻璃泡泡：桌面端罩住文字并真的模糊，手机端不�
    * 这里专门守一件事：手写 `-webkit-backdrop-filter` 会让构建器丢掉标准写法，
    * 于是 `getComputedStyle` 读回 `none`，玻璃层看上去还是玻璃，其实一点都没糊。
    */
-  const blur = await skin.evaluate((el) => getComputedStyle(el).backdropFilter);
+  const blur = await veil.evaluate((el) => getComputedStyle(el).backdropFilter);
   expect(blur).toContain('blur');
 
-  // 浮动是慢的、小的
+  // 形变与扰动由 SMIL 驱动，不是 JS 定时器；浮动是慢的、小的
+  const animateCount = await blob.evaluate((el) => el.querySelectorAll('animate').length);
+  expect(animateCount).toBeGreaterThan(0);
   const motion = await page.locator('.mb-bubble').evaluate((el) => {
     const cs = getComputedStyle(el);
     return { name: cs.animationName, duration: parseFloat(cs.animationDuration) };
@@ -162,5 +166,5 @@ test('中央玻璃泡泡：桌面端罩住文字并真的模糊，手机端不�
 
   // 手机端：这一层整个不出现，文字回到原来的纯排版
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(skin).toBeHidden();
+  await expect(veil).toBeHidden();
 });

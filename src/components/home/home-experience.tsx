@@ -7,6 +7,7 @@ import { MessageCircleHeart } from 'lucide-react';
 import { EmotionPanel } from '@/components/emotion/emotion-panel';
 import { enterSquare } from '@/components/layout/square-entrance';
 import { EmotionSky } from '@/components/emotion/emotion-sky';
+import { LiquidBubble } from '@/components/home/liquid-bubble';
 import { MeteorShower } from '@/components/home/meteor-shower';
 import { useToast } from '@/components/ui/toast';
 import { HOME_BLESSING_LINES, SLOGAN } from '@/data/emotions';
@@ -102,14 +103,12 @@ export function HomeExperience() {
       <div className="pointer-events-none relative z-10 flex min-h-[100dvh] flex-col items-center justify-center px-5 pb-24 pt-[96px] lg:pb-28 lg:pt-[108px]">
         <div className="home-copy mb-bubble relative flex w-full max-w-[440px] flex-col items-center text-center">
           {/*
-            桌面端那层玻璃泡泡。手机端 `display: none`，纸上什么也不多出来 ——
-            形状、模糊、高光全在 globals.css 的 `.mb-bubble-skin` 里，
-            PC 断点以下一条都不生效。
+            桌面端那颗液态玻璃气泡：形状、虹彩、扰动全在 SVG 里，
+            手机端由 CSS 整个藏掉。见 components/home/liquid-bubble.tsx。
           */}
-          <span className="mb-bubble-skin" aria-hidden="true" />
+          <LiquidBubble />
 
           {/* 标题与寄语：刻意做轻，不跟球抢视线 */}
-          {/* 标题：品牌名一行，第二行直接说「点开一颗球」，比一句 slogan 更像是邀请 */}
           <motion.h1 {...fade(0.2)} className="flex flex-col items-center">
             <span className="home-title-brand font-display text-[26px] font-light leading-none tracking-[0.2em] text-ink/85 sm:text-[32px]">
               MoodBox
