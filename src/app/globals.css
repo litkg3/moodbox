@@ -1448,19 +1448,23 @@ html[data-theme='night'] .orb-surface {
   background: radial-gradient(circle, #ffffff 0%, var(--orb-mid) 60%, var(--orb-deep) 100%);
 }
 
-/* ---------------- 首页中央：悬浮玻璃泡泡（仅桌面） ---------------- */
+/* ---------------- 首页中央：悬浮玻璃气泡（仅桌面） ---------------- */
 
 /*
- * 桌面端中央那团文字，装进一颗横过来的玻璃泡泡里。
+ * 桌面端中央那团文字，装进一颗横过来的玻璃气泡里。
  *
- * 它不是卡片：没有描边、没有直边、没有一条能被读成「上沿」的线。
- * 视觉上只有三样东西 —— 一层被模糊过的背景、一圈很淡的玻璃沿、
- * 一道左上角的柔光；再加上整体极慢的上下浮动，像悬在空气里。
+ * 它不是卡片，也不是一团磨砂 —— 是一层几乎看不见的介质：
+ * 中间几乎是空的（背后的球能直接透过来），一切重量都压在边缘那几毫米上。
+ * 肥皂泡就是这样成立的：泡壁上的光决定了整个球的体积，泡里面什么也没有。
  *
- * 形状用四段不等半径拼出来：每个角都是四分之一椭圆，但四个角的
- * 长短各不相同，于是轮廓是「有机的圆」，而不是一个标准椭圆或圆角矩形。
- * 皮肤比文字框外面还多探出 26/16px，文字因此永远落在玻璃里面，
- * 不会出现字压在那道弯线上的情况。
+ * 形状是一颗正椭圆（不是四段不等半径的圆角矩形）：
+ * 圆角矩形无论半径多大，四个角上总有四段圆弧在弯，眼睛会把它们连成「边」；
+ * 椭圆只有连续的曲率，没有一条线能被读成卡片的上沿。
+ *
+ * 三个伪元素/背景层分工：
+ *   主层          一点点体积感（上下各一丝亮）、脚下一层几乎看不见的接触影
+ *   ::before      泡壁的厚度：一圈上下亮、左右几乎消失的描边
+ *   ::after       折射：左上那道主高光 + 右上一点次高光 + 底部一道反光弧
  *
  * 整套规则只活在 `min-width: 1024px` 且高度够的窗口里。
  * 手机端一行都不生效 —— `.mb-bubble-skin` 在断点以下是 `display: none`。
@@ -1471,10 +1475,10 @@ html[data-theme='night'] .orb-surface {
 
 @media (min-width: 1024px) and (min-height: 640px) {
   .home-stage .home-copy.mb-bubble {
-    width: clamp(420px, 34vw, 480px);
+    width: clamp(440px, 35vw, 500px);
     max-width: none;
-    min-height: clamp(220px, 27vh, 260px);
-    padding: clamp(22px, 2.6vh, 30px) clamp(30px, 2.6vw, 40px);
+    min-height: clamp(230px, 28vh, 270px);
+    padding: clamp(22px, 2.6vh, 30px) clamp(34px, 3vw, 46px);
     justify-content: center;
     animation: mb-bubble-float 9.5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
     will-change: transform;
@@ -1483,59 +1487,48 @@ html[data-theme='night'] .orb-surface {
   .mb-bubble-skin {
     display: block;
     position: absolute;
-    inset: -18px -30px;
+    inset: -20px -32px;
     z-index: -1;
-    border-radius: 49% 51% 46% 54% / 54% 48% 52% 46%;
+    border-radius: 50%;
+    /*
+     * 中间几乎全空：只有顶部一点点高光、底部一点点反光，
+     * 其余交给底下的气氛自己透过来。
+     */
     background:
       radial-gradient(
-        56% 76% at 24% 2%,
-        rgba(255, 255, 255, 0.78) 0%,
-        rgba(255, 255, 255, 0.22) 26%,
-        rgba(255, 255, 255, 0) 50%
-      ),
-      /* 右下透出一点冷紫 —— 玻璃的折射感全在这一笔 */
-      radial-gradient(
-        76% 100% at 84% 98%,
-        rgba(198, 188, 238, 0.4) 0%,
-        rgba(198, 188, 238, 0) 64%
+        62% 52% at 30% 0%,
+        rgba(255, 255, 255, 0.34) 0%,
+        rgba(255, 255, 255, 0) 62%
       ),
       radial-gradient(
-        54% 66% at 24% 100%,
-        rgba(255, 226, 212, 0.32) 0%,
-        rgba(255, 226, 212, 0) 68%
-      ),
-      linear-gradient(
-        164deg,
-        rgba(255, 255, 255, 0.19) 0%,
-        rgba(255, 255, 255, 0.05) 48%,
-        rgba(255, 255, 255, 0.15) 100%
+        54% 42% at 70% 100%,
+        rgba(255, 255, 255, 0.22) 0%,
+        rgba(255, 255, 255, 0) 66%
       );
-    backdrop-filter: blur(26px) saturate(1.24);
+    /* 背景本身只有一层薄雾，主要靠模糊把背后的东西揉开 */
+    backdrop-filter: blur(14px) saturate(1.16);
     box-shadow:
-      inset 0 1px 1px rgba(255, 255, 255, 0.95),
-      inset 0 26px 60px -50px rgba(255, 255, 255, 0.72),
-      inset 0 0 96px rgba(255, 255, 255, 0.18),
-      inset 0 -42px 64px -40px rgba(92, 74, 120, 0.4),
-      inset 0 -3px 12px -6px rgba(255, 255, 255, 0.8),
-      0 0 0 0.5px rgba(126, 110, 158, 0.09),
-      0 44px 80px -48px rgba(70, 55, 92, 0.46),
-      0 12px 26px -16px rgba(70, 55, 92, 0.22);
+      /* 贴着地面的那一点接触影，几乎看不见，但有它才不飘在半空 */
+      0 14px 30px -24px rgba(70, 55, 92, 0.32);
   }
 
-  /* 一圈粗细与明度都在变的玻璃沿：左上最亮，右下带一点冷紫，底部留一道反光 */
-  .mb-bubble-skin::after {
+  /* 泡壁：上下两道更实、更亮的细线，中间迅速衰减 —— 细才不显卡片 */
+  .mb-bubble-skin::before {
     content: '';
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    padding: 1.5px;
+    padding: 0.9px;
     background: linear-gradient(
-      150deg,
-      rgba(255, 255, 255, 0.88) 0%,
-      rgba(255, 255, 255, 0.2) 24%,
-      rgba(212, 202, 244, 0.42) 58%,
-      rgba(255, 255, 255, 0.6) 84%,
-      rgba(255, 255, 255, 0.22) 100%
+      180deg,
+      rgba(255, 255, 255, 1) 0%,
+      rgba(255, 255, 255, 0.95) 2.5%,
+      rgba(255, 255, 255, 0.4) 7%,
+      rgba(255, 255, 255, 0.04) 22%,
+      rgba(255, 255, 255, 0.02) 74%,
+      rgba(255, 255, 255, 0.34) 91%,
+      rgba(255, 255, 255, 0.82) 97%,
+      rgba(255, 255, 255, 0.96) 100%
     );
     -webkit-mask:
       linear-gradient(#000 0 0) content-box,
@@ -1548,72 +1541,106 @@ html[data-theme='night'] .orb-surface {
     pointer-events: none;
   }
 
-  /* 左上一道被拉长的柔光，泡泡的「高光」全靠它 */
-  .mb-bubble-skin::before {
+  /*
+   * 折射高光。四项叠在一起：
+   * 左上那道是「主光」，边缘锐、中间亮，像有人拿灯从左上方照过来；
+   * 右上一点次光破掉对称；底下一道弧是泡壁把地面的光弹回去；
+   * 右下一点冷紫，是气泡折射出来的院子颜色。
+   * 只模糊 0.6px —— 太糊就变成棉花，不再是玻璃。
+   */
+  .mb-bubble-skin::after {
     content: '';
     position: absolute;
-    left: 11%;
-    top: 3%;
-    width: 34%;
-    height: 21%;
-    border-radius: 50%;
-    background: radial-gradient(
-      ellipse at 40% 40%,
-      rgba(255, 255, 255, 1) 0%,
-      rgba(255, 255, 255, 0.52) 40%,
-      rgba(255, 255, 255, 0) 74%
-    );
-    filter: blur(5px);
-    transform: rotate(-10deg);
+    inset: 0;
+    border-radius: inherit;
+    background:
+      radial-gradient(
+        24% 26% at 19% 17%,
+        rgba(255, 255, 255, 1) 0%,
+        rgba(255, 255, 255, 0.72) 22%,
+        rgba(255, 255, 255, 0.18) 52%,
+        rgba(255, 255, 255, 0) 76%
+      ),
+      radial-gradient(
+        11% 13% at 78% 13%,
+        rgba(255, 255, 255, 0.62) 0%,
+        rgba(255, 255, 255, 0) 76%
+      ),
+      radial-gradient(
+        44% 9% at 52% 98.5%,
+        rgba(255, 255, 255, 0.5) 0%,
+        rgba(255, 255, 255, 0) 78%
+      ),
+      radial-gradient(
+        20% 24% at 87% 72%,
+        rgba(198, 188, 238, 0.22) 0%,
+        rgba(198, 188, 238, 0) 78%
+      );
+    filter: blur(0.6px);
     pointer-events: none;
   }
 
-  /* 文字压在高光之上 */
+  /* 文字浮在气泡里面：往上提 2px，让它在光学中心而不是几何中心 */
   .mb-bubble > *:not(.mb-bubble-skin) {
     position: relative;
     z-index: 1;
+    transform: translateY(-2px);
   }
 
-  /* 夜里换一层深玻璃：不是把白调暗，而是换成带紫的烟灰 */
+  /* 夜里：泡壁的白光提亮，中间依旧通透，只把背后的深色换成冷一点的星光 */
   html[data-theme='night'] .mb-bubble-skin {
     background:
       radial-gradient(
-        88% 122% at 22% 4%,
-        rgba(196, 184, 240, 0.28) 0%,
-        rgba(196, 184, 240, 0.1) 34%,
-        rgba(196, 184, 240, 0) 60%
+        62% 52% at 30% 0%,
+        rgba(206, 196, 255, 0.28) 0%,
+        rgba(206, 196, 255, 0) 62%
       ),
-      linear-gradient(
-        168deg,
-        rgba(126, 112, 186, 0.26) 0%,
-        rgba(70, 62, 118, 0.2) 52%,
-        rgba(96, 84, 150, 0.24) 100%
+      radial-gradient(
+        54% 42% at 70% 100%,
+        rgba(255, 255, 255, 0.1) 0%,
+        rgba(255, 255, 255, 0) 66%
       );
-    box-shadow:
-      inset 0 1px 1px rgba(255, 255, 255, 0.16),
-      inset 0 0 80px rgba(150, 132, 220, 0.1),
-      inset 0 -34px 62px -36px rgba(0, 0, 0, 0.55),
-      0 48px 92px -54px rgba(0, 0, 0, 0.82),
-      0 0 70px -22px rgba(132, 112, 220, 0.34);
-  }
-
-  html[data-theme='night'] .mb-bubble-skin::after {
-    background: linear-gradient(
-      148deg,
-      rgba(255, 255, 255, 0.5) 0%,
-      rgba(255, 255, 255, 0.06) 34%,
-      rgba(255, 255, 255, 0.26) 70%,
-      rgba(255, 255, 255, 0.05) 100%
-    );
+    box-shadow: 0 16px 34px -26px rgba(0, 0, 0, 0.6);
   }
 
   html[data-theme='night'] .mb-bubble-skin::before {
-    background: radial-gradient(
-      ellipse at 42% 38%,
-      rgba(255, 255, 255, 0.5) 0%,
-      rgba(255, 255, 255, 0.16) 44%,
-      rgba(255, 255, 255, 0) 74%
+    background: linear-gradient(
+      180deg,
+      rgba(226, 218, 255, 0.95) 0%,
+      rgba(226, 218, 255, 0.62) 3%,
+      rgba(226, 218, 255, 0.2) 9%,
+      rgba(255, 255, 255, 0.04) 26%,
+      rgba(255, 255, 255, 0.03) 72%,
+      rgba(226, 218, 255, 0.36) 91%,
+      rgba(232, 224, 255, 0.7) 97%,
+      rgba(232, 224, 255, 0.9) 100%
     );
+  }
+
+  html[data-theme='night'] .mb-bubble-skin::after {
+    background:
+      radial-gradient(
+        24% 26% at 19% 17%,
+        rgba(255, 255, 255, 0.8) 0%,
+        rgba(255, 255, 255, 0.44) 22%,
+        rgba(255, 255, 255, 0.1) 52%,
+        rgba(255, 255, 255, 0) 76%
+      ),
+      radial-gradient(
+        11% 13% at 78% 13%,
+        rgba(255, 255, 255, 0.42) 0%,
+        rgba(255, 255, 255, 0) 76%
+      ),
+      radial-gradient(
+        44% 9% at 52% 98.5%,
+        rgba(210, 198, 255, 0.36) 0%,
+        rgba(210, 198, 255, 0) 78%
+      ),
+      radial-gradient(
+        22% 26% at 85% 76%,
+        rgba(150, 130, 230, 0.24) 0%,
+        rgba(150, 130, 230, 0) 74%
+      );
   }
 }
 
