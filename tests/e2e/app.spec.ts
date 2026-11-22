@@ -127,3 +127,40 @@ test('键盘可以访问情绪球并打开面板', async ({ page }) => {
   await page.keyboard.press('Enter');
   await expect(page.getByRole('dialog', { name: /开心/ })).toBeVisible();
 });
+
+test('中央玻璃泡泡：桌面端罩住文字并真的模糊，手机端不出现', async ({ page }) => {
+  await openHome(page);
+
+  const skin = page.locator('.mb-bubble-skin');
+  await expect(skin).toBeVisible();
+
+  // 文字整块落在泡泡里，而不是溢出到玻璃外面
+  const bubble = await page.locator('.mb-bubble').boundingBox();
+  const skinBox = await skin.boundingBox();
+  const title = await page.getByRole('heading', { level: 1 }).boundingBox();
+  expect(bubble && skinBox && title).toBeTruthy();
+  expect(skinBox!.width).toBeGreaterThan(bubble!.width);
+  expect(skinBox!.x).toBeLessThan(title!.x);
+  expect(skinBox!.x + skinBox!.width).toBeGreaterThan(title!.x + title!.width);
+
+  /*
+   * 模糊必须真的生效。
+   *
+   * 这里专门守一件事：手写 `-webkit-backdrop-filter` 会让构建器丢掉标准写法，
+   * 于是 `getComputedStyle` 读回 `none`，玻璃层看上去还是玻璃，其实一点都没糊。
+   */
+  const blur = await skin.evaluate((el) => getComputedStyle(el).backdropFilter);
+  expect(blur).toContain('blur');
+
+  // 浮动是慢的、小的
+  const motion = await page.locator('.mb-bubble').evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { name: cs.animationName, duration: parseFloat(cs.animationDuration) };
+  });
+  expect(motion.name).toBe('mb-bubble-float');
+  expect(motion.duration).toBeGreaterThan(6);
+
+  // 手机端：这一层整个不出现，文字回到原来的纯排版
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(skin).toBeHidden();
+});
