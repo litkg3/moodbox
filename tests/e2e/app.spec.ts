@@ -393,14 +393,21 @@ test('情绪转盘：鼠标悬停停住并切到那一格，移开后继续转',
    * 盘转到哪儿 —— 这是运行时的事，所以这里不能断言「一定是疲惫」，只能断言
    * 「悬停生效了」：有且只有一格被标成 hot、卡片标题等于指针指向的那一格。
    */
-  const board = (await page.locator('.emotion-wheel-board').boundingBox())!;
-  const centerX = board.x + board.width / 2;
-  // 选一条半径：点在扇形环的中线上（避开中间的洞和边缘）
-  const radius = board.width * 0.33;
-  await page.mouse.move(centerX, board.y + board.height / 2 - radius, { steps: 10 });
+  /*
+   * 落点要稳：第一屏的入场动画还在跑时盘的位置会动，等它停下再取坐标。
+   *
+   * 半径取环形中线（洞 86/400 = 21.5%，外沿 190/400 = 47.5%，中线 34.5%）。
+   * 之前写的 0.33 已经贴着洞边了，盘再转一点、入场再缩一点，指针就落回
+   * <svg> 空白上 —— hoverIndex 一直是 null，高亮不亮，看着像"悬停没反应"。
+   */
+  await page.waitForTimeout(1300);
+  const live = (await page.locator('.emotion-wheel-board').boundingBox())!;
+  const centerX = live.x + live.width / 2;
+  const radius = live.width * 0.345;
+  await page.mouse.move(centerX, live.y + live.height / 2 - radius, { steps: 10 });
   await page.waitForTimeout(500);
   // 径向往斜上轻移一下，确保触发了 pointermove
-  await page.mouse.move(centerX + 6, board.y + board.height / 2 - radius + 4, { steps: 4 });
+  await page.mouse.move(centerX + 6, live.y + live.height / 2 - radius + 4, { steps: 4 });
   await page.waitForTimeout(1200);
 
   const hot = page.locator('.emotion-wheel-slice-hot');

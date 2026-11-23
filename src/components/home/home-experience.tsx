@@ -186,31 +186,43 @@ export function HomeExperience() {
          */}
       <div className="emotion-screen relative z-10 mx-auto flex h-[100dvh] w-full max-w-[1200px] flex-col items-center justify-center px-5 py-16 sm:px-8 xl:max-w-[1560px]">
         {/*
-          第二屏的入场：整屏翻页上来（或被翻页带走）时，转盘浮上来、淡入。
-          whileInView + once 让它只在第一次露脸时演一遍；靠 IntersectionObserver
-          触发，滚到一半松开也不会半透明地卡在那里（翻页本身会被吸到整屏）。
+          第二屏的入场。
+          --
+          原来只有「从下方 48px 浮上来 + 淡入」。问题有两个：
+            1. 48px 放在一整屏（900px）里太轻，几乎等于没有；
+            2. 位移被这一屏的边界裁掉，看起来只是"淡出来"，不是"翻上来"。
+          现在换成三段式，和翻页动作对得上：
+            · 转盘：从 0.9 倍、下移 72px 长到原大小（像从屏幕下方推到眼前）；
+            · 两行标题：更晚一点、从更远处跟上；
+            · 整块再叠一点模糊，入画那一下才有"对焦"的感觉。
+          whileInView 用 -18% 的 rootMargin 提前一点触发，让它和翻页同时开始，
+          而不是等盘已经停稳了才动。
         */}
         <motion.div
-          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 48, scale: 0.965 }}
-          whileInView={{ opacity: 1, y: 0, scale: 1 }}
-          viewport={{ once: true, amount: 0.25 }}
-          transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
+          initial={
+            reduceMotion
+              ? { opacity: 0 }
+              : { opacity: 0, y: 72, scale: 0.9, filter: 'blur(6px)' }
+          }
+          whileInView={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+          viewport={{ once: true, amount: 0.15, margin: '0px 0px -18% 0px' }}
+          transition={{ duration: 1.05, ease: [0.2, 0.9, 0.24, 1] }}
           className="flex w-full flex-col items-center"
         >
           <motion.p
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 26 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.4 }}
-            transition={{ duration: 0.7, delay: 0.12, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
+            viewport={{ once: true, amount: 0.15, margin: '0px 0px -18% 0px' }}
+            transition={{ duration: 0.85, delay: 0.1, ease: [0.2, 0.9, 0.24, 1] }}
             className="mb-1.5 text-center text-[10.5px] tracking-[0.28em] text-ink-faint/80 sm:text-[11.5px]"
           >
             情绪的背后是需求
           </motion.p>
           <motion.h2
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 14 }}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 34 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.4 }}
-            transition={{ duration: 0.75, delay: 0.2, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
+            viewport={{ once: true, amount: 0.15, margin: '0px 0px -18% 0px' }}
+            transition={{ duration: 0.9, delay: 0.16, ease: [0.2, 0.9, 0.24, 1] }}
             className="mb-4 text-center font-display text-[22px] font-light tracking-[0.12em] text-ink/85 sm:mb-6 sm:text-[26px]"
           >
             情绪转盘

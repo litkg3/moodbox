@@ -1658,6 +1658,36 @@ html[data-theme='night'] .orb-surface {
   will-change: transform;
 }
 
+/*
+ * 扇形文字换字：就地淡入 + 从 0.94 放大落位。
+ *
+ * 为什么需要它 —— 转盘转到下一格、或者用户点了另一格，文字是整块换掉的。
+ * 没有过渡的话是"啪"一下变成另一个词，配上盘还在转，看起来就像文字
+ * 自己跳了一下。这里给的很轻（0.34s、只放 6%），既补上过渡，又不至于
+ * 让人等。
+ *
+ * 坑：动画里不能写 translate —— 外层 <g> 的 transform 属性负责把文字
+ * 摆到扇形锚点上，内层 .emotion-wheel-counter 负责反旋，这一层再挪位置
+ * 就会和反旋叠加，文字会飘出扇形。scale 的圆心落在 fill-box 中心，
+ * 原地胀缩，几何完全不动。
+ */
+@keyframes emotion-wheel-slice-caption {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.emotion-wheel-slice-caption {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: emotion-wheel-slice-caption 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 .emotion-wheel-slice {
   cursor: pointer;
   transition:
@@ -1900,8 +1930,12 @@ html[data-theme='night'] .emotion-wheel-card {
 @keyframes emotion-wheel-card-swap {
   0% {
     opacity: 0;
-    filter: blur(2px);
-    clip-path: inset(0 0 22% 0 round 4px);
+    filter: blur(3px);
+    clip-path: inset(0 0 34% 0 round 4px);
+  }
+  55% {
+    opacity: 1;
+    filter: blur(0.6px);
   }
   100% {
     opacity: 1;
@@ -1911,7 +1945,109 @@ html[data-theme='night'] .emotion-wheel-card {
 }
 
 .emotion-wheel-card-swap {
-  animation: emotion-wheel-card-swap 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: emotion-wheel-card-swap 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/*
+ * 换内容时卡片里泛起来的一层柔光。
+ *
+ * 关键决定：**不建发光盒子**。原来是一个绝对定位的 <span>，给它做
+ * scale(1.12) 的动画 —— 放大后的矩形会被算进卡片的 scrollHeight
+ * （实测 149 → 160），卡片于是凭空多出一截"能滚的高度"，虽然
+ * overflow: hidden 让人看不见，但 overscroll / 触屏拖动会跟着抖。
+ * contain: paint 和 overflow: hidden 都拦不住：它们只管绘制，不改
+ * 滚动溢出矩形；负 inset 更糟，直接把布局盒撑大。
+ *
+ * 现在的做法：柔光画成一个铺满卡片、**永不放大**的层，这里只负责把
+ * opacity 从 0 提到峰值再落回 0。没有放大 → 矩形不变 → 卡片高度纹丝
+ * 不动，scrollHeight 恒等于 clientHeight。
+ */
+.emotion-wheel-card-flash {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    62% 58% at 32% 96%,
+    color-mix(in srgb, var(--slice-color) 52%, transparent) 0%,
+    transparent 70%
+  );
+  /* 叠在卡片底色之上、内容之下 */
+  z-index: 0;
+  animation: emotion-wheel-card-flash 0.66s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 被点中的那一次更亮、更长一点 */
+.emotion-wheel-card-flash-strong {
+  animation-duration: 0.9s;
+  background: radial-gradient(
+    64% 62% at 32% 96%,
+    color-mix(in srgb, var(--slice-color) 70%, transparent) 0%,
+    transparent 70%
+  );
+}
+
+@keyframes emotion-wheel-card-flash {
+  0% {
+    opacity: 0;
+  }
+  32% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/*
+ * 点中的瞬间从卡片靠盘那一侧的边沿荡开一圈光。
+ *
+ * 用 border 画环，scale 由小到大、透明度归零 —— 和呼吸页那两道起势
+ * 光圈是同一套语言，整站只用一次"从某处荡开"这个动作。
+ *
+ * 它也在放大，所以同样受上面那条规律的约束：环必须**整个待在卡片里**。
+ * 于是左沿取 0（不是 -48px），平移到边沿外靠 translate 属性，关键帧里
+ * 只写 scale —— 位移写进关键帧会和 scale 一起进滚动溢出矩形。
+ */
+.emotion-wheel-card-burst {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 150px;
+  height: 150px;
+  margin-top: -75px;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, var(--slice-color) 70%, transparent);
+  pointer-events: none;
+  z-index: 0;
+  grid-area: auto;
+  animation: emotion-wheel-card-burst 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 卡片在右边 → 光从卡片左沿（靠盘的一侧）荡开；在左边则从右沿 */
+.emotion-wheel-card-burst[data-side='left'] {
+  left: auto;
+  right: 0;
+}
+
+@keyframes emotion-wheel-card-burst {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.35);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+}
+
+.emotion-wheel-card-burst[data-side='right'] {
+  translate: -48px 0;
+}
+
+.emotion-wheel-card-burst[data-side='left'] {
+  translate: 48px 0;
 }
 
 /* 第二块稍晚一点，读起来是"跟着出来"而不是两块一起闪 */
@@ -2107,6 +2243,25 @@ html[data-theme='night'] .emotion-wheel-card-method {
 }
 
 /*
+ * 点中某格时盘的那一下「按下去」。
+ *
+ * 只缩 1.5%，一圈 0.5s 回到原样。放在盘（.emotion-wheel-board）上而不是
+ * 扇形上：扇形一旦缩放，pointermove 命中的格子就会在动画期间不断变化，
+ * 高亮跟着闪 —— 这正是之前"点一下标签就乱动"的观感来源之一。
+ */
+@keyframes emotion-wheel-board-press {
+  0% {
+    transform: scale(1);
+  }
+  38% {
+    transform: scale(0.985);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/*
  * 宽屏：盘居中，卡片浮在两肩的空当里。
  *
  * 原来把盘放在 1fr 那一栏、卡片占掉固定的第二栏 —— 盘就被推到了左边，
@@ -2122,6 +2277,19 @@ html[data-theme='night'] .emotion-wheel-card-method {
 
   .emotion-wheel-board {
     margin: 0 auto;
+    /*
+     * 宽屏点中某一格时，盘只做一次极轻的"吸气"（缩到 0.985 再回 1），
+     * 位置和角度都不变 —— 标签该待在原地就待在原地。
+     *
+     * 这是「点完没反应」和「点完乱动」之间那条很窄的路：给一点点缩放，
+     * 用户能确认"我按下的就是这一格"；但绝不动角度，因为一旦角度变了，
+     * 标签就从手指底下溜走了。
+     */
+    transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .emotion-wheel.has-active .emotion-wheel-board {
+    animation: emotion-wheel-board-press 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .emotion-wheel-card-slot {
@@ -2219,9 +2387,16 @@ html[data-theme='night'] .emotion-wheel-card-method {
     transition: none;
   }
 
-  /* 换内容那块也直接到位，不做上浮 */
-  .emotion-wheel-card-swap {
+  /* 换内容那块也直接到位，不做上浮；柔光和光环保留但不动 */
+  .emotion-wheel-card-swap,
+  .emotion-wheel-slice-caption {
     animation: none;
+  }
+
+  .emotion-wheel-card-flash,
+  .emotion-wheel-card-burst {
+    animation: none;
+    opacity: 0;
   }
 
   .emotion-wheel-card {

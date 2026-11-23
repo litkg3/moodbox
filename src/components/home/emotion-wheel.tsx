@@ -38,6 +38,12 @@ const START_DEG = -90;
  */
 const STEP_MS = 1000;
 
+/**
+ * 盘的旋转过渡时长（毫秒），必须和 globals.css 里 .emotion-wheel-spin
+ * 的 transition-duration（0.82s）对上。用来判断「盘站定了没有」。
+ */
+const SPIN_MS = 820;
+
 /** 转盘 viewBox 尺寸（正方形），所有几何都基于它，再用 CSS 缩放适配。 */
 const SIZE = 400;
 const CX = SIZE / 2;
@@ -207,6 +213,15 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
     return () => window.clearInterval(timer);
   }, [autoActive, inView]);
 
+  /**
+   * 鼠标压在哪一格。
+   *
+   * 这个函数只做一件事：记下「指针现在落在谁身上」，绝不参与旋转角度的
+   * 计算。之前它同时决定 hoverIndex，而 hoverIndex 又会驱动整盘转到
+   * 「让那一格正对指针」的位置 —— 结果是鼠标每挪 1px，盘就跟着补一段
+   * 角度，扇形从指针底下跑掉、指针又落到新的扇形上，越挪越乱。
+   * 现在悬停只负责：暂停自动转动 + 把那一格点亮。
+   */
   const syncPointer = useCallback(
     (event: PointerEvent) => {
       if (event.pointerType !== 'mouse' || lockedRef.current || !autoActive) return;
@@ -220,13 +235,6 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
       const index = target ? Number(target.getAttribute('data-slice-index')) : NaN;
       const next = Number.isFinite(index) ? index : null;
       if (next === hoveredRef.current) return;
-      /*
-       * 悬停时盘要停在「当时指针指着的那一格」。
-       *
-       * 角度不用另算 —— 只要把 hoverIndex 设上，渲染时 displayIndex 取它，
-       * 下面的 spinGroup 会自己算到「这一格正对指针」，还顺带补整圈。
-       * 鼠标停在原地时盘会继续转到对齐位置，再往下转就卡住不动了。
-       */
       setHoverIndex(next);
     },
     [autoActive],
@@ -280,27 +288,55 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
    */
   const baseSpin = -SLICE_DEG / 2 - step * SLICE_DEG;
 
-  /** 把「某一格要正对指针」换算成整盘角度，并补齐整圈。 */
-  const spinFor = (index: number | null, fallbackSpin: number) => {
-    if (index === null) return fallbackSpin;
-    const targetAngle = START_DEG + SLICE_DEG / 2 + index * SLICE_DEG;
-    const desired = START_DEG - targetAngle;
-    return desired + 360 * Math.ceil((fallbackSpin - desired) / 360);
-  };
-
-  /** 鼠标停在哪一格就转到哪一格；锁定之后取冻结的角度，一步不动。 */
+  /** 锁定的那一格（下标）；没锁定就是 null。 */
   const lockIndex = lockedId ? Math.max(0, EMOTION_SLICES.findIndex((slice) => slice.id === lockedId)) : null;
-  const desiredIndex = lockIndex !== null ? null : hoverIndex;
-  const spinGroup =
-    frozenSpin !== null ? frozenSpin : ready ? spinFor(desiredIndex, baseSpin) : initialSpin;
 
-  /** 指针指的是哪一格：锁定的、悬停的，或者自动走到的那一格。 */
-  const pointerIndex = lockIndex ?? hoverIndex ?? mod(step);
+  /*
+   * 盘面的角度只有两个来源，都不看鼠标：
+   *
+   *   1. 锁定中 → 用点下去那一刻冻结的角度，一步不动；
+   *   2. 待机   → 用自动步进算出来的角度，一步 45°。
+   *
+   * 悬停只是把定时器停掉（盘就停在当前这一格），不参与角度计算。
+   * 这样「鼠标在盘上挪」和「盘怎么转」彻底解耦，点标签之后也不会乱动。
+   */
+  const spinGroup = frozenSpin !== null ? frozenSpin : ready ? baseSpin : initialSpin;
 
-  /** 卡片展示的情绪：锁定的优先，否则跟着指针走。 */
-  const focusIndex = lockedId
-    ? Math.max(0, EMOTION_SLICES.findIndex((slice) => slice.id === lockedId))
-    : pointerIndex;
+  /*
+   * 盘还「在路上」。
+   *
+   * 高亮/卡片跟着鼠标切换时，盘刚被停住但 CSS 过渡（0.65s）还没走完，
+   * 鼠标底下那一格随时会换人。这段时间里统一用「指针下那一格」当展示格，
+   * 等盘真正站定了再交给悬停记下的那一格 —— 否则会出现"卡片说疲惫、
+   * 指针指着无聊"的错位，看上去就是点一下 / 悬一下之后内容自己乱跳。
+   */
+  const [settled, setSettled] = useState(true);
+  useEffect(() => {
+    if (hoverIndex === null && frozenSpin === null) {
+      setSettled(true);
+      return;
+    }
+    setSettled(false);
+    const timer = window.setTimeout(() => setSettled(true), SPIN_MS + 40);
+    return () => window.clearTimeout(timer);
+  }, [hoverIndex, frozenSpin]);
+
+  /*
+   * 当前"被展示"的那一格。
+   *
+   *   锁定 → 被点中的那一格（盘已经冻住，它就是用户正在看的那一格）
+   *   悬停 → 鼠标压着的那一格；盘还没站定时先跟指针
+   *   待机 → 自动步进走到的那一格
+   *
+   * 注意锁定分支一定要取 lockIndex，不能落到 mod(step) 上：锁定之后
+   * 定时器停了、step 不再前进，但两者曾经对齐过吗？没有 —— 点下去那一刻
+   * 盘是从上一步刚转过来的，两者可能差一格。取 mod(step) 会让高亮和
+   * 卡片侧判断都偏掉一格，看起来就是"点完之后指针自己跳到别的格上去了"。
+   */
+  const hoverFocus = hovering ? (settled ? hoverIndex : mod(step)) : null;
+  const focusIndex = lockIndex ?? hoverFocus ?? mod(step);
+  /** 正对指针的那一格（用来打 .emotion-wheel-slice-top）。 */
+  const pointerIndex = focusIndex;
   // 显式收窄类型：EMOTION_SLICES 是 readonly 数组，索引访问会被推成可能为空
   const focused =
     EMOTION_SLICES[focusIndex] ?? (EMOTION_SLICES[0] as EmotionSlice);
@@ -312,7 +348,8 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
    * 加回去，就是它此刻在屏幕上的角度。cos > 0 在右半圈，cos < 0 在左半圈。
    * 卡片永远挨着自己那半圈，不会横跨整个盘跑到对面去。
    *
-   * 盘本身始终居中 —— 卡片是浮在两肩空当里的，不占布局位。
+   * 待机时"被展示的那一格"就是指针下那一格；锁定/悬停时盘不再动，
+   * 展示的那一格待在原位，卡片也就跟着它待在原来那一侧。
    */
   const pointerAngle = START_DEG + SLICE_DEG / 2 + focusIndex * SLICE_DEG + spinGroup;
   const cardSide: 'left' | 'right' = Math.cos((pointerAngle * Math.PI) / 180) >= 0 ? 'right' : 'left';
@@ -418,8 +455,17 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
                 const isDimmed = lockedId !== null && !isActive;
                 const isTop = index === pointerIndex;
                 /*
-                 * 键盘高亮跟着焦点走：Tab 进来、用方向键换格，都能看见自己在哪。
-                 * 鼠标高亮只在没有键盘焦点时生效，免得两个圈同时亮。
+                 * 高亮只认鼠标压着的那一格。
+                 *
+                 * 悬停已经把自动转动停住了，盘不会再从鼠标底下溜走，所以
+                 * 「鼠标压着的那一格」和「指针指的那一格」在这里是同一格。
+                 * 之前额外加了 isTop 做保险，结果盘还在收尾过渡（0.65s）
+                 * 或刚进视口时，指针落在一格上、top 还是上一格，高亮就
+                 * 整个不亮 —— 用户看到的是"鼠标放上去没反应"。
+                 *
+                 * 视觉上两者本来就不冲突：hot 是局部提亮放大（在这一格
+                 * 自己身上），top 只是亮度略提（见 .emotion-wheel-slice-top），
+                 * 没有第二套"指针标记"会被误读成盘在乱动。
                  */
                 const isHovered = hoverIndex === index && keyboardFocus === null;
 
@@ -497,28 +543,36 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
                         className="emotion-wheel-counter"
                         style={{ transform: `rotate(${-spinGroup}deg)` }}
                       >
-                        <text
-                          textAnchor="middle"
-                          className="emotion-wheel-slice-label"
-                          fill={slice.ink}
-                          fontSize="19"
-                          fontWeight="600"
-                          letterSpacing="0.08em"
-                          y="-3"
-                        >
-                          {slice.label}
-                        </text>
-                        <text
-                          textAnchor="middle"
-                          className="emotion-wheel-slice-sub"
-                          fill={slice.ink}
-                          fontSize="10"
-                          opacity="0.8"
-                          letterSpacing="0.02em"
-                          y="16"
-                        >
-                          是为了获得{slice.need}
-                        </text>
+                        {/*
+                          换字过渡：文字按情绪 id 换节点，各自就地淡入 + 轻微
+                          放大落位。只动 opacity / scale（SVG 里走 CSS
+                          transform 不会影响盘面几何），所以换字时不会有任何
+                          位移感 —— 这正是"点完标签不要乱动"要的效果。
+                        */}
+                        <g key={`label-${slice.id}`} className="emotion-wheel-slice-caption">
+                          <text
+                            textAnchor="middle"
+                            className="emotion-wheel-slice-label"
+                            fill={slice.ink}
+                            fontSize="19"
+                            fontWeight="600"
+                            letterSpacing="0.08em"
+                            y="-3"
+                          >
+                            {slice.label}
+                          </text>
+                          <text
+                            textAnchor="middle"
+                            className="emotion-wheel-slice-sub"
+                            fill={slice.ink}
+                            fontSize="10"
+                            opacity="0.8"
+                            letterSpacing="0.02em"
+                            y="16"
+                          >
+                            是为了获得{slice.need}
+                          </text>
+                        </g>
                       </g>
                     </g>
                   </g>
@@ -567,6 +621,39 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
             >
               {/* 顶部那条跟着情绪走的细色条，只做一点点提示 */}
               <span className="emotion-wheel-card-bar" aria-hidden="true" />
+
+              {/*
+                换内容时的柔光。
+
+                这里刻意**没有**独立的发光盒子：一个绝对定位、还要 scale 到
+                1.1 的元素，会把自己放大后的矩形算进卡片的 scrollHeight
+                （实测 149 → 160），卡片就凭空多出一截能滚的高度。contain:
+                paint / overflow: hidden 都拦不住 —— 它们只管绘制，不管
+                滚动溢出矩形。
+
+                所以柔光直接画在卡片自己的 background 上，靠一次 key 重挂
+                触发 `emotion-wheel-card-flash` 把 opacity 从 0 提到峰值再落回
+                0。没有盒子，就没有可滚范围。
+              */}
+              <span
+                key={`glow-${focused.id}`}
+                aria-hidden="true"
+                className={cn('emotion-wheel-card-flash', isLocked && 'emotion-wheel-card-flash-strong')}
+              />
+
+              {/*
+                点下去那一刻，从卡片外沿荡开一圈同色光。
+                key 用 lockedId，所以只有真正「点中某一格」时才重新播一次；
+                自动转动换内容不会有这一下。
+              */}
+              {isLocked ? (
+                <span
+                  key={`burst-${lockedId}`}
+                  aria-hidden="true"
+                  className="emotion-wheel-card-burst"
+                  data-side={cardSide}
+                />
+              ) : null}
 
               {/*
                 一张卡只留一个标题。
