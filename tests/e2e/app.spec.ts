@@ -196,3 +196,80 @@ test('情绪转盘：点空白处关闭详情，点击已选中扇形也能收�
   await page.mouse.click(20, 20);
   await expect(card).toBeHidden();
 });
+
+test('情绪转盘：第二屏撑满一屏，转盘水平居中', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openHome(page);
+
+  // 两屏：第一屏 + 转盘屏，页面刚好能滚一屏
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.waitForTimeout(700);
+
+  const geo = await page.evaluate(() => {
+    const board = document.querySelector('.emotion-wheel-board');
+    if (!board) return null;
+    const rect = board.getBoundingClientRect();
+    return {
+      centerX: rect.left + rect.width / 2,
+      centerY: rect.top + rect.height / 2,
+      vw: window.innerWidth,
+      vh: window.innerHeight,
+      docH: document.documentElement.scrollHeight,
+    };
+  });
+
+  expect(geo).toBeTruthy();
+  // 页面至少两屏高，滚到底就是转盘那一屏
+  expect(geo!.docH).toBeGreaterThanOrEqual(geo!.vh * 2 - 24);
+  // 转盘水平居中（±2px）
+  expect(Math.abs(geo!.centerX - geo!.vw / 2)).toBeLessThan(2);
+  // 滚到底后转盘落在视口中部，而不是吊在屏幕下缘
+  expect(geo!.centerY).toBeGreaterThan(geo!.vh * 0.32);
+  expect(geo!.centerY).toBeLessThan(geo!.vh * 0.72);
+});
+
+test('情绪转盘：桌面端自动转动，点一下停住，详情卡出现在侧边', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openHome(page);
+  await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
+
+  const spin = page.locator('.emotion-wheel-spin');
+  const readTransform = () => spin.evaluate((el) => getComputedStyle(el).transform);
+
+  // 待机时每秒转一格：2.2 秒后整盘角度必然变了
+  const first = await readTransform();
+  await page.waitForTimeout(2200);
+  expect(await readTransform()).not.toBe(first);
+
+  // 自动转动时顶部指针可见
+  await expect(page.locator('.emotion-wheel-pointer')).toHaveClass(/is-on/);
+
+  // 点一个扇形 → 停止自动转动，详情卡出现
+  await page.locator('.emotion-wheel-slice', { hasText: '焦虑' }).click();
+  await expect(page.getByRole('dialog', { name: /焦虑/ })).toBeVisible();
+
+  // 等最后一步旋转（0.82s）收尾，再等两秒确认角度不再变化（停转），指针收起
+  await page.waitForTimeout(1200);
+  const stopped = await readTransform();
+  await page.waitForTimeout(2200);
+  expect(await readTransform()).toBe(stopped);
+  await expect(page.locator('.emotion-wheel-pointer')).not.toHaveClass(/is-on/);
+
+  // 卡片在转盘的左边或右边，而不是下面
+  const board = await page.locator('.emotion-wheel-board').boundingBox();
+  const slot = page.locator('.emotion-wheel-card-slot');
+  const side = await slot.getAttribute('data-side');
+  const cardBox = await slot.boundingBox();
+  expect(board && cardBox).toBeTruthy();
+  expect(['left', 'right']).toContain(side);
+
+  if (side === 'right') {
+    expect(cardBox!.x).toBeGreaterThan(board!.x + board!.width);
+  } else {
+    expect(cardBox!.x + cardBox!.width).toBeLessThan(board!.x);
+  }
+
+  // 并排而不是上下堆：垂直占位与转盘有重叠
+  expect(cardBox!.y).toBeLessThan(board!.y + board!.height);
+  expect(cardBox!.y + cardBox!.height).toBeGreaterThan(board!.y);
+});

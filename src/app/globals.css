@@ -1476,16 +1476,68 @@ html[data-theme='night'] .orb-surface {
 /* ---------------- 情绪转盘（首页下滑区域） ---------------- */
 
 /*
- * 转盘交互全用 CSS `transform` + `opacity` 过渡：不碰布局属性，
- * 不触发重排，0.45s 带一点缓动。点中一个扇形 → 它放大、投下阴影，
- * 其余缩小并半透明；再点一下或点空白处收起。
- *
- * `transform-origin` 由组件按扇形在 SVG 里的几何写到行内样式上
- * （圆心 200 200），这样放大是「往圆外撑」，而不是往左上角漂。
+ * 第二屏：转盘水平居中，详情卡绝对定位在两侧留白里 —— 卡片不挤在
+ * 转盘下面，也不把转盘顶走。窄屏（<1280）没有两侧留白，卡片改为
+ * 底部浮层（fixed），转盘依然在正中。
  */
+.emotion-wheel-stage {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+}
+
+.emotion-wheel-board {
+  position: relative;
+  /* 第三个值兜住矮屏：宁可小一点，也别让第二屏撑破一屏 */
+  width: min(86vw, 440px, 58vh);
+}
+
+@media (min-width: 1024px) {
+  .emotion-wheel-board {
+    width: min(440px, 36vw, 52vh);
+  }
+}
+
+.emotion-wheel-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* 放大与阴影会越过 viewBox，别裁掉 */
+  overflow: visible;
+  user-select: none;
+}
+
+/*
+ * 整盘旋转层：绕 viewBox 中心转。
+ * 0.82s 比 JS 的 1s 步进短一点，每步末尾留一小段停顿，
+ * 指针压住文字的那一瞬能认清是什么情绪。
+ */
+.emotion-wheel-spin {
+  transform-box: view-box;
+  transform-origin: center;
+  transition: transform 0.82s cubic-bezier(0.3, 0.74, 0.24, 1);
+  will-change: transform;
+}
+
+/*
+ * 反旋层：抵消整盘转动，让扇形里的文字永远水平。
+ * 与外层用同样的时长与缓动，两者同步抵消，文字看不出在转。
+ * fill-box 让旋转中心落在文字自己的包围盒中心。
+ */
+.emotion-wheel-counter {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.82s cubic-bezier(0.3, 0.74, 0.24, 1);
+  will-change: transform;
+}
+
 .emotion-wheel-slice {
   cursor: pointer;
-  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform, opacity;
 }
 
@@ -1496,52 +1548,280 @@ html[data-theme='night'] .orb-surface {
 /* 悬停：只对精确指针生效，手机上不会因一次触摸留下悬停态 */
 @media (hover: hover) and (pointer: fine) {
   .emotion-wheel-slice:hover {
-    transform: scale(1.05);
+    transform: scale(1.04);
   }
 
   .emotion-wheel-slice:hover .emotion-wheel-slice-shape {
-    filter: brightness(1.04) saturate(1.05);
-  }
-}
-
-/* 有扇形被选中时：其余缩小 + 半透明（虚化），被点中的那一个放大并投下阴影 */
-.emotion-wheel-slice[aria-checked='true'] {
-  transform: scale(1.08);
-  z-index: 1;
-}
-
-.emotion-wheel-slice[aria-checked='true'] .emotion-wheel-slice-shape {
-  filter: drop-shadow(0 14px 24px rgba(70, 55, 92, 0.28));
-}
-
-/* 未选中的扇形：缩小 + 半透明。类由组件按 activeId 精确加上，不依赖兄弟选择器 */
-.emotion-wheel-slice-dim {
-  opacity: 0.35;
-  transform: scale(0.92);
-}
-
-/* 详情卡：雾面白玻璃，边框与左上角的小色点跟着当前扇形 */
-.emotion-wheel-card {
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.86) 0%, rgba(255, 255, 255, 0.6) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(18px) saturate(1.1);
-}
-
-html[data-theme='night'] .emotion-wheel-card {
-  background: linear-gradient(165deg, rgba(38, 34, 62, 0.86) 0%, rgba(24, 21, 44, 0.7) 100%);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
-/* 减少动态：转盘的缩放过渡一并关掉，只保留最基础的可见性变化 */
-@media (prefers-reduced-motion: reduce) {
-  .emotion-wheel-slice {
-    transition: none;
+    filter: brightness(1.05) saturate(1.06);
   }
 }
 
 /*
- * 移动端转盘扇形只留标题两个字，「是为了获得…」的副标题整行收起，
- * 完整说明仍由点击后的详情卡提供，不塞在扇形里。
+ * 自动转动时正对指针的那一格：只提亮、不缩放。
+ * 每秒缩一下会让整盘持续抖，反而看不清字。
+ */
+.emotion-wheel-slice-top .emotion-wheel-slice-shape {
+  filter: brightness(1.07) saturate(1.06);
+}
+
+/* 被点中：放大并投下阴影；其余缩小半透明 */
+.emotion-wheel-slice[aria-checked='true'] {
+  transform: scale(1.07);
+  z-index: 1;
+}
+
+.emotion-wheel-slice[aria-checked='true'] .emotion-wheel-slice-shape {
+  filter: drop-shadow(0 16px 26px rgba(70, 55, 92, 0.3));
+}
+
+.emotion-wheel-slice-dim {
+  opacity: 0.42;
+  transform: scale(0.93);
+}
+
+/* 正上方的指针：只在自动转动时出现 */
+.emotion-wheel-pointer {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.emotion-wheel-pointer.is-on {
+  opacity: 1;
+}
+
+/* 详情卡容器：窄屏是一层底部浮层 */
+.emotion-wheel-card-slot {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 40;
+}
+
+/* 卡片本体 */
+.emotion-wheel-card {
+  position: relative;
+  overflow: hidden auto;
+  max-height: min(62dvh, 520px);
+  border-radius: 26px;
+  padding: 22px 22px 18px;
+  text-align: left;
+  background: linear-gradient(168deg, rgba(255, 255, 255, 0.96) 0%, rgba(253, 251, 255, 0.9) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 34px 70px -34px rgba(58, 44, 80, 0.5),
+    0 2px 10px -6px rgba(58, 44, 80, 0.24);
+  backdrop-filter: blur(20px) saturate(1.12);
+  animation: emotion-wheel-card-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+html[data-theme='night'] .emotion-wheel-card {
+  background: linear-gradient(168deg, rgba(41, 36, 68, 0.96) 0%, rgba(26, 22, 46, 0.92) 100%);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* 顶边一条跟着扇形走的色带 */
+.emotion-wheel-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, var(--slice-color), var(--slice-edge));
+}
+
+/* 右上角一团同色柔光 */
+.emotion-wheel-card::after {
+  content: '';
+  position: absolute;
+  top: -58px;
+  right: -48px;
+  width: 180px;
+  height: 180px;
+  border-radius: 999px;
+  background: radial-gradient(circle, var(--slice-color) 0%, transparent 68%);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+@keyframes emotion-wheel-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.emotion-wheel-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.emotion-wheel-card-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--slice-color);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--slice-edge) 26%, transparent);
+}
+
+.emotion-wheel-card-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  color: var(--color-ink-faint);
+}
+
+.emotion-wheel-card-title {
+  margin-top: 2px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  color: var(--color-ink);
+}
+
+.emotion-wheel-card-need {
+  margin-top: 18px;
+}
+
+.emotion-wheel-card-key {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: var(--color-ink-faint);
+}
+
+.emotion-wheel-card-needword {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 27px;
+  letter-spacing: 0.1em;
+  color: var(--slice-ink);
+}
+
+.emotion-wheel-card-text {
+  margin-top: 8px;
+  font-size: 13.5px;
+  line-height: 1.9;
+  color: var(--color-ink-soft);
+}
+
+.emotion-wheel-card-method {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--slice-color) 30%, transparent);
+}
+
+html[data-theme='night'] .emotion-wheel-card-method {
+  background: color-mix(in srgb, var(--slice-color) 16%, transparent);
+}
+
+.emotion-wheel-card-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-faint);
+  transition: color 0.3s ease, background-color 0.3s ease;
+}
+
+.emotion-wheel-card-close:hover {
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--slice-color) 26%, transparent);
+}
+
+/*
+ * 桌面滚动吸附：首页正好两屏，滚轮停在两屏的交界附近就吸过去，
+ * 不会卡在「转盘只露一半」的中间位置。
+ * 用 proximity 而不是 mandatory —— 只是帮一下手，不夺走滚动的控制权；
+ * 手机与触屏不启用，避免和系统滚动手势打架。
+ */
+@media (min-width: 1024px) and (pointer: fine) {
+  html:has(.home-stage) {
+    scroll-snap-type: y proximity;
+  }
+
+  .home-screen,
+  .emotion-screen {
+    scroll-snap-align: start;
+    scroll-snap-stop: normal;
+  }
+}
+
+/*
+ * 窄屏：卡片是底部浮层，会盖住转盘下缘。
+ * 选中时把转盘缩一点、往上挪一点，让上半圈和卡片同时看得见。
+ * 缩放只作用在 .emotion-wheel-board 上 —— 卡片是它的兄弟节点，
+ * 不能被卷进 transform，否则 position: fixed 会相对祖先定位。
+ */
+@media (max-width: 1279px) {
+  .emotion-wheel-board {
+    transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .emotion-wheel.has-active .emotion-wheel-board {
+    transform: translateY(-6vh) scale(0.72);
+  }
+
+  .emotion-wheel-card {
+    max-height: min(52dvh, 460px);
+  }
+}
+
+/*
+ * 宽屏：两侧留白够用，卡片从「底部浮层」改成「转盘旁边的一栏」。
+ * 用 data-side 决定贴哪边，转盘本身仍在正中。
+ */@media (min-width: 1280px) {
+  .emotion-wheel-card-slot {
+    position: absolute;
+    top: 50%;
+    bottom: auto;
+    left: auto;
+    right: auto;
+    width: 320px;
+    z-index: 2;
+    transform: translateY(-50%);
+  }
+
+  .emotion-wheel-card-slot[data-side='right'] {
+    left: calc(50% + 262px);
+  }
+
+  .emotion-wheel-card-slot[data-side='left'] {
+    right: calc(50% + 262px);
+  }
+
+  .emotion-wheel-card {
+    max-height: none;
+  }
+}
+
+/* 减少动态：转盘的旋转、缩放与卡片入场一并关掉 */
+@media (prefers-reduced-motion: reduce) {
+  .emotion-wheel-spin,
+  .emotion-wheel-counter,
+  .emotion-wheel-slice {
+    transition: none;
+  }
+
+  .emotion-wheel-card {
+    animation: none;
+  }
+}
+
+/*
+ * 移动端扇形只留标题两个字：窄扇形塞不下「是为了获得……」，
+ * 完整说明由详情卡提供。
  */
 @media (max-width: 1023px) {
   .emotion-wheel-slice-sub {

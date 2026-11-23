@@ -100,7 +100,7 @@ export function HomeExperience() {
       */}
       <MeteorShower />
 
-      <div className="pointer-events-none relative z-10 flex min-h-[100dvh] flex-col items-center justify-center px-5 pb-24 pt-[96px] lg:pb-28 lg:pt-[108px]">
+      <div className="home-screen pointer-events-none relative z-10 flex min-h-[100dvh] flex-col items-center justify-center px-5 pb-24 pt-[96px] lg:pb-28 lg:pt-[108px]">
         <div className="home-copy relative flex w-full max-w-[440px] flex-col items-center text-center">
           {/* 标题与寄语：刻意做轻，不跟球抢视线 */}
           <motion.h1 {...fade(0.2)} className="flex flex-col items-center">
@@ -159,23 +159,24 @@ export function HomeExperience() {
       </div>
 
       {/*
-        情绪转盘：往下滚就能看到。第一屏（情绪球）保持 100dvh 不变，
-        转盘作为第二屏排在文档流下方。进入视口时从下方滑入（不是淡入）。
+        情绪转盘：往下滚就是一整屏。
+        第一屏保持 100dvh，第二屏也做成 100dvh 并垂直居中 —— 这样
+        PC 端滚到底时转盘正好落在屏幕正中，而不是吊在视口下半截。
       */}
       <motion.div
-        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 64 }}
+        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 56 }}
         whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.25 }}
+        viewport={{ once: true, amount: 0.1 }}
         transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
-        className="relative z-10 mx-auto w-full max-w-[720px] px-5 pb-24 pt-16 sm:px-8 lg:pb-32"
+        className="emotion-screen relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-[1200px] flex-col items-center justify-center px-5 py-20 sm:px-8"
       >
         <p className="mb-2 text-center text-[11px] tracking-[0.28em] text-ink-faint/80 sm:text-[12px]">
           情绪的背后是需求
         </p>
-        <h2 className="mb-8 text-center font-display text-[24px] font-light tracking-[0.12em] text-ink/85 sm:text-[28px]">
+        <h2 className="mb-7 text-center font-display text-[24px] font-light tracking-[0.12em] text-ink/85 sm:mb-9 sm:text-[28px]">
           情绪转盘
         </h2>
-        <EmotionWheel />
+        <EmotionWheel className="w-full" />
       </motion.div>
 
       <p className="sr-only">{SLOGAN}</p>

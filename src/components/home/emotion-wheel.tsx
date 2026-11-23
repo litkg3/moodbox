@@ -1,31 +1,45 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { useReducedMotion } from 'motion/react';
 import { EMOTION_SLICES, type EmotionSlice } from '@/data/emotion-wheel';
 import { cn } from '@/lib/utils';
 
 /*
  * ------------------------------------------------------------------
- * 情绪转盘：8 个彩色扇形。
+ * 情绪转盘
  *
- * 交互约定：
- * - 点一个扇形 → 它放大一点、投下阴影，其余扇形缩小并半透明；
- *   旁边浮出一张卡片，把「是为了获得……」和「处理方法」讲完整；
- * - 再点一下已选中的扇形、点返回按钮，或点转盘外的空白处，都能收起；
- * - 过渡全部用 CSS `transform` + `opacity`，0.45s，带一点缓动；
- *   不碰布局属性，所以不触发重排，动画也顺。
- *
- * 结构上把「转盘」和「详情卡」拆成两个兄弟节点，中间没有包一层会
- * 改变定位上下文的容器，这样点空白关闭的「遮罩」可以铺满整个 section。
+ * - 桌面端待机时整盘匀速步进：每秒转过 45°，让下一个扇形的文字转到
+ *   正上方的指针下。转到 45° 的整数倍才停，所以停下来时永远是「一个
+ *   扇形正对指针」，不会停在两块中间。
+ * - 扇形里的文字跟着盘走，但自身反向旋转同样的角度，于是无论盘转到
+ *   哪一格，文字始终是水平的、可读的（见 .emotion-wheel-counter）。
+ * - 手动点任意一个扇形 → 停止自动转动，被点的扇形放大并投下阴影，
+ *   其余缩小半透明，详情卡出现在它所在的一侧（左 / 右）。
+ * - 再点一次已选中的扇形、点返回、点转盘外的空白、按 Esc，都能收起，
+ *   收起后重新开始自动转动。
  * ------------------------------------------------------------------
  */
 
 /** 每个扇形占的角度（8 等分）。 */
 const SLICE_DEG = 360 / EMOTION_SLICES.length; // 45°
 
-/** 扇形从正上方（12 点方向）开始，顺时针依次排开。 */
+/** 第一个扇形的左边界从正上方（12 点）开始，顺时针排开。 */
 const START_DEG = -90;
+
+/**
+ * 自动转动：每步停留多久（毫秒）。
+ * 每一步的旋转过渡是 0.82s，写在 globals.css 的 .emotion-wheel-spin 上，
+ * 比这里短一点，留一小段停顿让人看清指针下的文字。
+ */
+const STEP_MS = 1000;
+
+/** 转盘 viewBox 尺寸（正方形），所有几何都基于它，再用 CSS 缩放适配。 */
+const SIZE = 400;
+const CX = SIZE / 2;
+const CY = SIZE / 2;
+const R_OUTER = 180;
+const R_INNER = 84;
 
 /**
  * 把「角度 + 半径」换算成 SVG 坐标。
@@ -40,10 +54,8 @@ function polar(cx: number, cy: number, radius: number, angleDeg: number) {
 }
 
 /**
- * 生成一个扇形（饼形）的 `d` 路径。
- * 从圆心出发 → 走到起始边 → 沿弧到终止边 → 回到圆心。
- * 圆心到两条边的距离用「小半径」外扩一点，让相邻扇形之间留一条缝，
- * 看起来是 8 块拼起来的转盘，而不是一个实心圆硬切几刀。
+ * 生成一个扇环的 `d` 路径。
+ * 内外两条弧之间是一条有厚度的扇形，相邻两块之间靠 stroke 分开。
  */
 function slicePath(cx: number, cy: number, rOuter: number, rInner: number, startDeg: number, endDeg: number) {
   const start = polar(cx, cy, rOuter, startDeg);
@@ -53,7 +65,6 @@ function slicePath(cx: number, cy: number, rOuter: number, rInner: number, start
 
   const largeArc = endDeg - startDeg > 180 ? 1 : 0;
 
-  // 从圆心出发，先到内圈起点，再撑到外圈，走外弧，收回来
   return [
     `M ${innerStart.x.toFixed(3)} ${innerStart.y.toFixed(3)}`,
     `L ${start.x.toFixed(3)} ${start.y.toFixed(3)}`,
@@ -64,22 +75,12 @@ function slicePath(cx: number, cy: number, rOuter: number, rInner: number, start
   ].join(' ');
 }
 
-/**
- * 扇形内文字的锚点：取扇形中间角度、半径一半偏外的地方，
- * 标题与「是为了获得……」两行叠在一起。
- */
-function sliceLabelAnchor(cx: number, cy: number, rOuter: number, rInner: number, startDeg: number, endDeg: number) {
+/** 扇形内文字的锚点：取扇形中间角度、半径约 58% 处。 */
+function labelAnchor(cx: number, cy: number, rOuter: number, rInner: number, startDeg: number, endDeg: number) {
   const midDeg = (startDeg + endDeg) / 2;
-  const r = rInner + (rOuter - rInner) * 0.62;
+  const r = rInner + (rOuter - rInner) * 0.58;
   return polar(cx, cy, r, midDeg);
 }
-
-/** 转盘 viewBox 尺寸（正方形），所有几何都基于它，再用 CSS 缩放适配。 */
-const SIZE = 400;
-const CX = SIZE / 2;
-const CY = SIZE / 2;
-const R_OUTER = 192;
-const R_INNER = 88;
 
 interface EmotionWheelProps {
   className?: string;
@@ -88,205 +89,290 @@ interface EmotionWheelProps {
 export function EmotionWheel({ className }: EmotionWheelProps) {
   const reduceMotion = useReducedMotion();
   const [activeId, setActiveId] = useState<string | null>(null);
+  /** 自动转动走到第几步（每步 45°）。 */
+  const [step, setStep] = useState(0);
+  /** 手动点过之后就不再自动转，直到收起。 */
+  const [autoOn, setAutoOn] = useState(true);
+  /** 只有桌面端才自动转（手机上自动转会分散注意力）。 */
+  const [isDesktop, setIsDesktop] = useState(false);
   const titleId = useId();
-  const wheelRef = useRef<HTMLDivElement>(null);
-  const cardRef = useRef<HTMLElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const active = useMemo(
     () => EMOTION_SLICES.find((slice) => slice.id === activeId) ?? null,
     [activeId],
   );
 
-  const selectSlice = useCallback((slice: EmotionSlice) => {
-    setActiveId((current) => (current === slice.id ? null : slice.id));
+  // 桌面判定：跟 CSS 的 lg 断点一致
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 1024px)');
+    const sync = () => setIsDesktop(query.matches);
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
   }, []);
 
-  const close = useCallback(() => setActiveId(null), []);
+  const autoActive = isDesktop && !reduceMotion && autoOn && activeId === null;
+
+  /*
+   * 停止自动转动的「硬开关」。
+   *
+   * setState 是异步的，点击那一瞬如果定时器正好排到点上，还会再走一格；
+   * 用一个 ref 在事件里同步关掉，已经排队的那一拍进来会直接 return。
+   */
+  const autoRef = useRef(false);
+  autoRef.current = autoActive;
+
+  // 自动转动：每 STEP_MS 推进一步
+  useEffect(() => {
+    if (!autoActive) return;
+    const timer = window.setInterval(() => {
+      if (!autoRef.current) return;
+      setStep((current) => current + 1);
+    }, STEP_MS);
+    return () => window.clearInterval(timer);
+  }, [autoActive]);
+
+  /** 整盘旋转角度：让第 step 个扇形的中心正好停在正上方。 */
+  const rotation = -SLICE_DEG / 2 - step * SLICE_DEG;
+
+  /** 正对指针的扇形下标（只在自动转动时有意义）。 */
+  const topIndex = autoActive
+    ? ((step % EMOTION_SLICES.length) + EMOTION_SLICES.length) % EMOTION_SLICES.length
+    : -1;
+
+  const selectSlice = useCallback(
+    (slice: EmotionSlice) => {
+      if (activeId === slice.id) {
+        // 再点一次同一个：收起，继续自动转
+        setActiveId(null);
+        setAutoOn(true);
+        return;
+      }
+      // 先同步掐掉定时器，再改状态
+      autoRef.current = false;
+      setActiveId(slice.id);
+      setAutoOn(false);
+    },
+    [activeId],
+  );
+
+  const close = useCallback(() => {
+    setActiveId(null);
+    setAutoOn(true);
+  }, []);
 
   /*
    * 点击转盘外的空白处关闭。
-   * 用全局 click 监听判断点击点是否落在转盘与详情卡之外；
-   * 转盘和详情卡各自 stopPropagation，这里的判断就足够稳。
+   * 只判断是否落在整个转盘舞台上，转盘内部空白（圆环中间）不会误关。
    */
   useEffect(() => {
     if (!activeId) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
-      if (wheelRef.current && wheelRef.current.contains(target)) return;
-      setActiveId(null);
+      if (stageRef.current && stageRef.current.contains(target)) return;
+      close();
     };
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [activeId]);
+  }, [activeId, close]);
 
   // Esc 关闭，方便键盘用户
   useEffect(() => {
     if (!activeId) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setActiveId(null);
+      if (event.key === 'Escape') close();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [activeId]);
+  }, [activeId, close]);
 
   /*
-   * 选中后详情卡出现在转盘下方，可能落在视口外。
-   * 只在卡片超出可视区时才把它平滑带进来（block:'nearest'），
-   * 转盘本身仍在原地，不会因为点一下就把整页顶走。
+   * 用户可能只滚了一半就点开扇形，卡片会落在视口外。
+   * 只在卡片真的超出可视区时才把它带进来；已经看得见就一动不动，
+   * 免得点一下页面自己往上跳。
    */
   useEffect(() => {
     if (!activeId) return;
     const timer = window.setTimeout(() => {
-      cardRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest' });
-    }, 60);
+      const card = cardRef.current;
+      if (!card) return;
+      const rect = card.getBoundingClientRect();
+      const viewport = window.innerHeight;
+      if (rect.top < 0 || rect.bottom > viewport) {
+        card.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest' });
+      }
+    }, 260);
     return () => window.clearTimeout(timer);
   }, [activeId, reduceMotion]);
 
+  /*
+   * 卡片放在被点扇形的同一侧：算一下它在屏幕上的角度，
+   * cos > 0 在右半圈，卡片去右边；否则去左边。
+   */
+  const activeIndex = active ? EMOTION_SLICES.findIndex((slice) => slice.id === active.id) : -1;
+  const activeAngle = START_DEG + SLICE_DEG / 2 + SLICE_DEG * activeIndex + rotation;
+  const cardSide = Math.cos((activeAngle * Math.PI) / 180) >= 0 ? 'right' : 'left';
+
   return (
     <section
-      ref={wheelRef}
       aria-labelledby={titleId}
-      className={cn('emotion-wheel relative flex flex-col items-center', className)}
+      className={cn('emotion-wheel', activeId && 'has-active', className)}
     >
       <h2 id={titleId} className="sr-only">
         情绪转盘
       </h2>
 
-      <div className="relative w-full max-w-[440px] select-none">
-        {/* 转盘本体 */}
-        <svg
-          viewBox={`0 0 ${SIZE} ${SIZE}`}
-          role="radiogroup"
-          aria-label="情绪转盘，点击一个扇形查看说明"
-          className="block w-full"
-        >
-          {EMOTION_SLICES.map((slice, index) => {
-            const startDeg = START_DEG + index * SLICE_DEG;
-            const endDeg = startDeg + SLICE_DEG;
-            const d = slicePath(CX, CY, R_OUTER, R_INNER, startDeg, endDeg);
-            const anchor = sliceLabelAnchor(CX, CY, R_OUTER, R_INNER, startDeg, endDeg);
-            const isActive = activeId === slice.id;
-            const isDimmed = activeId !== null && !isActive;
-
-            return (
-              <g
-                key={slice.id}
-                role="radio"
-                tabIndex={0}
-                aria-checked={isActive}
-                aria-label={`${slice.label}：${slice.needs}`}
-                onClick={() => selectSlice(slice)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    selectSlice(slice);
-                  }
-                }}
-                className={cn('emotion-wheel-slice focus:outline-none', isDimmed && 'emotion-wheel-slice-dim')}
-                style={
-                  {
-                    '--slice-color': slice.color,
-                    '--slice-edge': slice.edge,
-                    '--slice-ink': slice.ink,
-                    transformOrigin: `${CX}px ${CY}px`,
-                  } as React.CSSProperties
-                }
-              >
-                <path
-                  d={d}
-                  fill={slice.color}
-                  stroke={slice.edge}
-                  strokeWidth={1.5}
-                  strokeLinejoin="round"
-                  className="emotion-wheel-slice-shape"
-                />
-
-                {/* 扇形文字：标题居中，副标题在下方（移动端副标题由 CSS 收起） */}
-                <text
-                  textAnchor="middle"
-                  className="pointer-events-none"
-                  transform={`translate(${anchor.x.toFixed(2)} ${anchor.y.toFixed(2)})`}
-                >
-                  <tspan
-                    x="0"
-                    dy="0"
-                    dominantBaseline="central"
-                    className="emotion-wheel-slice-label"
-                    fill={slice.ink}
-                    fontSize="20"
-                    fontWeight="600"
-                    letterSpacing="0.06em"
-                  >
-                    {slice.label}
-                  </tspan>
-                  <tspan
-                    x="0"
-                    dy="1.55em"
-                    className="emotion-wheel-slice-sub"
-                    fill={slice.ink}
-                    fontSize="11.5"
-                    opacity="0.82"
-                  >
-                    是为了获得…
-                  </tspan>
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-
-        {/* 详情卡：点中后浮出，讲解完整信息 */}
-        {active && (
-          <motion.aside
-            key={active.id}
-            ref={cardRef}
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 14, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-            role="dialog"
-            aria-modal="false"
-            aria-label={`${active.label}：${active.needs}`}
-            className="emotion-wheel-card pointer-events-auto mt-6 w-full rounded-3xl p-6 text-left shadow-[0_28px_70px_-32px_rgba(70,55,92,0.45)] sm:p-7"
-            style={
-              {
-                '--slice-color': active.color,
-                '--slice-edge': active.edge,
-                '--slice-ink': active.ink,
-              } as React.CSSProperties
-            }
+      <div ref={stageRef} className="emotion-wheel-stage">
+        <div className="emotion-wheel-board">
+          <svg
+            viewBox={`0 0 ${SIZE} ${SIZE}`}
+            role="radiogroup"
+            aria-label="情绪转盘，点一个扇形看它的需求与处理方法"
+            className="emotion-wheel-svg"
           >
-            <div className="mb-3 flex items-center gap-3">
-              <span
-                aria-hidden="true"
-                className="h-4 w-4 rounded-full"
-                style={{ background: active.color, boxShadow: `0 0 0 3px ${active.edge}55` }}
-              />
-              <h3 className="font-display text-[22px] font-medium tracking-[0.08em] text-ink">
-                {active.label}
-              </h3>
-            </div>
+            {/* 整盘旋转层：扇形与文字都在里面 */}
+            <g className="emotion-wheel-spin" style={{ transform: `rotate(${rotation}deg)` }}>
+              {EMOTION_SLICES.map((slice, index) => {
+                const startDeg = START_DEG + index * SLICE_DEG;
+                const endDeg = startDeg + SLICE_DEG;
+                const d = slicePath(CX, CY, R_OUTER, R_INNER, startDeg, endDeg);
+                const anchor = labelAnchor(CX, CY, R_OUTER, R_INNER, startDeg, endDeg);
+                const isActive = activeId === slice.id;
+                const isDimmed = activeId !== null && !isActive;
+                const isTop = index === topIndex;
 
-            <p className="mb-4 text-[14px] leading-[1.9] text-ink-soft">
-              <span className="mr-1 font-medium text-ink">是为了获得：</span>
-              {active.needs}
-            </p>
+                return (
+                  <g
+                    key={slice.id}
+                    role="radio"
+                    tabIndex={0}
+                    aria-checked={isActive}
+                    aria-label={`${slice.label}：是为了获得${slice.need}`}
+                    onClick={() => selectSlice(slice)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        selectSlice(slice);
+                      }
+                    }}
+                    className={cn(
+                      'emotion-wheel-slice focus:outline-none',
+                      isDimmed && 'emotion-wheel-slice-dim',
+                      isTop && 'emotion-wheel-slice-top',
+                    )}
+                    style={
+                      {
+                        '--slice-color': slice.color,
+                        '--slice-edge': slice.edge,
+                        '--slice-ink': slice.ink,
+                        transformOrigin: `${CX}px ${CY}px`,
+                      } as React.CSSProperties
+                    }
+                  >
+                    <path
+                      d={d}
+                      fill={slice.color}
+                      stroke={slice.edge}
+                      strokeWidth={1.4}
+                      strokeLinejoin="round"
+                      className="emotion-wheel-slice-shape"
+                    />
 
-            <p className="rounded-2xl bg-white/60 px-4 py-3 text-[13.5px] leading-[1.9] text-ink-soft">
-              <span className="mr-1 font-medium text-ink">处理方法：</span>
-              {active.method}
-            </p>
+                    {/*
+                      扇形文字：两层组。
+                      外层用 transform 属性移到扇形锚点；
+                      内层用 CSS 反向旋转，抵消整盘的转动，让文字始终水平。
+                      两层分开是必须的 —— CSS transform 会覆盖 SVG 的
+                      transform 属性，写在一起translate 就丢了。
+                    */}
+                    <g transform={`translate(${anchor.x.toFixed(2)} ${anchor.y.toFixed(2)})`}>
+                      <g
+                        className="emotion-wheel-counter"
+                        style={{ transform: `rotate(${-rotation}deg)` }}
+                      >
+                        <text
+                          textAnchor="middle"
+                          className="emotion-wheel-slice-label"
+                          fill={slice.ink}
+                          fontSize="19"
+                          fontWeight="600"
+                          letterSpacing="0.08em"
+                          y="-3"
+                        >
+                          {slice.label}
+                        </text>
+                        <text
+                          textAnchor="middle"
+                          className="emotion-wheel-slice-sub"
+                          fill={slice.ink}
+                          fontSize="10"
+                          opacity="0.8"
+                          letterSpacing="0.02em"
+                          y="16"
+                        >
+                          是为了获得{slice.need}
+                        </text>
+                      </g>
+                    </g>
+                  </g>
+                );
+              })}
+            </g>
 
-            <button
-              type="button"
-              onClick={close}
-              className="mt-5 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] tracking-[0.04em] text-ink-faint transition-colors duration-300 hover:text-ink"
+            {/* 正上方的固定指针：自动转动时指向当前那一格 */}
+            <g
+              aria-hidden="true"
+              className={cn('emotion-wheel-pointer', autoActive && 'is-on')}
             >
-              <span aria-hidden="true" className="text-[15px] leading-none">
-                ←
-              </span>
-              返回转盘
-            </button>
-          </motion.aside>
+              <path d="M 200 27 L 189 7 L 211 7 Z" fill="var(--color-ink-ghost, #9a90a8)" opacity="0.75" />
+            </g>
+          </svg>
+        </div>
+
+        {active && (
+          <div className="emotion-wheel-card-slot" data-side={cardSide}>
+            <div
+              key={active.id}
+              ref={cardRef}
+              role="dialog"
+              aria-modal="false"
+              aria-label={`${active.label}：是为了获得${active.need}`}
+              className="emotion-wheel-card"
+              style={
+                {
+                  '--slice-color': active.color,
+                  '--slice-edge': active.edge,
+                  '--slice-ink': active.ink,
+                } as React.CSSProperties
+              }
+            >
+              <header className="emotion-wheel-card-head">
+                <span className="emotion-wheel-card-dot" aria-hidden="true" />
+                <div>
+                  <p className="emotion-wheel-card-eyebrow">情绪的背后</p>
+                  <h3 className="emotion-wheel-card-title">{active.label}</h3>
+                </div>
+              </header>
+
+              <div className="emotion-wheel-card-need">
+                <span className="emotion-wheel-card-key">是为了获得</span>
+                <span className="emotion-wheel-card-needword">{active.need}</span>
+                <p className="emotion-wheel-card-text">{active.needs}</p>
+              </div>
+
+              <div className="emotion-wheel-card-method">
+                <span className="emotion-wheel-card-key">处理方法</span>
+                <p className="emotion-wheel-card-text">{active.method}</p>
+              </div>
+
+              <button type="button" onClick={close} className="emotion-wheel-card-close">
+                <span aria-hidden="true">←</span>
+                返回转盘
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </section>
