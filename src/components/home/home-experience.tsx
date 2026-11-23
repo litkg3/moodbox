@@ -2,37 +2,51 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { motion, useReducedMotion } from 'motion/react';
-import { ChevronDown, MessageCircleHeart } from 'lucide-react';
+import { ChevronDown, MessageCircleHeart, Wind } from 'lucide-react';
 import { EmotionPanel } from '@/components/emotion/emotion-panel';
 import { enterSquare } from '@/components/layout/square-entrance';
 import { EmotionSky } from '@/components/emotion/emotion-sky';
 import { EmotionWheel } from '@/components/home/emotion-wheel';
+import { MbtiSection } from '@/components/home/mbti-section';
 import { MeteorShower } from '@/components/home/meteor-shower';
+import { ScreenDots } from '@/components/home/screen-dots';
+import { ScrollScreen } from '@/components/home/scroll-screen';
 import { useToast } from '@/components/ui/toast';
 import { HOME_BLESSING_LINES, SLOGAN } from '@/data/emotions';
 import { useMoodBox } from '@/hooks/use-moodbox';
 import { burstLine } from '@/lib/burst-lines';
 import { getEmotion } from '@/lib/emotions';
 import { moodBoxStore } from '@/lib/moodbox-store';
-import { useScreenSnap } from '@/hooks/use-screen-snap';
 import type { Emotion, EmotionId } from '@/types';
 
 /** 球碎掉之后，过多久自己飘回来。用户要求：两秒。 */
 const RETURN_DELAY_MS = 2000;
 
 /**
- * 首页：一片漂浮着情绪球的天空。
+ * 首页 = 四整屏。
  *
- * 文字只做背景音 —— 标题和寄语都压得很轻，主体让给球。
- * 功能入口全部在页头下方那条导航里（见 TopToolBar）。
+ * 情绪天空 → 情绪转盘 → 人格详解 → 树洞广场。
+ *
+ * 翻页交给 CSS `scroll-snap-type: y mandatory`（html 上的 .mb-snap），
+ * 不写 JS 拦截滚轮：浏览器的吸附本身就是"拖到一半、松手滑过去"的手感，
+ * 而且滚动条、键盘、读屏、锚点全部免费拿到。
+ *
+ * 矮屏（< 560px 高，常见于横屏手机）不开吸附：那种高度里一屏装不下
+ * 转盘，强吸会把人锁在半屏上，不如让它当普通长页面滚。
  */
+const SCREENS = [
+  { id: 'sky', label: '情绪天空' },
+  { id: 'wheel', label: '情绪转盘' },
+  { id: 'mbti', label: '人格详解' },
+  { id: 'square', label: '树洞广场' },
+] as const;
+
 export function HomeExperience() {
   const [selectedEmotion, setSelectedEmotion] = useState<Emotion | null>(null);
   const [burstingId, setBurstingId] = useState<EmotionId | null>(null);
+  const [activeScreen, setActiveScreen] = useState(0);
   const { bursts } = useMoodBox();
   const { showToast } = useToast();
-  const reduceMotion = useReducedMotion();
   const timers = useRef(new Map<EmotionId, number>());
 
   // 组件卸载时把还没到点的「飞回」定时器清掉
@@ -43,6 +57,118 @@ export function HomeExperience() {
       pending.clear();
     };
   }, []);
+
+  /* ---------------- 整屏吸附 ---------------- */
+  useEffect(() => {
+    const query = window.matchMedia('(min-height: 560px)');
+    const root = document.documentElement;
+    const sync = () => root.classList.toggle('mb-snap', query.matches);
+    sync();
+    query.addEventListener('change', sync);
+    return () => {
+      query.removeEventListener('change', sync);
+      root.classList.remove('mb-snap');
+    };
+  }, []);
+
+  /* 当前在哪一屏：比例最大的那一屏。只影响导航圆点的高亮。 */
+  useEffect(() => {
+    const nodes = SCREENS.map((screen) => document.getElementById(screen.id));
+    const ratios = new Map<Element, number>();
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          ratios.set(entry.target, entry.isIntersecting ? entry.intersectionRatio : 0);
+        }
+        let best = -1;
+        let bestRatio = 0.2;
+        nodes.forEach((node, index) => {
+          if (!node) return;
+          const ratio = ratios.get(node) ?? 0;
+          if (ratio > bestRatio) {
+            bestRatio = ratio;
+            best = index;
+          }
+        });
+        if (best >= 0) setActiveScreen(best);
+      },
+      { threshold: [0, 0.2, 0.4, 0.6, 0.8, 1] },
+    );
+
+    nodes.forEach((node) => node && observer.observe(node));
+    return () => observer.disconnect();
+  }, []);
+
+  const goToScreen = useCallback((index: number) => {
+    const target = SCREENS[index];
+    if (!target) return;
+    const el = document.getElementById(target.id);
+    if (!el) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  }, []);
+
+  /*
+   * 某一屏内部自己还能滚（手机端的人格详解）时，先把整页的强制吸附摘掉。
+   *
+   * 不摘会怎样：滚轮滚到内层底部后会直接穿透到整页，一次滑过两三屏 ——
+   * 因为 snap-stop 只约束"一个滚动容器之内"的位移。
+   * 摘掉之后，内层滚到底、再滚一下才翻到下一屏；离开这一屏（或内层已经到底）
+   * 就立刻挂回来，保住一滑一屏的手感。
+   */
+  useEffect(() => {
+    const root = document.documentElement;
+    const scrollers = Array.from(document.querySelectorAll<HTMLElement>('[data-screen-scroll]'));
+    if (scrollers.length === 0) return;
+
+    let detachTimer = 0;
+
+    const canScroll = (el: HTMLElement) => el.scrollHeight - el.clientHeight > 4;
+
+    const innerAtEdge = (el: HTMLElement) =>
+      el.scrollTop <= 1 || el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+
+    /** 当前这一屏里还有没滚完的内层容器吗 */
+    const blockedByInner = () => {
+      const active = document.getElementById(SCREENS[activeScreen]?.id ?? '');
+      const inner = active?.querySelector<HTMLElement>('[data-screen-scroll]');
+      return Boolean(inner && canScroll(inner) && !innerAtEdge(inner));
+    };
+
+    const sync = () => {
+      window.clearTimeout(detachTimer);
+      const detach = blockedByInner();
+      root.classList.toggle('mb-snap-inner', detach);
+      /*
+       * 离开内层边界后不要立刻挂回：滚轮还会继续派发一两次事件，
+       * 那时吸附已经回来了，人会感觉"卡了一下"。等手停下来再挂。
+       */
+      if (!detach) {
+        detachTimer = window.setTimeout(() => root.classList.remove('mb-snap-inner'), 260);
+      }
+    };
+
+    const onInnerScroll = (event: Event) => {
+      const el = event.currentTarget as HTMLElement;
+      if (el.scrollHeight - el.clientHeight <= 4) return;
+      sync();
+    };
+
+    scrollers.forEach((el) => el.addEventListener('scroll', onInnerScroll, { passive: true }));
+    const observer = new IntersectionObserver(sync, { threshold: [0, 0.5, 1] });
+    document.querySelectorAll('.mb-screen').forEach((node) => observer.observe(node));
+
+    sync();
+    return () => {
+      window.clearTimeout(detachTimer);
+      scrollers.forEach((el) => el.removeEventListener('scroll', onInnerScroll));
+      observer.disconnect();
+      root.classList.remove('mb-snap-inner');
+    };
+  }, [activeScreen]);
+
+  /* ---------------- 情绪球 ---------------- */
 
   const handleSelect = useCallback((emotion: Emotion) => {
     setSelectedEmotion(emotion);
@@ -79,157 +205,122 @@ export function HomeExperience() {
     [showToast],
   );
 
-  const fade = (delay: number) => ({
-    initial: reduceMotion ? { opacity: 0 } : { opacity: 0, y: 12 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 1.1, delay, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
-  });
-
-  /*
-   * 整屏翻页：必须是「一滑就是一整屏」，不能停在两屏中间。
-   *
-   * enabled 用 JS 判断而不是纯 CSS 媒体查询，是因为 CSS 的 scroll-snap
-   * 在鼠标滚轮上并不可靠（见 use-screen-snap 的注释），而且矮屏里
-   * 一屏装不下内容，强吸会让人看不到转盘。
-   */
-  const [snapEnabled, setSnapEnabled] = useState(false);
-  useEffect(() => {
-    const query = window.matchMedia('(min-height: 620px)');
-    const sync = () => setSnapEnabled(query.matches);
-    sync();
-    query.addEventListener('change', sync);
-    return () => query.removeEventListener('change', sync);
-  }, []);
-  useScreenSnap(snapEnabled);
-
   return (
-    <main className="home-stage relative min-h-[100dvh] w-full overflow-hidden">
-      <EmotionSky
-        activeId={selectedEmotion?.id ?? null}
-        bursts={bursts}
-        burstingId={burstingId}
-        onSelect={handleSelect}
-        onBurstComplete={handleBurstComplete}
-      />
-
-      {/*
-        深夜 + 星空模式时，偶尔划过一场流星雨。
-        放在天空之上、文字之下：它是背景的一部分，不该压住任何字。
-      */}
+    <main className="home-stage relative w-full overflow-x-clip">
       <MeteorShower />
 
-      <div className="home-screen pointer-events-none relative z-10 flex h-[100dvh] flex-col items-center justify-center px-5 pb-24 pt-[96px] lg:pb-28 lg:pt-[108px]">
-        <div className="home-copy relative flex w-full max-w-[440px] flex-col items-center text-center">
-          {/* 标题与寄语：刻意做轻，不跟球抢视线 */}
-          <motion.h1 {...fade(0.2)} className="flex flex-col items-center">
-            <span className="home-title-brand font-display text-[26px] font-light leading-none tracking-[0.2em] text-ink/85 sm:text-[32px]">
-              MoodBox
-            </span>
-            <span className="home-title-invite mt-4 font-display text-[15px] font-light leading-[1.9] tracking-[0.16em] text-ink/70 sm:mt-5 sm:text-[17.5px] lg:mt-3.5">
-              点开一颗情绪球！
-            </span>
-          </motion.h1>
+      <ScrollScreen id="sky" label="情绪天空" className="home-screen">
+        <EmotionSky
+          activeId={selectedEmotion?.id ?? null}
+          bursts={bursts}
+          burstingId={burstingId}
+          onSelect={handleSelect}
+          onBurstComplete={handleBurstComplete}
+        />
 
-          <motion.p
-            {...fade(0.45)}
-            className="mt-5 text-[10.5px] leading-[2.1] tracking-[0.05em] text-ink-faint/90 sm:text-[11px] lg:mt-4"
-          >
-            {HOME_BLESSING_LINES.map((line) => (
-              <span key={line} className="block">
-                {line}
+        <div className="pointer-events-none relative z-10 flex h-full flex-col items-center justify-center px-5 pb-24 pt-[96px] lg:pb-28 lg:pt-[108px]">
+          <div className="home-copy pointer-events-auto relative flex w-full max-w-[440px] flex-col items-center text-center">
+            <h1 className="mb-reveal flex flex-col items-center">
+              <span className="home-title-brand font-display text-[26px] font-light leading-none tracking-[0.2em] text-ink/85 sm:text-[32px]">
+                MoodBox
               </span>
-            ))}
-          </motion.p>
+              <span className="home-title-invite mt-4 font-display text-[15px] font-light leading-[1.9] tracking-[0.16em] text-ink/70 sm:mt-5 sm:text-[17.5px] lg:mt-3.5">
+                点开一颗情绪球！
+              </span>
+            </h1>
 
-          <motion.div {...fade(0.68)} className="pointer-events-auto mt-7 sm:mt-8 lg:mt-6">
-            {/*
-              点下去先留一个信号，广场页据此放一段「进门」的转场。
-              导航照常走，不 preventDefault —— 该多快还是多快。
-            */}
-            <Link
-              href="/square"
-              prefetch={false}
-              onClick={enterSquare}
-              className="group mb-btn-warm inline-flex h-10 items-center gap-2 rounded-full px-5 text-[12.5px] tracking-[0.06em] transition-all duration-500 hover:brightness-[1.02] sm:h-11 sm:px-6"
+            <p
+              className="mb-reveal mt-5 text-[10.5px] leading-[2.1] tracking-[0.05em] text-ink-faint/90 sm:text-[11px] lg:mt-4"
+              data-delay="1"
             >
-              <MessageCircleHeart
-                size={15}
-                strokeWidth={1.7}
-                aria-hidden="true"
-                className="transition-transform duration-500 group-hover:scale-110"
-              />
-              树洞广场
-            </Link>
-          </motion.div>
-        </div>
+              {HOME_BLESSING_LINES.map((line) => (
+                <span key={line} className="block">
+                  {line}
+                </span>
+              ))}
+            </p>
 
-        {/* 底部向下滑动箭头：只示意，不带文字 */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 text-ink-ghost/70"
-        >
-          <ChevronDown
-            size={26}
-            strokeWidth={1.6}
-            className="mb-scroll-hint"
-          />
-        </div>
-      </div>
+            <div className="mb-reveal pointer-events-auto mt-7 sm:mt-8 lg:mt-6" data-delay="2">
+              {/* 点下去先留一个信号，广场页据此放一段「进门」的转场 */}
+              <Link
+                href="/square"
+                prefetch={false}
+                onClick={enterSquare}
+                className="group mb-btn-warm inline-flex h-10 items-center gap-2 rounded-full px-5 text-[12.5px] tracking-[0.06em] transition-all duration-500 hover:brightness-[1.02] sm:h-11 sm:px-6"
+              >
+                <MessageCircleHeart
+                  size={15}
+                  strokeWidth={1.7}
+                  aria-hidden="true"
+                  className="transition-transform duration-500 group-hover:scale-110"
+                />
+                树洞广场
+              </Link>
+            </div>
+          </div>
 
-      {/*
-         * 高度锁死 100dvh，不再是 min-height。
-         * 用 min-h 时只要内容比一屏高一点，整页高度就不是「2 × 一屏」，
-         * 整屏翻页会算错、滚到底还会差几十像素 —— 那正是「卡在两屏中间」的来源。
-         * 现在让内容在固定的一屏里自适应（见下面的 py），页面高度恒等于两屏。
-         *
-         * 宽屏单独放宽 max-w：卡片浮在转盘两肩，两块都要装得下。
-         */}
-      <div className="emotion-screen relative z-10 mx-auto flex h-[100dvh] w-full max-w-[1200px] flex-col items-center justify-center px-5 py-16 sm:px-8 xl:max-w-[1560px]">
-        {/*
-          第二屏的入场。
-          --
-          原来只有「从下方 48px 浮上来 + 淡入」。问题有两个：
-            1. 48px 放在一整屏（900px）里太轻，几乎等于没有；
-            2. 位移被这一屏的边界裁掉，看起来只是"淡出来"，不是"翻上来"。
-          现在换成三段式，和翻页动作对得上：
-            · 转盘：从 0.9 倍、下移 72px 长到原大小（像从屏幕下方推到眼前）；
-            · 两行标题：更晚一点、从更远处跟上；
-            · 整块再叠一点模糊，入画那一下才有"对焦"的感觉。
-          whileInView 用 -18% 的 rootMargin 提前一点触发，让它和翻页同时开始，
-          而不是等盘已经停稳了才动。
-        */}
-        <motion.div
-          initial={
-            reduceMotion
-              ? { opacity: 0 }
-              : { opacity: 0, y: 72, scale: 0.9, filter: 'blur(6px)' }
-          }
-          whileInView={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-          viewport={{ once: true, amount: 0.15, margin: '0px 0px -18% 0px' }}
-          transition={{ duration: 1.05, ease: [0.2, 0.9, 0.24, 1] }}
-          className="flex w-full flex-col items-center"
-        >
-          <motion.p
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 26 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.15, margin: '0px 0px -18% 0px' }}
-            transition={{ duration: 0.85, delay: 0.1, ease: [0.2, 0.9, 0.24, 1] }}
-            className="mb-1.5 text-center text-[10.5px] tracking-[0.28em] text-ink-faint/80 sm:text-[11.5px]"
+          {/* 底部向下滑动箭头：只示意，不带文字 */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 text-ink-ghost/70"
           >
+            <ChevronDown size={26} strokeWidth={1.6} className="mb-scroll-hint" />
+          </div>
+        </div>
+      </ScrollScreen>
+
+      <ScrollScreen id="wheel" label="情绪转盘" className="emotion-screen">
+        <div className="emotion-screen-inner">
+          {/*
+            这两行标题允许上移淡入；转盘本身只能用透明度 ——
+            transform 会让内部的 fixed 卡片以它为准定位（手机端卡片会跳到屏幕外）。
+          */}
+          <p className="mb-reveal text-center text-[10.5px] tracking-[0.28em] text-ink-faint/80 sm:text-[11.5px]">
             情绪的背后是需求
-          </motion.p>
-          <motion.h2
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 34 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.15, margin: '0px 0px -18% 0px' }}
-            transition={{ duration: 0.9, delay: 0.16, ease: [0.2, 0.9, 0.24, 1] }}
-            className="mb-4 text-center font-display text-[22px] font-light tracking-[0.12em] text-ink/85 sm:mb-6 sm:text-[26px]"
+          </p>
+          <h2
+            className="mb-reveal mb-4 text-center font-display text-[22px] font-light tracking-[0.12em] text-ink/85 sm:mb-6 sm:text-[26px]"
+            data-delay="1"
           >
             情绪转盘
-          </motion.h2>
-          <EmotionWheel className="w-full" />
-        </motion.div>
-      </div>
+          </h2>
+          <div className="mb-reveal-fade w-full">
+            <EmotionWheel />
+          </div>
+        </div>
+      </ScrollScreen>
+
+      <MbtiSection />
+
+      <ScrollScreen id="square" label="树洞广场" className="mb-closing">
+        <div className="mb-closing-inner">
+          <h2 className="mb-reveal mb-closing-title">
+            有些话说不出口，
+            <br />
+            可以先放进树洞
+          </h2>
+          <p className="mb-reveal mb-closing-copy" data-delay="1">
+            那里有人写下今天的一点小崩溃，也有人回一句「我也是」。
+            <br />
+            不必署名，也不必解释。
+          </p>
+          <div className="mb-reveal mb-closing-actions" data-delay="2">
+            <Link href="/square" prefetch={false} onClick={enterSquare} className="mb-btn-warm">
+              <MessageCircleHeart size={15} strokeWidth={1.6} aria-hidden="true" />
+              去树洞广场
+            </Link>
+            <Link href="/breathe" className="mb-btn-ghost">
+              <Wind size={15} strokeWidth={1.6} aria-hidden="true" />
+              呼吸放松
+            </Link>
+          </div>
+          <p className="mb-reveal mb-closing-note" data-delay="3">
+            所有记录只保存在你的浏览器本地
+          </p>
+        </div>
+      </ScrollScreen>
+
+      <ScreenDots items={SCREENS} active={activeScreen} onSelect={goToScreen} />
 
       <p className="sr-only">{SLOGAN}</p>
 

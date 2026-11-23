@@ -809,3 +809,82 @@ const turns = Math.round((target - raw) / 360);
 好在发现得快（截图一看就不对）。恢复方式是从 `git show HEAD:src/app/globals.css` 把那段原样切回来。
 
 教训：**批量替换前先打印出要删的区间**，而不是想当然认为两个锚点之间就是自己刚写的那几行。
+
+---
+
+## 第十二轮：整屏吸附，和一张要在一屏里说完的十六格
+
+这一轮做了两件事：把首页交给浏览器自己的 `scroll-snap`，再在中间塞进一屏「MBTI 十六种人格类型 详解」。
+
+### 一、为什么这次不用 JS 接管滚轮
+
+上一轮的跟手方案（滚轮 → 推 target → 每帧指数逼近）手感不错，但它本质上是在替浏览器写滚动：滚动条、键盘、读屏、锚点、触摸惯性都得自己再补一遍。
+
+这次改用原生：
+
+```css
+html.mb-snap { scroll-snap-type: y mandatory; scroll-padding-top: 0; }
+.mb-screen   { height: 100dvh; scroll-snap-align: start; scroll-snap-stop: always; }
+```
+
+好处是"拖到一半、松手吸过去"这个手感由浏览器给，`scroll-snap-stop: always` 保证一次手势只过一屏。矮屏（`max-height: 559px`）不开吸附 —— 那种高度一屏装不下转盘，硬吸会把人锁在半屏。
+
+进场动画用 `IntersectionObserver` 打标，不监听 `scroll`：
+
+```css
+.mb-reveal      { opacity: 0; transform: translateY(24px); }
+[data-revealed] .mb-reveal { opacity: 1; transform: none; transition: .6s cubic-bezier(.22,.61,.36,1); }
+```
+
+### 二、三处必须记住的坑
+
+| 坑 | 表现 | 原因 / 修法 |
+| --- | --- | --- |
+| 吸附点偏移 | 每一屏顶部露出上一屏一条 | 全站 `html { scroll-padding-top: 104px }` 给固定页头留了空，吸附点跟着下移。`.mb-snap` 上归零 |
+| 滚轮压着转盘不滚 | 鼠标在卡片上时页面不动 | `.emotion-wheel-card` 上的 `overscroll-behavior: contain` 吞掉了 wheel。删掉（`overflow: hidden` 已经够） |
+| 转盘手机端卡片跑到屏幕外 | 卡片以容器为准定位 | 外层任何 `transform` 都会成为 `position: fixed` 的包含块。转盘那一层只能用 `mb-reveal-fade`（只动透明度，`transform: none`） |
+
+另外首屏「情绪球点不动」是另一类：居中文字容器铺满整屏，盖住了天空层。容器加 `pointer-events-none`、文字块单独 `pointer-events-auto`，球就点得到了。
+
+### 三、`proximity` 的一个解析怪癖
+
+手机端这一屏内容比一屏高，本该是"屏内滚动 + `y proximity`"。写下去之后 computed 一直是 `y`。
+
+排查结论（同一台 Chrome 141 / 144、同一份 CSS，与我们的选择器无关）：
+
+- `scroll-snap-type: y proximity` 写在 **`@media (max-height: …)`** 里，整个值被丢掉，只剩 `y`；
+- 同样的规则写在 **`@media (max-width: …)`** 里就正常；`mandatory`、`x proximity` 都正常。
+
+所以 `proximity` 只能声明在宽度断点里。测试也不要断言 computed 等于 `'y proximity'` —— 能滚动的方向上，计算值只暴露 `y`/`x`/`both`，靠断言这个字符串只会测到浏览器脾气。改成断言真正的行为：容器可滚、卡片声明了 `scroll-snap-align: start`、两列真的等宽。
+
+顺带一个坑：`display: flex` 的滚动容器里放 grid，grid 会缩成内容宽，2 列其实铺不满。给 `.mb-mbti-grid` 补 `width: 100%` + `justify-content/align-content: start` 才对齐。
+
+### 四、内层滚动 × 整页强制吸附 = 一次滑过好几屏
+
+`scroll-snap-stop` 只约束"一个滚动容器之内"的位移。手机端内层滚到底之后，滚轮继续派发事件，整页的 `y mandatory` 接住它，一次就滑掉两三屏。
+
+修法不是拦截滚轮，而是**在特定时刻让位**：
+
+```ts
+// 当前屏里的 [data-screen-scroll] 还能滚、且没到底
+html.classList.toggle('mb-snap-inner', detach);   // -> scroll-snap-type: none
+```
+
+离开边界后延迟 260ms 再挂回来 —— 否则滚轮还在派发事件时吸附刚好回归，人会明显感觉"卡了一下"。
+
+### 五、MBTI 那一屏
+
+- 桌面 4×4 一屏：`grid-template-columns: repeat(4, minmax(0,1fr))` + `grid-template-rows: repeat(4, …)`，容器 `height: 100%` 靠 flex 分配；窄屏才变成 2 列 + `grid-auto-rows`，屏内滚。
+- 四组主色按「压在最浅奶油底 4.5:1」定，夜间另给一套提亮值。**卡片底色是很关键的一环**：白色只给 56% 时，底下的背景色把代号的对比度拉到 1.4，字几乎看不见。改成白色 78% + 组色柔光 44%，代号才回到 5.6~7.0。
+- 对比度测试改成量真实像素：截图取卡片区域的空白处当底色，和 computed `color` 相除 —— 毛玻璃上算 CSS 声明值是自欺欺人。
+- 切图：`scripts/mbti-slice.mjs <信息图>` 按 4×4 行优先切 16 张 480×480 webp，并生成整图给灯箱用。插画目前是 `scripts/mbti-illustrations.mjs` 用同一套 SVG 组合生成的，比例与圆底色统一。
+- 字号全部走 `--mbti-*` 令牌（`--mbti-title-size / -code-size / -body-size / -lines`），改一处 16 张卡一起变。
+
+### 六、怎么调
+
+| 想改什么 | 改哪 |
+| --- | --- |
+| 吸附灵敏度 | `.mb-screen` 的 `scroll-snap-stop: always`（去掉则一次手势可连翻）；矮屏阈值在 `home-experience.tsx` 的 `matchMedia('(min-height: 560px)')` |
+| 屏内是否吸 | 只声明在 `@media (max-width: 1199px)` 里的 `.mb-mbti-scroll { scroll-snap-type: y proximity }` |
+| 卡片描述行数 / 间距 | `--mbti-lines`、`--mbti-gap` |
+| 新增一屏 | `SCREENS` 数组加一项 + 放一个 `<ScrollScreen id="…" label="…">`，圆点导航会自动多一颗 |

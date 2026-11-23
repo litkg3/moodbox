@@ -1928,7 +1928,6 @@ html[data-theme='night'] .mb-post-skeleton {
 .emotion-wheel-card {
   position: relative;
   overflow: hidden;
-  overscroll-behavior: contain;
   max-height: min(52dvh, 460px);
   border-radius: 24px;
   /* 顶部多留一点，给那条 2px 的色条腾位置，不压在文字上 */
@@ -3000,5 +2999,906 @@ html[data-theme='night'] .mb-gate-panel {
   .mb-meteor {
     animation: none;
     opacity: 0;
+  }
+}
+
+/* ============================================================
+   首页整屏吸附（Apple 式）
+   ------------------------------------------------------------
+   滚动交给浏览器：html 上开 scroll-snap-type: y mandatory，
+   每一屏自己声明 scroll-snap-align: start + scroll-snap-stop: always。
+   好处是滚轮/触控板/触摸/键盘/锚点全部走同一套原生逻辑，
+   而且"拖到一半松手、顺着惯性滑过去"是浏览器自带的吸附动画，
+   比用 JS 驱动 scrollTo 更像苹果官网。
+
+   JS 只做两件事：给 html 挂 .mb-snap（矮屏不挂），以及用
+   IntersectionObserver 判断当前屏、放行进场动画。
+   ============================================================ */
+
+html.mb-snap {
+  scroll-snap-type: y mandatory;
+  /*
+   * 首页每一屏自带 padding-top，不需要再给页头留 scroll-padding：
+   * 留了的话吸附点会整体上移 104px，屏与屏之间永远露出上一屏的一条。
+   */
+  scroll-padding-top: 0;
+}
+
+.mb-screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  overflow: hidden;
+}
+
+/*
+ * 矮屏（横屏手机 / 分屏）一屏根本装不下转盘，强吸会把人锁在半屏。
+ * 这时退回普通长页面：JS 那边同时不挂 .mb-snap。
+ */
+@media (max-height: 559px) {
+  .mb-screen {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+}
+
+/* ---------------- 进场：淡入 + 上移 24px ---------------- */
+
+.mb-reveal,
+.mb-reveal-fade {
+  opacity: 0;
+  transition:
+    opacity 0.6s cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 0.6s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.mb-reveal {
+  transform: translateY(24px);
+}
+
+/* 只淡入、不带位移：转盘外面不能有 transform，否则内部 fixed 卡片会改基准 */
+.mb-reveal-fade {
+  transform: none;
+}
+
+[data-revealed='true'] .mb-reveal,
+[data-revealed='true'] .mb-reveal-fade {
+  opacity: 1;
+  transform: none;
+}
+
+.mb-reveal[data-delay='1'] {
+  transition-delay: 0.09s;
+}
+.mb-reveal[data-delay='2'] {
+  transition-delay: 0.18s;
+}
+.mb-reveal[data-delay='3'] {
+  transition-delay: 0.27s;
+}
+
+/* 没有 JS 的环境别把内容锁在 opacity: 0 里 */
+@media (scripting: none) {
+  .mb-reveal,
+  .mb-reveal-fade {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------------- 第一屏 ---------------- */
+
+.home-screen {
+  justify-content: center;
+}
+
+/* ---------------- 第二屏 ---------------- */
+
+.emotion-screen {
+  align-items: center;
+  justify-content: center;
+  padding: clamp(84px, 10vh, 108px) 20px clamp(28px, 6vh, 56px);
+}
+
+@media (min-width: 640px) {
+  .emotion-screen {
+    padding-inline: 32px;
+  }
+}
+
+.emotion-screen-inner {
+  display: flex;
+  width: 100%;
+  max-width: 1200px;
+  flex-direction: column;
+  align-items: center;
+}
+
+@media (min-width: 1280px) {
+  .emotion-screen-inner {
+    max-width: 1560px;
+  }
+}
+
+/* ---------------- 右侧圆点导航 ---------------- */
+
+.mb-screen-nav {
+  position: fixed;
+  right: clamp(14px, 1.5vw, 26px);
+  top: 50%;
+  z-index: 45;
+  display: none;
+  translate: 0 -50%;
+  transition: opacity 0.4s ease;
+}
+
+@media (min-width: 1024px) {
+  .mb-screen-nav {
+    display: block;
+  }
+}
+
+/* 转盘卡片就在右侧，两者叠在一起谁都看不清 */
+body:has(.emotion-wheel.has-active) .mb-screen-nav {
+  pointer-events: none;
+  opacity: 0;
+}
+
+.mb-screen-nav ol {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.mb-screen-dot {
+  position: relative;
+  display: flex;
+  width: 30px;
+  height: 14px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.mb-screen-dot > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-ink-soft) 46%, transparent);
+  box-shadow: 0 0 0 0 transparent;
+  transition:
+    width 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.4s ease,
+    box-shadow 0.4s ease;
+}
+
+.mb-screen-dot.is-active > span {
+  width: 18px;
+  background: color-mix(in srgb, var(--color-lavender-deep) 86%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-lavender) 22%, transparent);
+}
+
+.mb-screen-dot em {
+  position: absolute;
+  right: 26px;
+  white-space: nowrap;
+  font-size: 10.5px;
+  font-style: normal;
+  letter-spacing: 0.16em;
+  color: var(--color-ink-faint);
+  opacity: 0;
+  transform: translateX(4px);
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+  pointer-events: none;
+}
+
+.mb-screen-dot:hover em,
+.mb-screen-dot:focus-visible em {
+  opacity: 1;
+  transform: none;
+}
+
+.mb-screen-dot:focus-visible {
+  outline: none;
+}
+
+.mb-screen-dot:focus-visible > span {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-lavender-deep) 40%, transparent);
+}
+
+html[data-theme='night'] .mb-screen-dot > span {
+  background: color-mix(in srgb, var(--color-ink-soft) 52%, transparent);
+}
+
+html[data-theme='night'] .mb-screen-dot.is-active > span {
+  background: color-mix(in srgb, var(--color-lavender-deep) 90%, transparent);
+}
+
+/* ---------------- 第四屏：收束 ---------------- */
+
+.mb-closing {
+  align-items: center;
+  justify-content: center;
+  padding: 108px 24px 72px;
+  text-align: center;
+}
+
+.mb-closing-inner {
+  display: flex;
+  max-width: 620px;
+  flex-direction: column;
+  align-items: center;
+}
+
+.mb-closing-title {
+  font-family: var(--font-display);
+  font-size: clamp(23px, 2.4vw, 33px);
+  font-weight: 300;
+  line-height: 1.62;
+  letter-spacing: 0.1em;
+  color: var(--color-ink);
+}
+
+.mb-closing-copy {
+  margin-top: 18px;
+  font-size: 12.5px;
+  line-height: 2.1;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-faint);
+}
+
+.mb-closing-actions {
+  display: flex;
+  margin-top: 30px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.mb-closing-actions > a {
+  display: inline-flex;
+  height: 42px;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 0 22px;
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+  transition:
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.4s ease,
+    background-color 0.4s ease;
+}
+
+.mb-closing-actions > a:hover {
+  transform: translateY(-1px);
+}
+
+.mb-btn-ghost {
+  border: 1px solid color-mix(in srgb, var(--color-ink-ghost) 26%, transparent);
+  background: color-mix(in srgb, var(--color-white) 46%, transparent);
+  color: var(--color-ink-soft);
+  backdrop-filter: blur(14px) saturate(1.05);
+}
+
+.mb-btn-ghost:hover {
+  background: color-mix(in srgb, var(--color-white) 62%, transparent);
+  color: var(--color-ink);
+}
+
+html[data-theme='night'] .mb-btn-ghost {
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--color-ink-soft);
+}
+
+.mb-closing-note {
+  margin-top: 34px;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  color: var(--color-ink-faint);
+}
+
+/* ============================================================
+   MBTI 十六型
+   ============================================================ */
+
+:root {
+  /*
+   * 四组主色。两条硬约束，改色前先过一遍：
+   * 1) 压在本站最浅的奶油底 #fbf7f3 上 ≥ 4.5:1（卡片代号是大号文字，但底色会随
+   *    主题浮动，所以按最坏情况算）；
+   * 2) 压在卡片自身的半透明玻璃底上也要 ≥ 4.5:1，见下面 .mb-mbti-card 的
+   *    白色 78% / soft 42% —— 之前的 56% 太透，底下的背景色把对比度拉到 1.4，
+   *    等于代号根本看不清。
+   * 实测（日间，卡片底）：analyst 7.0 / sentinel 6.0 / diplomat 5.6 / explorer 5.9。
+   */
+  --mbti-analyst: #4f3570;
+  --mbti-analyst-soft: #e8d9f4;
+
+  --mbti-sentinel: #2c5772;
+  --mbti-sentinel-soft: #d8e9f2;
+
+  --mbti-diplomat: #356046;
+  --mbti-diplomat-soft: #dcecdb;
+
+  --mbti-explorer: #7b4f1d;
+  --mbti-explorer-soft: #f4e3cb;
+
+  /* 尺寸阶梯：一处改，16 张卡与标题一起变 */
+  --mbti-radius: 20px;
+  --mbti-gap: clamp(9px, 1.05vw, 15px);
+  --mbti-title-size: clamp(20px, 2.1vw, 29px);
+  --mbti-sub-size: clamp(11.5px, 0.9vw, 13px);
+  --mbti-code-size: clamp(17px, 1.55vw, 23px);
+  --mbti-name-size: clamp(11px, 0.82vw, 12.5px);
+  --mbti-body-size: clamp(11px, 0.86vw, 13px);
+  --mbti-note-size: 11px;
+  --mbti-art: clamp(40px, 3.9vw, 60px);
+  --mbti-lines: 3;
+}
+
+html[data-theme='night'] {
+  --mbti-analyst: #c9b4ef;
+  --mbti-analyst-soft: #4a3d63;
+
+  --mbti-sentinel: #9dc4dd;
+  --mbti-sentinel-soft: #2f4356;
+
+  --mbti-diplomat: #a6d0b0;
+  --mbti-diplomat-soft: #33483a;
+
+  --mbti-explorer: #e8c08a;
+  --mbti-explorer-soft: #4a3a26;
+}
+
+.mb-mbti {
+  padding: clamp(76px, 9vh, 104px) clamp(16px, 3vw, 44px) clamp(14px, 2.4vh, 28px);
+  align-items: center;
+}
+
+.mb-mbti-shell {
+  display: flex;
+  width: 100%;
+  max-width: 1420px;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.mb-mbti-head {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: clamp(10px, 1.9vh, 20px);
+}
+
+.mb-mbti-heading {
+  min-width: 0;
+}
+
+.mb-mbti-title {
+  font-family: var(--font-display);
+  font-size: var(--mbti-title-size);
+  font-weight: 300;
+  line-height: 1.3;
+  letter-spacing: 0.12em;
+  color: var(--color-ink);
+}
+
+.mb-mbti-sub {
+  margin-top: 7px;
+  font-size: var(--mbti-sub-size);
+  letter-spacing: 0.18em;
+  color: var(--color-ink-faint);
+}
+
+.mb-mbti-full {
+  display: inline-flex;
+  height: 34px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-ink-ghost) 24%, transparent);
+  background: color-mix(in srgb, var(--color-white) 44%, transparent);
+  padding: 0 14px;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-soft);
+  backdrop-filter: blur(12px) saturate(1.05);
+  transition:
+    color 0.35s ease,
+    border-color 0.35s ease,
+    background-color 0.35s ease;
+}
+
+.mb-mbti-full:hover {
+  border-color: color-mix(in srgb, var(--color-lavender-deep) 40%, transparent);
+  background: color-mix(in srgb, var(--color-white) 62%, transparent);
+  color: var(--color-ink);
+}
+
+.mb-mbti-scroll {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0%;
+}
+
+/*
+ * 网格放在可滚容器里，宽度由 align-content 决定会缩成内容宽，
+ * 必须自己撑满 + 左对齐，2 列时才能正常铺成两列。
+ */
+.mb-mbti-grid {
+  display: grid;
+  width: 100%;
+  align-content: start;
+  justify-content: start;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: var(--mbti-gap);
+}
+
+.mb-mbti-card {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(4px, 0.65vh, 8px);
+  overflow: hidden;
+  border-radius: var(--mbti-radius);
+  border: 1px solid color-mix(in srgb, var(--mbti-accent) 18%, transparent);
+  background:
+    radial-gradient(
+      118% 96% at 88% 0%,
+      color-mix(in srgb, var(--mbti-soft) 44%, transparent) 0%,
+      transparent 62%
+    ),
+    color-mix(in srgb, var(--color-white) 78%, transparent);
+  padding: clamp(9px, 1.05vh, 13px) clamp(10px, 0.85vw, 14px);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(16px) saturate(1.06);
+  opacity: 0;
+  translate: 0 18px;
+  transition:
+    transform 0.45s cubic-bezier(0.22, 0.61, 0.36, 1),
+    border-color 0.4s ease,
+    box-shadow 0.45s ease;
+}
+
+[data-revealed='true'] .mb-mbti-card {
+  animation: mb-mbti-card-in 0.6s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  /* 十六张依次落位：一张差 18ms，一秒内铺满 */
+  animation-delay: calc(var(--i, 0) * 18ms);
+}
+
+@keyframes mb-mbti-card-in {
+  from {
+    opacity: 0;
+    translate: 0 18px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+.mb-mbti-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--mbti-accent) 40%, transparent);
+  box-shadow: 0 22px 44px -28px color-mix(in srgb, var(--mbti-accent) 55%, transparent);
+}
+
+.mb-mbti-card:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--mbti-accent) 68%, transparent);
+  outline-offset: 2px;
+}
+
+.mb-mbti-head-row {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding-right: calc(var(--mbti-art) + 4px);
+}
+
+.mb-mbti-code {
+  font-family: var(--font-display);
+  font-size: var(--mbti-code-size);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0.05em;
+  color: var(--mbti-accent);
+}
+
+.mb-mbti-name {
+  font-size: var(--mbti-name-size);
+  letter-spacing: 0.08em;
+  color: var(--color-ink-soft);
+}
+
+.mb-mbti-desc {
+  overflow: hidden;
+  font-size: var(--mbti-body-size);
+  line-height: 1.6;
+  /*
+   * 卡片底的白色只有 78%，背景会透进来一点，所以正文不能停在 ink-faint
+   * （那是在纯底上的安全值），正文要能顺着读，直接用 ink-soft 的实色。
+   */
+  color: var(--color-ink-soft);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--mbti-lines);
+}
+
+.mb-mbti-art {
+  position: absolute;
+  top: clamp(8px, 1vh, 11px);
+  right: clamp(8px, 0.7vw, 12px);
+  width: var(--mbti-art);
+  height: var(--mbti-art);
+  border-radius: 14px;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--mbti-soft) 60%, transparent);
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mb-mbti-card:hover .mb-mbti-art {
+  transform: scale(1.06) rotate(-1.5deg);
+}
+
+/* 四组配色：类名只负责把 token 指过去 */
+.mb-mbti-analyst {
+  --mbti-accent: var(--mbti-analyst);
+  --mbti-soft: var(--mbti-analyst-soft);
+}
+.mb-mbti-sentinel {
+  --mbti-accent: var(--mbti-sentinel);
+  --mbti-soft: var(--mbti-sentinel-soft);
+}
+.mb-mbti-diplomat {
+  --mbti-accent: var(--mbti-diplomat);
+  --mbti-soft: var(--mbti-diplomat-soft);
+}
+.mb-mbti-explorer {
+  --mbti-accent: var(--mbti-explorer);
+  --mbti-soft: var(--mbti-explorer-soft);
+}
+
+.mb-mbti-note {
+  margin-top: clamp(8px, 1.4vh, 14px);
+  flex-shrink: 0;
+  text-align: center;
+  font-size: var(--mbti-note-size);
+  letter-spacing: 0.1em;
+  color: var(--color-ink-faint);
+}
+
+.mb-mbti-hint {
+  display: none;
+}
+
+@media (min-width: 1200px) and (min-height: 900px) {
+  :root {
+    --mbti-lines: 4;
+  }
+}
+
+/*
+ * 平板与手机：两列、屏内滚。
+ *
+ * 这一屏内容确实比一屏高，所以它自己是滚动容器。滚动收口交给
+ * `.mb-mbti-scroll { scroll-snap-type: y proximity }`（见本文件末尾）：
+ * 卡片只是"靠近了吸一下"，不会把人卡在第一行看不完后面。
+ */
+@media (max-width: 1199px) {
+  .mb-mbti {
+    padding-bottom: 10px;
+  }
+
+  .mb-mbti-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+    grid-auto-rows: minmax(112px, auto);
+    gap: clamp(8px, 2.2vw, 14px);
+  }
+
+  .mb-mbti-scroll {
+    overflow-y: auto;
+    overscroll-behavior-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-right: 2px;
+  }
+
+  .mb-mbti-card {
+    scroll-snap-align: start;
+  }
+
+  .mb-mbti-hint {
+    display: inline;
+    margin-left: 10px;
+    letter-spacing: 0.08em;
+  }
+}
+
+/* 窄屏页头改为竖排：标题独占一行，按钮落到副标题下面 */
+@media (max-width: 899px) {
+  .mb-mbti-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .mb-mbti-full {
+    height: 30px;
+    padding: 0 12px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 560px) {
+  :root {
+    --mbti-lines: 3;
+    --mbti-art: 38px;
+  }
+
+  .mb-mbti-title {
+    letter-spacing: 0.08em;
+  }
+
+  .mb-mbti-sub {
+    letter-spacing: 0.1em;
+  }
+}
+
+/* 详情弹层 */
+.mb-mbti-detail-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.mb-mbti-detail-art {
+  width: 92px;
+  height: 92px;
+  flex-shrink: 0;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--mbti-accent) 22%, transparent);
+  background: color-mix(in srgb, var(--mbti-soft) 55%, transparent);
+  object-fit: cover;
+}
+
+.mb-mbti-detail p {
+  font-size: 13.5px;
+  line-height: 1.95;
+  color: var(--color-ink-soft);
+}
+
+.mb-mbti-detail-note {
+  margin-top: 18px;
+  border-top: 1px solid color-mix(in srgb, var(--color-ink-ghost) 18%, transparent);
+  padding-top: 14px;
+  font-size: 11.5px;
+  line-height: 1.9;
+  color: var(--color-ink-faint);
+}
+
+.mb-mbti-back {
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-ink-ghost) 24%, transparent);
+  background: color-mix(in srgb, var(--color-white) 52%, transparent);
+  padding: 0 16px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-soft);
+  transition:
+    color 0.3s ease,
+    background-color 0.3s ease;
+}
+
+.mb-mbti-back:hover {
+  background: color-mix(in srgb, var(--color-white) 72%, transparent);
+  color: var(--color-ink);
+}
+
+/* ---------------- 整图灯箱 ---------------- */
+
+.mb-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  background: rgba(18, 15, 28, 0.8);
+  backdrop-filter: blur(18px) saturate(1.08);
+  color: #f6f1ff;
+}
+
+.mb-lightbox-bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px clamp(14px, 3vw, 28px);
+}
+
+.mb-lightbox-bar p {
+  font-size: 12.5px;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.mb-lightbox-bar p span {
+  margin-left: 8px;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.mb-lightbox-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mb-lightbox-tools button,
+.mb-lightbox-tools a {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.86);
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
+}
+
+.mb-lightbox-tools button:hover,
+.mb-lightbox-tools a:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.mb-lightbox-scale {
+  min-width: 44px;
+  text-align: center;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.62);
+  font-variant-numeric: tabular-nums;
+}
+
+.mb-lightbox-stage {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 0 clamp(10px, 2vw, 32px);
+  touch-action: none;
+  cursor: grab;
+}
+
+.mb-lightbox-stage:active {
+  cursor: grabbing;
+}
+
+.mb-lightbox-stage img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 10px;
+  box-shadow: 0 44px 90px -44px rgba(0, 0, 0, 0.9);
+  transform-origin: center;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.mb-lightbox-hint {
+  flex-shrink: 0;
+  padding: 10px 0 16px;
+  text-align: center;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* ---------------- 降级与动画偏好 ---------------- */
+
+@supports not ((backdrop-filter: blur(4px)) or (-webkit-backdrop-filter: blur(4px))) {
+  .mb-mbti-card {
+    background: color-mix(in srgb, var(--color-cream) 94%, var(--mbti-soft));
+  }
+
+  .mb-mbti-full,
+  .mb-btn-ghost {
+    background: color-mix(in srgb, var(--color-cream) 96%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mb-reveal,
+  .mb-reveal-fade {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .mb-mbti-card {
+    opacity: 1;
+    translate: none;
+    animation: none !important;
+    transition: none;
+  }
+
+  .mb-closing-actions > a {
+    transition: none;
+  }
+}
+
+/*
+ * ── 一个必须写在这里的怪癖 ────────────────────────────────────────────────
+ *
+ * `scroll-snap-type: y proximity` 在 `@media (max-height: X)` 里会整个值被丢掉
+ * （CSSOM 读回来只剩 `y`，等于强制吸附），`mandatory` 和 `x proximity` 都正常。
+ * 同一台 Chrome、同一份规则，只要把 max-height 换成 max-width 就正常。
+ * 这是 Chromium 对 scroll-snap 的解析问题，跟我们的选择器无关。
+ *
+ * 所以 `proximity` 只声明在 `max-width` 里 —— 见下方；别为了"顺手"把宽度和
+ * 高度条件合并到一个媒体查询里，否则手机横屏会变回强制吸附。
+ *
+ * 另外全局还有一处 `html.mb-snap { scroll-snap-type: y mandatory }`，
+ * 窄屏时这一屏自己还能滚，会和整页的强制吸附打架（滚轮在内层滚到边界后会
+ * 一口气穿透好几屏）。所以内层真的能滚时，由 [data-screen] / JS 摘掉整页的
+ * mandatory，滚到底再挂回来。
+ */
+@media (max-width: 1199px) {
+  .mb-mbti-scroll {
+    /* 卡片靠近时吸一下，不硬卡 */
+    scroll-snap-type: y proximity;
+  }
+}
+
+/*
+ * 内层还能滚的时候，整页暂时不吸附（由 home-experience 加这个类）。
+ * 见 home-experience.tsx 里的说明：强制吸附 + 内层滚动容器同时存在时，
+ * 滚轮会从内层边界一口气穿透好几屏。
+ */
+html.mb-snap.mb-snap-inner {
+  scroll-snap-type: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 减少动效只关动画，吸附保留（需求里明确要求） */
+  html.mb-snap {
+    scroll-behavior: auto;
   }
 }

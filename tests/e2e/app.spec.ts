@@ -275,7 +275,7 @@ test('情绪转盘：点空白处关闭详情，点击已选中扇形也能收�
   await expect(card).toHaveCount(0);
 });
 
-test('首页整屏翻页：跟手拖、过半吸附，不会停在两屏中间', async ({ page }) => {
+test('首页整屏吸附：CSS scroll-snap 一滑一屏，滚动跟手后自动吸住', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openHome(page);
   await page.waitForTimeout(600);
@@ -283,18 +283,23 @@ test('首页整屏翻页：跟手拖、过半吸附，不会停在两屏中间',
   const y = () => page.evaluate(() => Math.round(window.scrollY));
   const vh = await page.evaluate(() => window.innerHeight);
   const docH = await page.evaluate(() => document.documentElement.scrollHeight);
-  // 页面正好两屏高，否则"整屏"这个概念本身就不成立
-  expect(Math.abs(docH - vh * 2)).toBeLessThanOrEqual(2);
+  // 四屏：情绪天空 / 情绪转盘 / 人格详解 / 树洞广场
+  expect(Math.abs(docH - vh * 4)).toBeLessThanOrEqual(2);
+
+  // 吸附是 CSS 给的，不是 JS 驱动的
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollSnapType)).toBe(
+    'y mandatory',
+  );
+  expect(await page.locator('#sky').evaluate((el) => getComputedStyle(el).scrollSnapAlign)).toBe('start');
+  expect(await page.locator('#sky').evaluate((el) => getComputedStyle(el).scrollSnapStop)).toBe('always');
 
   expect(await y()).toBe(0);
-  await page.mouse.move(1200, 450);
+  // 落在转盘左侧的空白上：卡片区域会接管滚动，这里专测页面本身
+  await page.mouse.move(300, 450);
 
   /*
-   * 一、页面要「跟手」：滚动过程中必须出现中间位置。
-   *
-   * 旧的实现在滚轮事件里直接 scrollTo 到整屏，采样只会得到 0 和 900
-   * 两个值 —— 画面是"顿"过去的。这里要求至少抓到一个落在中间的采样点，
-   * 才说明页面真的是被拖着走的。
+   * 一、跟手：滚动过程中必须出现中间位置。
+   * 原生吸附也是"先跟着走、松手再吸"，采样只出现 0 和 900 就说明是顿过去的。
    */
   const trail: number[] = [];
   const sampler = setInterval(async () => {
@@ -304,48 +309,43 @@ test('首页整屏翻页：跟手拖、过半吸附，不会停在两屏中间',
       /* 页面正在关闭时忽略 */
     }
   }, 40);
-  await page.mouse.wheel(0, 400);
-  await page.waitForTimeout(1000);
+  await page.mouse.wheel(0, 600);
+  await page.waitForTimeout(1200);
   clearInterval(sampler);
   expect(trail.some((value) => value > 40 && value < vh - 40)).toBe(true);
-
-  // 越过半屏，吸附到第二屏
   expect(await y()).toBe(vh);
 
-  // 二、不到半屏就回弹：滚 60 只走一小段，停手后还是第一屏
-  await page.mouse.wheel(0, -400);
-  await page.waitForTimeout(1000);
-  expect(await y()).toBe(0);
-  await page.mouse.wheel(0, 60);
-  await page.waitForTimeout(1000);
-  expect(await y()).toBe(0);
+  // 二、一次大幅滑动只翻一屏（snap-stop: always）
+  await page.mouse.wheel(0, 1200);
+  await page.waitForTimeout(1200);
+  expect(await y()).toBe(vh * 2);
 
-  // 三、过半就去下一页（400 × 增益 ≈ 0.96 屏）
-  await page.mouse.wheel(0, 400);
+  // 三、不够半屏就回弹，停在原来那一屏
+  await page.mouse.wheel(0, 120);
   await page.waitForTimeout(1000);
-  expect(await y()).toBe(vh);
+  expect(await y()).toBe(vh * 2);
 
-  // 连滚两下也不会飞出页面
-  await page.mouse.wheel(0, 400);
-  await page.mouse.wheel(0, 400);
-  await page.waitForTimeout(1000);
-  expect(await y()).toBe(vh);
-
-  // 键盘走同一套吸附
+  // 四、键盘走同一套吸附
   await page.keyboard.press('PageUp');
   await page.waitForTimeout(1200);
-  expect(await y()).toBe(0);
-  await page.keyboard.press('PageDown');
-  await page.waitForTimeout(1200);
   expect(await y()).toBe(vh);
+
+  // 五、圆点导航直接跳到某一屏
+  await page.getByRole('button', { name: '前往树洞广场' }).click();
+  await page.waitForTimeout(1400);
+  expect(await y()).toBe(vh * 3);
+  await expect(page.locator('.mb-screen-dot.is-active em')).toHaveText('树洞广场');
 });
 
 test('情绪转盘：第二屏撑满一屏，转盘水平居中', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openHome(page);
 
-  // 两屏：第一屏 + 转盘屏，页面刚好能滚一屏
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  // 直接落到第二屏（转盘）。url 里没有锚点，用 offsetTop 避免 smooth 还没走完
+  await page.evaluate(() => {
+    const el = document.getElementById('wheel');
+    if (el) window.scrollTo({ top: el.offsetTop, behavior: 'instant' });
+  });
   await page.waitForTimeout(700);
 
   const geo = await page.evaluate(() => {
@@ -362,8 +362,8 @@ test('情绪转盘：第二屏撑满一屏，转盘水平居中', async ({ page 
   });
 
   expect(geo).toBeTruthy();
-  // 页面至少两屏高，滚到底就是转盘那一屏
-  expect(geo!.docH).toBeGreaterThanOrEqual(geo!.vh * 2 - 24);
+  // 四屏的页面，第二屏就是转盘
+  expect(geo!.docH).toBeGreaterThanOrEqual(geo!.vh * 4 - 24);
   /*
    * 窄屏（<1280）转盘水平居中（±2px）；
    * 宽屏改成「盘在左、卡片在右」，盘会往左让出一栏，这里只要求它完整在屏内。
