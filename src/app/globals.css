@@ -1555,6 +1555,72 @@ html[data-theme='night'] .orb-surface {
   }
 }
 
+/* ---------------- 情绪转盘（首页下滑区域） ---------------- */
+
+/*
+ * 转盘交互全用 CSS `transform` + `opacity` 过渡：不碰布局属性，
+ * 不触发重排，0.45s 带一点缓动。点中一个扇形 → 它放大、投下阴影，
+ * 其余缩小并半透明；再点一下或点空白处收起。
+ *
+ * `transform-origin` 由组件按扇形在 SVG 里的几何写到行内样式上
+ * （圆心 200 200），这样放大是「往圆外撑」，而不是往左上角漂。
+ */
+.emotion-wheel-slice {
+  cursor: pointer;
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, opacity;
+}
+
+.emotion-wheel-slice-shape {
+  transition: filter 0.45s ease;
+}
+
+/* 悬停：只对精确指针生效，手机上不会因一次触摸留下悬停态 */
+@media (hover: hover) and (pointer: fine) {
+  .emotion-wheel-slice:hover {
+    transform: scale(1.05);
+  }
+
+  .emotion-wheel-slice:hover .emotion-wheel-slice-shape {
+    filter: brightness(1.04) saturate(1.05);
+  }
+}
+
+/* 有扇形被选中时：其余缩小 + 半透明（虚化），被点中的那一个放大并投下阴影 */
+.emotion-wheel-slice[aria-checked='true'] {
+  transform: scale(1.08);
+  z-index: 1;
+}
+
+.emotion-wheel-slice[aria-checked='true'] .emotion-wheel-slice-shape {
+  filter: drop-shadow(0 14px 24px rgba(70, 55, 92, 0.28));
+}
+
+/* 未选中的扇形：缩小 + 半透明。类由组件按 activeId 精确加上，不依赖兄弟选择器 */
+.emotion-wheel-slice-dim {
+  opacity: 0.35;
+  transform: scale(0.92);
+}
+
+/* 详情卡：雾面白玻璃，边框与左上角的小色点跟着当前扇形 */
+.emotion-wheel-card {
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.86) 0%, rgba(255, 255, 255, 0.6) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(18px) saturate(1.1);
+}
+
+html[data-theme='night'] .emotion-wheel-card {
+  background: linear-gradient(165deg, rgba(38, 34, 62, 0.86) 0%, rgba(24, 21, 44, 0.7) 100%);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* 减少动态：转盘的缩放过渡一并关掉，只保留最基础的可见性变化 */
+@media (prefers-reduced-motion: reduce) {
+  .emotion-wheel-slice {
+    transition: none;
+  }
+}
+
 /* ---------------- 底部导航（主页，桌面端） ---------------- */
 
 .mb-dock {

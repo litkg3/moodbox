@@ -7,6 +7,7 @@ import { MessageCircleHeart } from 'lucide-react';
 import { EmotionPanel } from '@/components/emotion/emotion-panel';
 import { enterSquare } from '@/components/layout/square-entrance';
 import { EmotionSky } from '@/components/emotion/emotion-sky';
+import { EmotionWheel } from '@/components/home/emotion-wheel';
 import { LiquidBubble } from '@/components/home/liquid-bubble';
 import { MeteorShower } from '@/components/home/meteor-shower';
 import { useToast } from '@/components/ui/toast';
@@ -151,6 +152,26 @@ export function HomeExperience() {
           </motion.div>
         </div>
       </div>
+
+      {/*
+        情绪转盘：往下滚就能看到。第一屏（情绪球 + 中央泡泡）保持 100dvh 不变，
+        转盘作为第二屏排在文档流下方。进入视口时从下方滑入（不是淡入）。
+      */}
+      <motion.div
+        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 64 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.25 }}
+        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
+        className="relative z-10 mx-auto w-full max-w-[720px] px-5 pb-24 pt-16 sm:px-8 lg:pb-32"
+      >
+        <p className="mb-2 text-center text-[11px] tracking-[0.28em] text-ink-faint/80 sm:text-[12px]">
+          每一种情绪，都在替你要点什么
+        </p>
+        <h2 className="mb-8 text-center font-display text-[24px] font-light tracking-[0.12em] text-ink/85 sm:text-[28px]">
+          情绪转盘
+        </h2>
+        <EmotionWheel />
+      </motion.div>
 
       <p className="sr-only">{SLOGAN}</p>
 
