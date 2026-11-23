@@ -106,6 +106,13 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
   const [step, setStep] = useState(0);
   /** 鼠标悬停暂停时停在哪一格；为空表示没有悬停。 */
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  /**
+   * 点中某一格时，把当时盘面的角度原样冻在这里。
+   *
+   * 锁定之后盘就保持这个角度不动 —— 被点的标签停在它原来的方位，
+   * 不会被"对齐"到指针下面。为空表示没有锁定。
+   */
+  const [frozenSpin, setFrozenSpin] = useState<number | null>(null);
   /** 手动点过之后就不再自动转，直到收起。 */
   const [autoOn, setAutoOn] = useState(true);
   /**
@@ -118,6 +125,8 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
    *           这个态会一直保留，直到用户下一次点扇形重新打开。
    */
   const [cardMode, setCardMode] = useState<'follow' | 'locked' | 'off'>('follow');
+  /** 当前用键盘聚焦的扇形（null = 没有键盘焦点，或已经交给鼠标）。 */
+  const [keyboardFocus, setKeyboardFocus] = useState<number | null>(null);
   /** 只有桌面端才自动转（手机上自动转会分散注意力）。 */
   const [isDesktop, setIsDesktop] = useState(false);
   const titleId = useId();
@@ -164,19 +173,39 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
   const pointerPos = useRef<{ x: number; y: number } | null>(null);
 
   /*
+   * 转盘被滚出视口就不再自动转。
+   *
+   * 这一条正是「桌面端卡片不自动打开」的根因：首页两屏都有 100dvh 高，
+   * 转盘在第二屏，进页面时它整个在视口之外。原来不管在不在看都照转，
+   * 定时器空跑，第一屏的人什么也看不到 —— 看起来就像「没有自动」。
+   * 现在用 IntersectionObserver 盯着转盘，至少露出三成才算「在看」。
+   */
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setInView(entry ? entry.isIntersecting : false),
+      { threshold: 0.3 },
+    );
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, []);
+
+  /*
    * 自动转动：悬停、锁定、收起都会让这个 effect 重跑，定时器随之停掉。
    *
    * 悬停的判定放在定时器里做，不在事件里做 —— 少了这个 effect 反复
    * 重启，盘也就不会一卡一卡。
    */
   useEffect(() => {
-    if (!autoActive) return;
+    if (!autoActive || !inView) return;
     const timer = window.setInterval(() => {
       if (!autoRef.current) return;
       setStep((current) => current + 1);
     }, STEP_MS);
     return () => window.clearInterval(timer);
-  }, [autoActive]);
+  }, [autoActive, inView]);
 
   const syncPointer = useCallback(
     (event: PointerEvent) => {
@@ -235,27 +264,38 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
   const count = EMOTION_SLICES.length;
   const mod = (value: number) => ((value % count) + count) % count;
 
-  /** 盘停在「第几格」：锁定的那一格、悬停的那一格，或者自动走到的那一格。 */
-  const displayIndex = lockedId
-    ? Math.max(0, EMOTION_SLICES.findIndex((slice) => slice.id === lockedId))
-    : hoverIndex ?? (autoActive ? mod(step) : mod(step));
-
-  /**
-   * 整盘旋转角度。
+  /*
+   * 整盘旋转角度 —— 盘自己转，指针不动。
    *
-   * 视角上「指针在正上方」，要让它指向 displayIndex 那一格，就得把
-   * 那一格的扇心转到 -90°：旋转量 = -90 - (扇心角 + 当前累计转角)。
-   * 外面再补若干个整圈，保证一直是同一个方向往前转，不会为了归位
-   * 突然倒着甩回去。
+   * 除了自动步进，这里还叠了两项「手动补转」：
+   *
+   *   - 悬停：hoverSpin，让指针下那一格转到正上方；
+   *   - 锁定：lockSpin，让被点的那一格转到正上方。
+   *
+   * 目标角度要求「那一格的扇心 = -90°」。把需求反过来解，就是
+   * 「整盘要转到多少度」。外面再补若干个整圈（baseSpin 那一项），
+   * 保证一直是同一个方向往前转，不会为了归位突然倒着甩回去 ——
+   * 这也是「点一下标签，标签不要跳到指向上方」的关键：转的是盘
+   * 这一个整体，被点的扇形只是恰好停在了指针下面。
    */
   const baseSpin = -SLICE_DEG / 2 - step * SLICE_DEG;
-  const targetAngle = START_DEG + SLICE_DEG / 2 + displayIndex * SLICE_DEG;
-  const desiredSpin = START_DEG - targetAngle;
-  // 摇出随机起始格之后才允许「补整圈」：第一帧不该从 0° 甩到某个大角度
-  const spinGroup = ready ? desiredSpin + 360 * Math.ceil((baseSpin - desiredSpin) / 360) : initialSpin;
 
-  /** 指针指的是哪一格。 */
-  const pointerIndex = hoverIndex ?? mod(step);
+  /** 把「某一格要正对指针」换算成整盘角度，并补齐整圈。 */
+  const spinFor = (index: number | null, fallbackSpin: number) => {
+    if (index === null) return fallbackSpin;
+    const targetAngle = START_DEG + SLICE_DEG / 2 + index * SLICE_DEG;
+    const desired = START_DEG - targetAngle;
+    return desired + 360 * Math.ceil((fallbackSpin - desired) / 360);
+  };
+
+  /** 鼠标停在哪一格就转到哪一格；锁定之后取冻结的角度，一步不动。 */
+  const lockIndex = lockedId ? Math.max(0, EMOTION_SLICES.findIndex((slice) => slice.id === lockedId)) : null;
+  const desiredIndex = lockIndex !== null ? null : hoverIndex;
+  const spinGroup =
+    frozenSpin !== null ? frozenSpin : ready ? spinFor(desiredIndex, baseSpin) : initialSpin;
+
+  /** 指针指的是哪一格：锁定的、悬停的，或者自动走到的那一格。 */
+  const pointerIndex = lockIndex ?? hoverIndex ?? mod(step);
 
   /** 卡片展示的情绪：锁定的优先，否则跟着指针走。 */
   const focusIndex = lockedId
@@ -266,15 +306,21 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
     EMOTION_SLICES[focusIndex] ?? (EMOTION_SLICES[0] as EmotionSlice);
   const isLocked = lockedId !== null;
   /*
-   * 卡片要不要出现：
-   * - locked：一定显示（手机端点开就是这一种）
-   * - follow：只在桌面端的自动态显示，跟着指针换内容
-   * - off   ：收起，连自动态也不显示
+   * 卡片出在哪一侧：看「被展示的那一格现在在屏幕的左半圈还是右半圈」。
+   *
+   * 扇形 i 的扇心角（盘没转时）是 -90 + 45i + 22.5；把整盘转过的角度
+   * 加回去，就是它此刻在屏幕上的角度。cos > 0 在右半圈，cos < 0 在左半圈。
+   * 卡片永远挨着自己那半圈，不会横跨整个盘跑到对面去。
+   *
+   * 盘本身始终居中 —— 卡片是浮在两肩空当里的，不占布局位。
    */
-  const cardVisible = cardMode !== 'off' && (isLocked || (isDesktop && autoActive));
+  const pointerAngle = START_DEG + SLICE_DEG / 2 + focusIndex * SLICE_DEG + spinGroup;
+  const cardSide: 'left' | 'right' = Math.cos((pointerAngle * Math.PI) / 180) >= 0 ? 'right' : 'left';
+
+
 
   const selectSlice = useCallback(
-    (slice: EmotionSlice) => {
+    (slice: EmotionSlice, index: number | null) => {
       if (lockedId === slice.id) {
         /*
          * 再点一次同一个：收起，继续自动转。
@@ -284,14 +330,23 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
          */
         setLockedId(null);
         setHoverIndex(null);
+        setFrozenSpin(null);
         setAutoOn(true);
         setCardMode('off');
         return;
       }
-      // 先同步掐掉定时器，再改状态
+      /*
+       * 关键：点下去之后盘不再重算角度，就停在这一刻的位置。
+       *
+       * 之前的写法把 hoverIndex 清成 null，盘于是一路转回「自动步进」
+       * 算出来的那个角度 —— 表现出来就是「点一下，被点的标签自己跑到
+       * 指向上方去了」。现在先把当前盘面角度冻结进 frozenSpin，
+       * hoverIndex 清掉（鼠标可能马上离开），锁定的内容照样停在原处。
+       */
+      setFrozenSpin(spinGroup);
+      setHoverIndex(null);
       autoRef.current = false;
       setLockedId(slice.id);
-      setHoverIndex(null);
       setAutoOn(false);
       setCardMode('locked');
     },
@@ -301,6 +356,7 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
   const close = useCallback(() => {
     setLockedId(null);
     setHoverIndex(null);
+    setFrozenSpin(null);
     setAutoOn(true);
     // 收起之后不再让卡片跟着指针冒出来，用户是主动想关掉它
     setCardMode('off');
@@ -331,26 +387,8 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
     return () => document.removeEventListener('keydown', onKey);
   }, [lockedId, close]);
 
-  /*
-   * 用户可能只滚了一半就点开扇形，卡片会落在视口外。
-   * 只在卡片真的超出可视区时才把它带进来；已经看得见就一动不动，
-   * 免得点一下页面自己往上跳。
-   */
-  useEffect(() => {
-    if (!lockedId) return;
-    const timer = window.setTimeout(() => {
-      const card = cardRef.current;
-      if (!card) return;
-      const rect = card.getBoundingClientRect();
-      const viewport = window.innerHeight;
-      if (rect.top < 0 || rect.bottom > viewport) {
-        card.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest' });
-      }
-    }, 260);
-    return () => window.clearTimeout(timer);
-  }, [lockedId, reduceMotion]);
-
-  const showCard = cardVisible;
+  /** 卡片到底要不要渲染。自动态只在「桌面 + 没被收起 + 转盘真的在眼前」时成立。 */
+  const showCard = cardMode !== 'off' && (isLocked || (isDesktop && autoActive && inView));
 
   return (
     <section
@@ -379,6 +417,11 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
                 const isActive = lockedId === slice.id;
                 const isDimmed = lockedId !== null && !isActive;
                 const isTop = index === pointerIndex;
+                /*
+                 * 键盘高亮跟着焦点走：Tab 进来、用方向键换格，都能看见自己在哪。
+                 * 鼠标高亮只在没有键盘焦点时生效，免得两个圈同时亮。
+                 */
+                const isHovered = hoverIndex === index && keyboardFocus === null;
 
                 return (
                   <g
@@ -388,18 +431,41 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
                     aria-checked={isActive}
                     aria-label={`${slice.label}：是为了获得${slice.need}`}
                     data-slice-index={index}
-                    onClick={() => selectSlice(slice)}
+                    onClick={() => selectSlice(slice, index)}
+                    onFocus={() => setKeyboardFocus(index)}
+                    onBlur={() => setKeyboardFocus((current) => (current === index ? null : current))}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
-                        selectSlice(slice);
+                        selectSlice(slice, index);
+                        return;
                       }
+                      /*
+                       * 方向键在 8 个扇形之间转圈。
+                       * 扇形是按顺时针排的，所以「右/下」往后、「左/上」往前。
+                       */
+                      const delta =
+                        event.key === 'ArrowRight' || event.key === 'ArrowDown'
+                          ? 1
+                          : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+                            ? -1
+                            : 0;
+                      if (!delta) return;
+                      event.preventDefault();
+                      const next = (index + delta + count) % count;
+                      const nextSlice = EMOTION_SLICES[next];
+                      if (!nextSlice) return;
+                      setKeyboardFocus(next);
+                      // 焦点跟着挪，读屏才会播报新的那一格
+                      const el = stageRef.current?.querySelector<SVGGElement>(`[data-slice-index="${next}"]`);
+                      el?.focus();
                     }}
                     className={cn(
                       'emotion-wheel-slice focus:outline-none',
                       isDimmed && 'emotion-wheel-slice-dim',
                       isTop && 'emotion-wheel-slice-top',
-                      hoverIndex === index && 'emotion-wheel-slice-hot',
+                      isHovered && 'emotion-wheel-slice-hot',
+                      keyboardFocus === index && 'emotion-wheel-slice-focus',
                     )}
                     style={
                       {
@@ -463,7 +529,7 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
             {/* 正上方的固定指针：自动转动时指向当前那一格 */}
             <g
               aria-hidden="true"
-              className={cn('emotion-wheel-pointer', (autoActive || isLocked) && 'is-on')}
+              className={cn('emotion-wheel-pointer', autoActive && 'is-on', isLocked && 'is-locked')}
             >
               <path d="M 200 27 L 189 7 L 211 7 Z" fill="var(--color-ink-ghost, #9a90a8)" opacity="0.75" />
             </g>
@@ -475,6 +541,7 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
             className="emotion-wheel-card-slot"
             data-visible="true"
             data-locked={isLocked ? 'true' : 'false'}
+            data-side={cardSide}
           >
             <div
               key={focused.id}
@@ -502,26 +569,27 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
               <span className="emotion-wheel-card-bar" aria-hidden="true" />
 
               {/*
-                三块直接挂在卡片上，宽屏才能用栅格把它们摆成「左栏标题 + 需求，
-                右栏处理方法」两栏。中间不要再包一层 —— 包了之后栅格就只看到
-                一个块，子元素再怎么设 grid-area 都无效。
-              */}
-              <div className="emotion-wheel-card-title-wrap">
-                <span className="emotion-wheel-card-dot" aria-hidden="true" />
-                <div>
-                  <p className="emotion-wheel-card-eyebrow">情绪的背后</p>
-                  <h3 className="emotion-wheel-card-title">{focused.label}</h3>
-                </div>
-              </div>
+                一张卡只留一个标题。
+                --
+                原来是「情绪的背后」（眉标）+「焦虑」（标题）+「是为了获得」
+                +「确定」（又一个更大的字）—— 四行字里三行都在抢同一件事：
+                这是什么情绪、它要什么。视觉上就成了「多层标题、主次不分」。
 
-              <div className="emotion-wheel-card-need">
-                <span className="emotion-wheel-card-key">是为了获得</span>
-                <span className="emotion-wheel-card-needword">{focused.need}</span>
-                <p className="emotion-wheel-card-text">{focused.needs}</p>
-              </div>
+                现在：左边一个情绪词打头，右边接着一句话把它说清楚。
+                不再有眉标、不再有第二个大字。
+              */}
+              <h3 className="emotion-wheel-card-title">
+                <span className="emotion-wheel-card-dot" aria-hidden="true" />
+                {focused.label}
+              </h3>
+
+              <p className="emotion-wheel-card-lead">
+                是为了获得<b>{focused.need}</b>
+                <span className="emotion-wheel-card-lead-text">{focused.needs}</span>
+              </p>
 
               <div className="emotion-wheel-card-method">
-                <span className="emotion-wheel-card-key">处理方法</span>
+                <span className="emotion-wheel-card-key">可以这样</span>
                 <p className="emotion-wheel-card-text">{focused.method}</p>
               </div>
 

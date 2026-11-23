@@ -1557,15 +1557,51 @@ html[data-theme='night'] .orb-surface {
  * 这里只管把那一格画得轻一点：微放大 + 提亮 + 一圈同色描边。
  */
 @media (hover: hover) and (pointer: fine) {
+  /*
+   * 悬停分三层，各管一件事，互不抢：
+   *   1. 扇形整体放大一点点 + 沿半径向外挪 2px（像被指尖按了一下）；
+   *   2. 面本身提亮、饱和度略升，并压一层同色的内阴影，让边缘"立"起来；
+   *   3. 描边变粗半像素、颜色换成同族深色，边界更清楚。
+   *
+   * 幅度都很小（1.04 / 2px / 0.6px），转得快也不闪。
+   */
+  .emotion-wheel-slice {
+    transition:
+      transform 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.32s ease;
+  }
+
   .emotion-wheel-slice:hover,
   .emotion-wheel-slice-hot {
-    transform: scale(1.04);
+    transform: scale(1.045);
   }
 
   .emotion-wheel-slice:hover .emotion-wheel-slice-shape,
   .emotion-wheel-slice-hot .emotion-wheel-slice-shape {
-    filter: brightness(1.06) saturate(1.08) drop-shadow(0 6px 14px rgba(70, 55, 92, 0.16));
-    stroke-width: 2.2;
+    filter:
+      brightness(1.05)
+      saturate(1.1)
+      drop-shadow(0 8px 16px color-mix(in srgb, var(--slice-edge) 30%, transparent));
+    stroke: color-mix(in srgb, var(--slice-edge) 78%, var(--slice-ink) 22%);
+    stroke-width: 2;
+  }
+
+  /* 文字跟着面一起亮一点点，不要出现"面亮了字还是灰的" */
+  .emotion-wheel-slice:hover .emotion-wheel-slice-label,
+  .emotion-wheel-slice-hot .emotion-wheel-slice-label {
+    fill: color-mix(in srgb, var(--slice-ink) 82%, #1a1526 18%);
+  }
+
+  /* 卡片本身也给一点可交互的感觉：指针在卡片上时，角上那团光稍微亮一点 */
+  .emotion-wheel-card {
+    transition: box-shadow 0.4s ease, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .emotion-wheel-card:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 40px 80px -38px rgba(58, 44, 80, 0.55),
+      0 2px 10px -6px rgba(58, 44, 80, 0.24);
   }
 }
 
@@ -1577,19 +1613,30 @@ html[data-theme='night'] .orb-surface {
   filter: brightness(1.07) saturate(1.06);
 }
 
-/* 被点中：放大并投下阴影；其余缩小半透明 */
+/* 键盘焦点：和悬停同一套高亮，另加一圈可见描边 */
+.emotion-wheel-slice-focus .emotion-wheel-slice-shape {
+  stroke: var(--color-lavender-deep, #7c6aa8);
+  stroke-width: 2.4;
+}
+
+/*
+ * 被点中：只放大被点的那一格，投下阴影，描边压深；
+ * 其余只变淡，不缩小 —— 缩小并上色边缘会让盘显得在抖，
+ * 而且「原地不动」这个诉求里，扇形形状本身也不该跟着变。
+ */
 .emotion-wheel-slice[aria-checked='true'] {
-  transform: scale(1.07);
+  transform: scale(1.06);
   z-index: 1;
 }
 
 .emotion-wheel-slice[aria-checked='true'] .emotion-wheel-slice-shape {
-  filter: drop-shadow(0 16px 26px rgba(70, 55, 92, 0.3));
+  filter: drop-shadow(0 14px 22px color-mix(in srgb, var(--slice-edge) 45%, transparent));
+  stroke: color-mix(in srgb, var(--slice-edge) 72%, var(--slice-ink) 28%);
+  stroke-width: 2;
 }
 
 .emotion-wheel-slice-dim {
-  opacity: 0.42;
-  transform: scale(0.93);
+  opacity: 0.34;
 }
 
 /* 正上方的指针：只在自动转动时出现 */
@@ -1600,6 +1647,17 @@ html[data-theme='night'] .orb-surface {
 
 .emotion-wheel-pointer.is-on {
   opacity: 1;
+}
+
+/*
+ * 锁定之后指针让位。
+ *
+ * 指针的作用是「现在停在这一格」，属于待机态的语言；用户已经亲手点了
+ * 一格，高亮的放大 + 阴影足够说明，再顶上一个小三角就会读成
+ * 「这一格被转到了最上面」—— 正好和「标签留在原地」相反。
+ */
+.emotion-wheel-pointer.is-locked {
+  opacity: 0;
 }
 
 /* ---------------- 详情卡 ---------------- */
@@ -1667,22 +1725,51 @@ html[data-theme='night'] .emotion-wheel-card {
   }
 }
 
-/* 横向两栏时，卡片只做「宽」的入场，不做纵向位移，免得和居中打架 */
+/* 桌面端：卡片里那句话的说明单独一行，读起来更顺 */
 @media (min-width: 1280px) {
-  .emotion-wheel-card {
-    animation-name: emotion-wheel-card-in-wide;
+  .emotion-wheel-card-lead-text {
+    margin-top: 4px;
   }
 }
 
-@keyframes emotion-wheel-card-in-wide {
+/*
+ * 卡片从「自己那半边」滑进来：在右边就从右边进来，在左边就从左边进来。
+ * 只滑 14px + 3px 的模糊，轻一点，别抢转盘的戏。
+ * 注意只能动 opacity / transform / filter，不能带 translateY(-50%)，
+ * 那样会把手写的居中位移冲掉（那一位在外层 slot 上，这里不碰）。
+ */
+@keyframes emotion-wheel-card-in-right {
   from {
     opacity: 0;
-    transform: translateX(-10px);
+    transform: translateX(16px);
+    filter: blur(3px);
   }
   to {
     opacity: 1;
     transform: translateX(0);
+    filter: blur(0);
   }
+}
+
+@keyframes emotion-wheel-card-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0);
+  }
+}
+
+.emotion-wheel-card-slot[data-side='right'] .emotion-wheel-card {
+  animation-name: emotion-wheel-card-in-right;
+}
+
+.emotion-wheel-card-slot[data-side='left'] .emotion-wheel-card {
+  animation-name: emotion-wheel-card-in-left;
 }
 
 /*
@@ -1708,37 +1795,63 @@ html[data-theme='night'] .emotion-wheel-card {
   z-index: 1;
 }
 
-.emotion-wheel-card-title-wrap {
+/*
+ * 一张卡只有一个标题。
+ *
+ * 之前是眉标「情绪的背后」+ 标题「焦虑」+「是为了获得」+ 大字「确定」，
+ * 四行字里三行在说同一件事，看起来就是一层套一层的标题。
+ * 现在只留：情绪词（唯一的大字）+ 一句把它说清楚的话。
+ */
+.emotion-wheel-card-title {
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-
-.emotion-wheel-card-dot {
-  width: 10px;
-  height: 10px;
-  flex: none;
-  border-radius: 999px;
-  background: var(--slice-color);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--slice-edge) 24%, transparent);
-}
-
-.emotion-wheel-card-eyebrow {
-  font-size: 9.5px;
-  letter-spacing: 0.26em;
-  color: var(--color-ink-faint);
-}
-
-.emotion-wheel-card-title {
-  margin-top: 1px;
+  gap: 8px;
   font-family: var(--font-display);
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 400;
-  line-height: 1.2;
+  line-height: 1.25;
   letter-spacing: 0.1em;
   color: var(--color-ink);
 }
 
+.emotion-wheel-card-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--slice-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--slice-edge) 22%, transparent);
+}
+
+/*
+ * 标题下面那一句：「是为了获得**确定**。你说的话想被认真对待…」
+ * 主句 13px、需求词加粗上色、解释退成同一行的浅色小字 ——
+ * 一句话读完，不用再在一堆小标题之间找主次。
+ */
+.emotion-wheel-card-lead {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.85;
+  letter-spacing: 0.01em;
+  color: var(--color-ink);
+}
+
+.emotion-wheel-card-lead b {
+  margin: 0 2px;
+  font-weight: 600;
+  color: var(--slice-ink);
+}
+
+/* 解释那一句退一档：主句能一眼读完，细节留给想细看的人 */
+.emotion-wheel-card-lead-text {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--color-ink-faint);
+}
+
+/* 小标签：「可以这样」—— 只标出这一段在讲什么，不占标题的位置 */
 .emotion-wheel-card-key {
   display: block;
   font-size: 9.5px;
@@ -1746,23 +1859,10 @@ html[data-theme='night'] .emotion-wheel-card {
   color: var(--color-ink-faint);
 }
 
-.emotion-wheel-card-need {
-  margin-top: 14px;
-}
-
-.emotion-wheel-card-needword {
-  display: block;
-  margin-top: 2px;
-  font-family: var(--font-display);
-  font-size: 23px;
-  letter-spacing: 0.08em;
-  color: var(--slice-ink);
-}
-
 .emotion-wheel-card-text {
-  margin-top: 6px;
+  margin-top: 4px;
   font-size: 12.5px;
-  line-height: 1.85;
+  line-height: 1.8;
   color: var(--color-ink-soft);
 }
 
@@ -1814,21 +1914,17 @@ html[data-theme='night'] .emotion-wheel-card-method {
 }
 
 /*
- * 宽屏：卡片横过来放在右侧留白里。
+ * 宽屏：盘居中，卡片浮在两肩的空当里。
  *
- * 左边是盘（居中偏左），右边是卡片 —— 盘不用挪位，卡片也不挤在下面。
- * 卡片内部是两栏：左边标题 + 需求，右边一条竖分隔线 + 处理方法。
+ * 原来把盘放在 1fr 那一栏、卡片占掉固定的第二栏 —— 盘就被推到了左边，
+ * 不再居中。现在盘绝对居中、卡片 absolute 浮在左右两侧（哪边空去哪边），
+ * 两者互不影响布局。
  */
 @media (min-width: 1280px) {
-  /*
-   * 宽屏改成「两栏 + 卡片浮在右侧留白」，不是居中偏左：
-   * 卡片是绝对定位的浮层，如果盘还居中，浮层只能压在盘右半边。
-   * 用 grid 把第一栏留给盘，第二栏就是真正空出来的那块。
-   */
   .emotion-wheel-stage {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) clamp(380px, 33vw, 560px);
-    align-items: center;
+    position: relative;
+    display: flex;
+    justify-content: center;
   }
 
   .emotion-wheel-board {
@@ -1838,49 +1934,56 @@ html[data-theme='night'] .emotion-wheel-card-method {
   .emotion-wheel-card-slot {
     position: absolute;
     top: 50%;
-    right: clamp(24px, 3vw, 56px);
-    left: auto;
     bottom: auto;
-    width: clamp(380px, 33vw, 560px);
+    width: clamp(340px, 25vw, 420px);
     max-width: none;
     z-index: 2;
     transform: translateY(-50%);
   }
 
+  /* 卡片在哪边就跟哪边对齐；另一边留空，不会横跨整个盘 */
+  .emotion-wheel-card-slot[data-side='right'] {
+    right: clamp(8px, 1.6vw, 28px);
+    left: auto;
+  }
+
+  .emotion-wheel-card-slot[data-side='left'] {
+    left: clamp(8px, 1.6vw, 28px);
+    right: auto;
+  }
+
   .emotion-wheel-card {
-    max-height: none;
-    padding: 22px 24px 20px;
+    max-height: min(64vh, 520px);
+    padding: 22px 20px 18px;
     opacity: 1;
   }
 
   /*
-   * 卡片横过来：三栏。
+   * 卡片里的四块横着排。
    *
-   *   标题 │ 是为了获得 + 词 + 说明     │ 处理方法
+   *   情绪词 + 一句话                     │ 可以这样
+   *   ————————————————————————————————————
+   *   返回转盘
    *
-   * 各占一栏、顶对齐，才不会挤成两行。之前把标题和需求塞进同一格
-   * 再和「处理方法」并排，纵向就串行了。
+   * 一句话里已经带着需求词，所以不再单独给需求一栏 —— 少一栏就少一层标题。
    */
   .emotion-wheel-card {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    /* 行距交给各块的 margin，栅格自己不要额外间距，否则两栏对不齐 */
-    row-gap: 0;
-    column-gap: 24px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.82fr);
+    row-gap: 12px;
+    column-gap: 16px;
     align-items: start;
   }
 
-  .emotion-wheel-card-title-wrap {
-    align-items: flex-start;
+  .emotion-wheel-card-title {
     grid-column: 1;
     grid-row: 1;
+    margin-bottom: -8px;
   }
 
-  /* 左栏下面接需求，右栏整块是「处理方法」——两栏并排，不是串行 */
-  .emotion-wheel-card-need {
+  .emotion-wheel-card-lead {
     grid-column: 1;
     grid-row: 2;
-    margin-top: 14px;
   }
 
   .emotion-wheel-card-method {
@@ -1888,21 +1991,17 @@ html[data-theme='night'] .emotion-wheel-card-method {
     grid-row: 1 / span 2;
     margin-top: 0;
     align-self: stretch;
-    padding: 2px 0 0 22px;
+    padding: 1px 0 0 18px;
     border-radius: 0;
     background: transparent;
-    border-left: 1px solid color-mix(in srgb, var(--slice-edge) 24%, transparent);
+    border-left: 1px solid color-mix(in srgb, var(--slice-edge) 26%, transparent);
   }
 
   .emotion-wheel-card-close {
     grid-column: 1 / -1;
     grid-row: 3;
-    margin-top: 16px;
+    margin-top: 2px;
     justify-self: start;
-  }
-
-  .emotion-wheel-card-method .emotion-wheel-card-text {
-    margin-top: 4px;
   }
 }
 

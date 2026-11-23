@@ -15,6 +15,7 @@ import { useMoodBox } from '@/hooks/use-moodbox';
 import { burstLine } from '@/lib/burst-lines';
 import { getEmotion } from '@/lib/emotions';
 import { moodBoxStore } from '@/lib/moodbox-store';
+import { useScreenSnap } from '@/hooks/use-screen-snap';
 import type { Emotion, EmotionId } from '@/types';
 
 /** 球碎掉之后，过多久自己飘回来。用户要求：两秒。 */
@@ -84,6 +85,23 @@ export function HomeExperience() {
     transition: { duration: 1.1, delay, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
   });
 
+  /*
+   * 整屏翻页：必须是「一滑就是一整屏」，不能停在两屏中间。
+   *
+   * enabled 用 JS 判断而不是纯 CSS 媒体查询，是因为 CSS 的 scroll-snap
+   * 在鼠标滚轮上并不可靠（见 use-screen-snap 的注释），而且矮屏里
+   * 一屏装不下内容，强吸会让人看不到转盘。
+   */
+  const [snapEnabled, setSnapEnabled] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia('(min-height: 620px)');
+    const sync = () => setSnapEnabled(query.matches);
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+  useScreenSnap(snapEnabled);
+
   return (
     <main className="home-stage relative min-h-[100dvh] w-full overflow-hidden">
       <EmotionSky
@@ -100,7 +118,7 @@ export function HomeExperience() {
       */}
       <MeteorShower />
 
-      <div className="home-screen pointer-events-none relative z-10 flex min-h-[100dvh] flex-col items-center justify-center px-5 pb-24 pt-[96px] lg:pb-28 lg:pt-[108px]">
+      <div className="home-screen pointer-events-none relative z-10 flex h-[100dvh] flex-col items-center justify-center px-5 pb-24 pt-[96px] lg:pb-28 lg:pt-[108px]">
         <div className="home-copy relative flex w-full max-w-[440px] flex-col items-center text-center">
           {/* 标题与寄语：刻意做轻，不跟球抢视线 */}
           <motion.h1 {...fade(0.2)} className="flex flex-col items-center">
@@ -163,21 +181,23 @@ export function HomeExperience() {
         第一屏保持 100dvh，第二屏也做成 100dvh 并垂直居中 —— 这样
         PC 端滚到底时转盘正好落在屏幕正中，而不是吊在视口下半截。
       */}
-      <motion.div
-        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 56 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.1 }}
-        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
-        className="emotion-screen relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-[1200px] flex-col items-center justify-center px-5 py-20 sm:px-8"
-      >
-        <p className="mb-2 text-center text-[11px] tracking-[0.28em] text-ink-faint/80 sm:text-[12px]">
+      {/*
+         * 高度锁死 100dvh，不再是 min-height。
+         * 用 min-h 时只要内容比一屏高一点，整页高度就不是「2 × 一屏」，
+         * 整屏翻页会算错、滚到底还会差几十像素 —— 那正是「卡在两屏中间」的来源。
+         * 现在让内容在固定的一屏里自适应（见下面的 py），页面高度恒等于两屏。
+         *
+         * 宽屏单独放宽 max-w：卡片浮在转盘两肩，两块都要装得下。
+         */}
+      <div className="emotion-screen relative z-10 mx-auto flex h-[100dvh] w-full max-w-[1200px] flex-col items-center justify-center px-5 py-16 sm:px-8 xl:max-w-[1560px]">
+        <p className="mb-1.5 text-center text-[10.5px] tracking-[0.28em] text-ink-faint/80 sm:text-[11.5px]">
           情绪的背后是需求
         </p>
-        <h2 className="mb-7 text-center font-display text-[24px] font-light tracking-[0.12em] text-ink/85 sm:mb-9 sm:text-[28px]">
+        <h2 className="mb-4 text-center font-display text-[22px] font-light tracking-[0.12em] text-ink/85 sm:mb-6 sm:text-[26px]">
           情绪转盘
         </h2>
         <EmotionWheel className="w-full" />
-      </motion.div>
+      </div>
 
       <p className="sr-only">{SLOGAN}</p>
 

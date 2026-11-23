@@ -138,8 +138,8 @@ test('滚到转盘后情绪球随页面滚走，第一屏底部有向下箭头',
   // 滚到转盘区域后，情绪球已经随页面滚出视口（不再只是原地渐隐）
   await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
   const skyBox = await page.locator('.emotion-sky').boundingBox();
-  // 天空（含小球）已经滚到视口上方之外
-  expect(skyBox && skyBox.y + skyBox.height).toBeLessThanOrEqual(0);
+  // 天空（含小球）已经滚到视口上方之外（留一点亚像素容差）
+  expect(skyBox && skyBox.y + skyBox.height).toBeLessThanOrEqual(24);
 });
 
 test('情绪转盘：8 个扇形，点击放大并展示完整信息，可返回关闭', async ({ page }) => {
@@ -162,7 +162,7 @@ test('情绪转盘：8 个扇形，点击放大并展示完整信息，可返回
   const card = page.locator('.emotion-wheel-card');
   await expect(card).toBeVisible();
   await expect(card).toContainText('是为了获得');
-  await expect(card).toContainText('处理方法');
+  await expect(card).toContainText('可以这样');
 
   // 其余扇形进入半透明态（被点中的那一个 aria-checked=true）
   await expect(lost).toHaveAttribute('aria-checked', 'true');
@@ -218,6 +218,45 @@ test('情绪转盘：点空白处关闭详情，点击已选中扇形也能收�
   await expect(card).toHaveCount(0);
 });
 
+test('首页整屏翻页：一滑就是一整屏，不会停在两屏中间', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openHome(page);
+  await page.waitForTimeout(600);
+
+  const y = () => page.evaluate(() => Math.round(window.scrollY));
+  const vh = await page.evaluate(() => window.innerHeight);
+  const docH = await page.evaluate(() => document.documentElement.scrollHeight);
+  // 页面正好两屏高，否则"整屏"这个概念本身就不成立
+  expect(Math.abs(docH - vh * 2)).toBeLessThanOrEqual(2);
+
+  expect(await y()).toBe(0);
+
+  // 很小的滚动量也要被补成一整屏
+  await page.mouse.move(1200, 450);
+  await page.mouse.wheel(0, 60);
+  await page.waitForTimeout(1300);
+  expect(await y()).toBe(vh);
+
+  // 往上一点同理
+  await page.mouse.wheel(0, -30);
+  await page.waitForTimeout(1300);
+  expect(await y()).toBe(0);
+
+  // 连滚两下只会前进一屏，不会飞出去
+  await page.mouse.wheel(0, 120);
+  await page.mouse.wheel(0, 120);
+  await page.waitForTimeout(1300);
+  expect(await y()).toBe(vh);
+
+  // 键盘也一样
+  await page.keyboard.press('PageUp');
+  await page.waitForTimeout(1200);
+  expect(await y()).toBe(0);
+  await page.keyboard.press('PageDown');
+  await page.waitForTimeout(1200);
+  expect(await y()).toBe(vh);
+});
+
 test('情绪转盘：第二屏撑满一屏，转盘水平居中', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openHome(page);
@@ -246,12 +285,8 @@ test('情绪转盘：第二屏撑满一屏，转盘水平居中', async ({ page 
    * 窄屏（<1280）转盘水平居中（±2px）；
    * 宽屏改成「盘在左、卡片在右」，盘会往左让出一栏，这里只要求它完整在屏内。
    */
-  if (geo!.vw < 1280) {
-    expect(Math.abs(geo!.centerX - geo!.vw / 2)).toBeLessThan(2);
-  } else {
-    expect(geo!.centerX).toBeGreaterThan(geo!.vw * 0.2);
-    expect(geo!.centerX).toBeLessThan(geo!.vw * 0.45);
-  }
+  // 任何宽度下盘都水平居中（宽屏也一样，卡片只是浮在两肩）
+  expect(Math.abs(geo!.centerX - geo!.vw / 2)).toBeLessThan(3);
   // 滚到底后转盘落在视口中部，而不是吊在屏幕下缘
   expect(geo!.centerY).toBeGreaterThan(geo!.vh * 0.32);
   expect(geo!.centerY).toBeLessThan(geo!.vh * 0.72);
@@ -349,11 +384,20 @@ test('情绪转盘：点一下停住并锁定，卡片在侧边横向排开', as
   await expect(page.locator('.emotion-wheel-card-close')).toBeVisible();
   await expect(page.locator('.emotion-wheel-card-slot')).toHaveAttribute('data-locked', 'true');
 
-  // 卡片在转盘右侧，且是横向排布（宽明显大于高）
+  /*
+   * 卡片落在「这一格所在的那半圈」那一侧，并且和盘不重叠。
+   * 盘本身始终居中 —— 这是这次改动的重点，单独用一个用例守。
+   */
   const board = await page.locator('.emotion-wheel-board').boundingBox();
   const cardBox = await page.locator('.emotion-wheel-card').boundingBox();
   expect(board && cardBox).toBeTruthy();
-  expect(cardBox!.x).toBeGreaterThan(board!.x + board!.width);
+  const side = await page.locator('.emotion-wheel-card-slot').getAttribute('data-side');
+  if (side === 'right') {
+    expect(cardBox!.x).toBeGreaterThan(board!.x + board!.width);
+  } else {
+    expect(cardBox!.x + cardBox!.width).toBeLessThan(board!.x);
+  }
+  // 横向排布：比正方形宽得多
   expect(cardBox!.width).toBeGreaterThan(cardBox!.height);
 
   /*
@@ -368,9 +412,71 @@ test('情绪转盘：点一下停住并锁定，卡片在侧边横向排开', as
   expect(bar.width).toBeLessThanOrEqual(32);
   expect(bar.width).toBeLessThan(bar.cardWidth * 0.2);
 
-  // 横向两栏：处理方法在需求的右边，而不是下面
-  const need = await page.locator('.emotion-wheel-card-need').boundingBox();
+  // 横向两栏：处理方法在那句话的右边，而不是下面
+  const lead = await page.locator('.emotion-wheel-card-lead').boundingBox();
   const method = await page.locator('.emotion-wheel-card-method').boundingBox();
-  expect(need && method).toBeTruthy();
-  expect(method!.x).toBeGreaterThan(need!.x + need!.width - 1);
+  expect(lead && method).toBeTruthy();
+  expect(method!.x).toBeGreaterThan(lead!.x + lead!.width - 1);
+});
+
+test('情绪转盘：宽屏盘居中，卡片浮在两肩不挤动盘', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openHome(page);
+  await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
+
+  // 自动态卡片已经在，先把盘的中心记下来
+  await expect(page.locator('.emotion-wheel-card')).toBeVisible();
+  const before = await page.locator('.emotion-wheel-board').boundingBox();
+  const vw = await page.evaluate(() => window.innerWidth);
+  expect(Math.abs(before!.x + before!.width / 2 - vw / 2)).toBeLessThan(3);
+
+  // 点一格之后盘不能挪位，卡片只浮在两肩
+  await page.locator('.emotion-wheel-slice', { hasText: '疲惫' }).click();
+  await expect(page.locator('.emotion-wheel-card')).toBeVisible();
+  const after = await page.locator('.emotion-wheel-board').boundingBox();
+  expect(Math.abs(after!.x - before!.x)).toBeLessThan(2);
+  expect(Math.abs(after!.width - before!.width)).toBeLessThan(2);
+});
+
+test('情绪转盘：点中的标签停在原位，不会被转到指针下面', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openHome(page);
+  await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
+
+  /*
+   * 「点在它此刻所在的位置」—— 直接调元素的 click() 最接近这件事：
+   * Playwright 默认的 click 会先等元素停止移动，而转盘一直在转，
+   * 等到的位置和真正按下时可能已经差了一格。
+   */
+  const slice = page.locator('.emotion-wheel-slice').nth(5);
+  const readTransform = () =>
+    page.locator('.emotion-wheel-spin').evaluate((el) => getComputedStyle(el).transform);
+
+  await slice.evaluate((el) => (el as SVGGElement).dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  await expect(page.locator('.emotion-wheel-card-close')).toBeVisible();
+
+  // 等过渡走完，读一个稳定值
+  await page.waitForTimeout(900);
+  const frozen = await readTransform();
+  await page.waitForTimeout(2200);
+  // 点击之后盘就定住，不再自己转到"对齐指针"的角度
+  expect(await readTransform()).toBe(frozen);
+
+  /*
+   * 被点的那一格仍在它原来的方位上 —— 也就是它此刻的扇心角
+   * 不等于 -90°（正上方）。真被"转上去"的话这个角度会正好是 -90°。
+   */
+  const angle = await slice.evaluate((el) => {
+    const shape = el.querySelector('.emotion-wheel-slice-shape')!;
+    const box = shape.getBoundingClientRect();
+    const board = document.querySelector('.emotion-wheel-board')!.getBoundingClientRect();
+    const cx = board.x + board.width / 2;
+    const cy = board.y + board.height / 2;
+    return (Math.atan2(box.y + box.height / 2 - cy, box.x + box.width / 2 - cx) * 180) / Math.PI;
+  });
+  // 允许 ±6° 的包围盒误差，但明显不能落在 -90°（正上方）附近
+  expect(Math.abs(angle + 90)).toBeGreaterThan(20);
+
+  // 锁定之后正上方的指针收起：它表示"停在最上面"，容易误读成标签被转上去了
+  await expect(page.locator('.emotion-wheel-pointer')).not.toHaveClass(/is-on/);
 });

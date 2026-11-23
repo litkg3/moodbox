@@ -634,7 +634,11 @@ test('刚发的帖子写「今天」，回复也带日期而不是只有几点',
   await post.getByRole('button', { name: /^(回复|\d+ 条回复)$/ }).click();
   await post.getByLabel('回复内容').fill('收到，这条是回复的时间检查');
   await post.getByRole('button', { name: '发送' }).click();
-  await expect(post.getByText('收到，这条是回复的时间检查')).toBeVisible();
+  /*
+   * 断言要看列表里的那一段 <p>：输入框还开着时它自己也带着这段文字，
+   * getByText 在 strict 模式下会同时命中输入框和正文。
+   */
+  await expect(post.locator('li p', { hasText: '收到，这条是回复的时间检查' }).first()).toBeVisible();
   const replyItem = post.locator('li', { hasText: '收到，这条是回复的时间检查' }).first();
   await expect(replyItem).toContainText('今天');
 });
