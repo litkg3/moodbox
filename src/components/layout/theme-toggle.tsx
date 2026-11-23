@@ -32,8 +32,8 @@ export function ThemeToggle({
       aria-pressed={night}
       title={night ? '现在是星空，点一下回到白日' : '现在是白日，点一下进入星空'}
       className={cn(
-        'mb-glass-soft group grid h-10 w-10 place-items-center rounded-full text-ink-faint',
-        'transition-colors duration-500 hover:text-ink sm:h-11 sm:w-11',
+        'mb-glass-nav mb-nav-item group grid h-10 w-10 place-items-center rounded-full',
+        'transition-colors duration-500 sm:h-11 sm:w-11',
         /*
          * 带标签时把 grid 换成 inline-flex：`grid` 会让每个子元素各占一格，
          * 太阳/月亮两个图标 + 两段文字叠成两行，「星空」被折成「星」和「空」。

@@ -376,6 +376,68 @@ html[data-theme='night'] .mb-glass-soft {
 }
 
 /*
+ * 导航栏专用的一层底。
+ *
+ * 比 mb-glass-soft 更实一点（0.56/0.30 → 0.8/0.62），因为导航一直压在
+ * 内容上方：小球飘到按钮底下时，原来的透明度会让字和球叠在一起。
+ * 单独开一个类而不是改 mb-glass-soft —— 后者还被面板、按钮复用。
+ */
+.mb-glass-nav {
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.66) 100%);
+  backdrop-filter: blur(20px) saturate(1.1);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 8px 20px -18px rgba(70, 55, 92, 0.5);
+}
+
+html[data-theme='night'] .mb-glass-nav {
+  background: linear-gradient(155deg, rgba(58, 52, 88, 0.86) 0%, rgba(40, 35, 64, 0.78) 100%);
+  backdrop-filter: blur(20px) saturate(1.04);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 8px 22px -18px rgba(0, 0, 0, 0.9);
+}
+
+/*
+ * 导航项的文字与图标一律用比 ink-faint 更深的一档。
+ *
+ * ink-faint 是给"说明性小字"用的，压在玻璃上会飘；导航是功能入口，
+ * 必须一眼读得清，所以统一走 ink-soft，悬停提到 ink。
+ */
+.mb-nav-item {
+  color: var(--color-ink-soft);
+}
+
+.mb-nav-item:hover {
+  color: var(--color-ink);
+}
+
+.mb-nav-item svg {
+  color: currentColor;
+  opacity: 0.92;
+}
+
+html[data-theme='night'] .mb-nav-item {
+  color: rgba(240, 236, 252, 0.82);
+}
+
+html[data-theme='night'] .mb-nav-item:hover {
+  color: #ffffff;
+}
+
+/* 页头那层实底也加一点不透明度，滚起来正文不会从字缝里透出来 */
+.mb-header-veil {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-cream) 92%, transparent) 0%,
+    color-mix(in srgb, var(--color-cream) 88%, transparent) calc(100% - 10px),
+    color-mix(in srgb, var(--color-cream) 0%, transparent) 100%
+  );
+}
+
+/*
  * 实心一点的卡片表面。
  * 新页面统一用它，避免每个组件各写一套白色透明底，
  * 换主题时也只需要改这里一处。
@@ -515,22 +577,6 @@ html[data-theme='night'] .mb-chip {
  * logo 底下 —— 只要还有一点透明度，滚动时就一定看得见。
  * 这里干脆改成与底色完全一致的实底（含夜间），用一条极淡的下边线收口。
  */
-.mb-header-veil {
-  /*
-   * 上面是实底，最底下留 10px 渐隐。
-   *
-   * 只留一点点：页头缩到 `py-2` 之后总高比它下面那层留白矮，中间会露出
-   * 一条缝 —— 渐隐负责把这条缝接上去，内容看起来是「滑进页头底下」，
-   * 而不是被一刀切断。渐隐以上必须完全不透明。
-   */
-  background: linear-gradient(
-    180deg,
-    var(--color-cream) 0%,
-    var(--color-cream) calc(100% - 10px),
-    color-mix(in srgb, var(--color-cream) 0%, transparent) 100%
-  );
-}
-
 html[data-theme='night'] .mb-header-veil {
   background: linear-gradient(
     180deg,
@@ -1035,6 +1081,81 @@ html[data-theme='night'] .mb-jar-gloss-soft {
     rgba(159, 179, 206, 0.35) 100%
   );
   box-shadow: 0 28px 60px -34px rgba(130, 105, 170, 0.7);
+}
+
+/*
+ * 起势的光圈：从圆环边缘往外荡开，两道错开 0.25s。
+ * 只用 border + scale + opacity，走合成层，不触发重绘。
+ */
+.mb-breath-ripple {
+  border: 1px solid color-mix(in srgb, #b8a4e0 62%, transparent);
+  animation: mb-breath-ripple 1.05s cubic-bezier(0.22, 1, 0.36, 1) both;
+  pointer-events: none;
+}
+
+.mb-breath-ripple-late {
+  animation-delay: 0.25s;
+  border-color: color-mix(in srgb, #9fb3ce 55%, transparent);
+}
+
+@keyframes mb-breath-ripple {
+  0% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  28% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.26);
+  }
+}
+
+/* 起势时整个圆环轻轻亮一下，像被点着了 */
+.mb-breath-launch::before {
+  content: '';
+  position: absolute;
+  inset: 4%;
+  border-radius: 999px;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, #c9b6e8 26%, transparent) 0%,
+    color-mix(in srgb, #c9b6e8 0%, transparent) 70%
+  );
+  animation: mb-breath-glow 0.95s ease-out both;
+  pointer-events: none;
+}
+
+@keyframes mb-breath-glow {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+}
+
+/* 圆心那三个小点：错开地亮一下，表示"正在把气聚起来" */
+.mb-breath-dot {
+  animation: mb-breath-dot 0.9s ease-in-out infinite;
+}
+
+@keyframes mb-breath-dot {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateY(-2px);
+  }
 }
 
 html[data-theme='night'] .mb-breath-orb {
@@ -1677,10 +1798,18 @@ html[data-theme='night'] .orb-surface {
   z-index: 40;
 }
 
-/* 卡片本体 */
+/*
+ * 卡片本体。
+ *
+ * overflow 必须是 hidden，不能是 `hidden auto`：卡片里不允许出现纵向滚动条。
+ * 内容长度是固定的（标题 + 一句话 + 可以这样），真的放不下就调字号/间距，
+ * 而不是让用户在一个浮层里再滚一次 —— 那个滚动条既难看，也会把
+ * 入场动画的位移吃掉。
+ */
 .emotion-wheel-card {
   position: relative;
-  overflow: hidden auto;
+  overflow: hidden;
+  overscroll-behavior: contain;
   max-height: min(52dvh, 460px);
   border-radius: 24px;
   /* 顶部多留一点，给那条 2px 的色条腾位置，不压在文字上 */
@@ -1692,37 +1821,107 @@ html[data-theme='night'] .orb-surface {
     0 34px 70px -34px rgba(58, 44, 80, 0.5),
     0 2px 10px -6px rgba(58, 44, 80, 0.24);
   backdrop-filter: blur(20px) saturate(1.12);
-  animation: emotion-wheel-card-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: emotion-wheel-card-in 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 html[data-theme='night'] .emotion-wheel-card {
-  background: linear-gradient(168deg, rgba(41, 36, 68, 0.96) 0%, rgba(26, 22, 46, 0.92) 100%);
   border-color: rgba(255, 255, 255, 0.12);
 }
 
-/* 右下角一团同色柔光 */
-.emotion-wheel-card::after {
-  content: '';
-  position: absolute;
-  right: -58px;
-  bottom: -66px;
-  width: 190px;
-  height: 190px;
-  border-radius: 999px;
-  background: radial-gradient(circle, var(--slice-color) 0%, transparent 68%);
-  opacity: 0.42;
-  pointer-events: none;
+/*
+ * 右下角一团同色柔光 —— 用 background 画，不用 ::after。
+ *
+ * 原来是一个 right:-58px / bottom:-66px 的 190px 圆形伪元素。卡片的
+ * overflow: hidden 会把它截住、看不出来，但它**照样计入 scrollHeight**：
+ * 卡片于是一个 scrollHeight 215 / clientHeight 149 的「假可滚区域」。
+ * 视觉上没影响，可只要有任何代码（或浏览器）判断"这张卡能不能滚"，
+ * 都会被这个多出来的 66px 骗到。
+ * 画在背景层里就没有盒子、没有溢出，顺便少一个合成层。
+ */
+.emotion-wheel-card {
+  background:
+    radial-gradient(
+      circle 150px at calc(100% + 40px) calc(100% + 48px),
+      color-mix(in srgb, var(--slice-color) 42%, transparent) 0%,
+      transparent 68%
+    ),
+    linear-gradient(168deg, rgba(255, 255, 255, 0.96) 0%, rgba(253, 251, 255, 0.9) 100%);
 }
 
+html[data-theme='night'] .emotion-wheel-card {
+  background:
+    radial-gradient(
+      circle 150px at calc(100% + 40px) calc(100% + 48px),
+      color-mix(in srgb, var(--slice-color) 30%, transparent) 0%,
+      transparent 68%
+    ),
+    linear-gradient(168deg, rgba(41, 36, 68, 0.96) 0%, rgba(26, 22, 46, 0.92) 100%);
+}
+
+/*
+ * 入场：从下方 12px 浮上来 + 淡入。
+ *
+ * 只在卡片第一次出现时跑。自动转动换内容时不重跑这个 —— 那一秒一次
+ * 的整块重放会像在闪，换内容的过渡交给下面 emotion-wheel-card-swap。
+ */
 @keyframes emotion-wheel-card-in {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(12px) scale(0.985);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
+}
+
+/*
+ * 网格定位要和 key 换块共存。
+ * 换了 key 只是 React 换了个节点，DOM 位置不变，grid-area 依然按原来的
+ * 第 1 / 2 / 3 个网格块排 —— 这里显式写一遍，免得以后有人把块顺序调乱了。
+ */
+.emotion-wheel-card-title {
+  grid-area: auto;
+}
+
+/*
+ * 换内容：只做一次非常轻的「呼吸」。
+ *
+ * 盘每转一格卡片就换一次内容。原来是把卡片整个 key 掉重挂，于是
+ * 每秒都播放一遍入场动画 —— 看起来在闪。现在卡片本身不重挂，
+ * 只有内部这几块按 key 换成新的内容块，各自做一次上浮 + 淡入。
+ *
+ * 坑：动画里写 transform 会让元素脱离文档流（绝对定位化 / 变成
+ * 独立的布局盒），在 grid 里就落到「隐式行」里，高度从 0 开始按
+ * 内容撑 —— 卡片于是被算高了 60 多像素，溢出裁掉最后一行。
+ * 所以这里改成 only 动 opacity 和 filter，位移交给不会被布局吃掉的
+ * clip-path 收放（视觉上是同一种"往上浮出来"）。
+ */
+@keyframes emotion-wheel-card-swap {
+  0% {
+    opacity: 0;
+    filter: blur(2px);
+    clip-path: inset(0 0 22% 0 round 4px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    clip-path: inset(0 0 0 0 round 4px);
+  }
+}
+
+.emotion-wheel-card-swap {
+  animation: emotion-wheel-card-swap 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 第二块稍晚一点，读起来是"跟着出来"而不是两块一起闪 */
+.emotion-wheel-card-swap-late {
+  animation-delay: 0.06s;
+}
+
+/* 网格行按内容自适应；grid 条目本来就会被拉伸，不会再出现"高出一截" */
+.emotion-wheel-card {
+  grid-auto-rows: min-content;
 }
 
 /* 桌面端：卡片里那句话的说明单独一行，读起来更顺 */
@@ -1787,12 +1986,6 @@ html[data-theme='night'] .emotion-wheel-card {
   border-radius: 999px;
   background: linear-gradient(90deg, var(--slice-color), var(--slice-edge));
   pointer-events: none;
-}
-
-/* 卡片内容压在右下角那团柔光之上 */
-.emotion-wheel-card > :not(.emotion-wheel-card-bar) {
-  position: relative;
-  z-index: 1;
 }
 
 /*
@@ -2013,10 +2206,22 @@ html[data-theme='night'] .emotion-wheel-card-method {
 
 /* 减少动态：转盘的旋转、缩放与卡片入场一并关掉 */
 @media (prefers-reduced-motion: reduce) {
+  .mb-breath-ripple,
+  .mb-breath-dot,
+  .mb-breath-launch::before {
+    animation: none;
+    opacity: 0;
+  }
+
   .emotion-wheel-spin,
   .emotion-wheel-counter,
   .emotion-wheel-slice {
     transition: none;
+  }
+
+  /* 换内容那块也直接到位，不做上浮 */
+  .emotion-wheel-card-swap {
+    animation: none;
   }
 
   .emotion-wheel-card {

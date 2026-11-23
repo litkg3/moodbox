@@ -178,6 +178,63 @@ test('情绪转盘：8 个扇形，点击放大并展示完整信息，可返回
   await expect(lost).toHaveAttribute('aria-checked', 'false');
 });
 
+test('情绪转盘：卡片内部不出现滚动条', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openHome(page);
+  await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
+  await expect(page.locator('.emotion-wheel-card')).toBeVisible();
+
+  /*
+   * 卡片里不允许有纵向滚动。
+   * 判断标准是 scrollHeight 与 clientHeight 相等 —— 只要相等，就没有
+   * 可滚区域，无论那一块是内容真的超了，还是装饰伪元素把它撑开的。
+   */
+  const box = await page.locator('.emotion-wheel-card').evaluate((el) => ({
+    scrollHeight: el.scrollHeight,
+    clientHeight: el.clientHeight,
+    overflowY: getComputedStyle(el).overflowY,
+  }));
+  expect(box.overflowY).toBe('hidden');
+  expect(box.scrollHeight).toBe(box.clientHeight);
+
+  // 换一格内容之后同样不能溢出
+  await page.locator('.emotion-wheel-slice', { hasText: '疲惫' }).click();
+  await page.waitForTimeout(700);
+  const after = await page.locator('.emotion-wheel-card').evaluate((el) => ({
+    scrollHeight: el.scrollHeight,
+    clientHeight: el.clientHeight,
+  }));
+  expect(after.scrollHeight).toBe(after.clientHeight);
+});
+
+test('导航栏：底色够实、文字与图标比说明性小字更深', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openHome(page);
+
+  const nav = page.locator('nav[aria-label="功能导航"] ul');
+  await expect(nav).toBeVisible();
+  // 底色是一层可读的渐变（不是完全透明）
+  const bg = await nav.evaluate((el) => getComputedStyle(el).backgroundImage);
+  expect(bg).toContain('gradient');
+
+  /*
+   * 颜色对比：导航项应该比 ink-faint（说明性小字）更深。
+   * 直接比「与页面底色的亮度差」不好算，这里退一步比较 alpha 与亮度：
+   * ink-faint 在白日下是半透明灰，导航项必须比它更不透明。
+   */
+  const item = page.locator('.mb-nav-item').first();
+  const navColor = await item.evaluate((el) => getComputedStyle(el).color);
+  const faintColor = await page.evaluate(() => {
+    const probe = document.createElement('span');
+    probe.className = 'text-ink-faint';
+    document.body.appendChild(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+  expect(navColor).not.toBe(faintColor);
+});
+
 test('情绪转盘：点空白处关闭详情，点击已选中扇形也能收起', async ({ page }) => {
   /*
    * 用宽屏（≥1280）测。
@@ -426,6 +483,8 @@ test('情绪转盘：宽屏盘居中，卡片浮在两肩不挤动盘', async ({
 
   // 自动态卡片已经在，先把盘的中心记下来
   await expect(page.locator('.emotion-wheel-card')).toBeVisible();
+  // 第二屏的入场动画会把整块从下方 48px 浮上来，等它跑完再量
+  await page.waitForTimeout(1200);
   const before = await page.locator('.emotion-wheel-board').boundingBox();
   const vw = await page.evaluate(() => window.innerWidth);
   expect(Math.abs(before!.x + before!.width / 2 - vw / 2)).toBeLessThan(3);
@@ -479,4 +538,25 @@ test('情绪转盘：点中的标签停在原位，不会被转到指针下面',
 
   // 锁定之后正上方的指针收起：它表示"停在最上面"，容易误读成标签被转上去了
   await expect(page.locator('.emotion-wheel-pointer')).not.toHaveClass(/is-on/);
+});
+
+test('呼吸页：点开始先播起势动画，再进入吸气', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await gotoHydrated(page, '/breathe');
+
+  await page.getByRole('button', { name: /点击开始/ }).click();
+  /*
+   * 起势期间：圆心写「跟着呼吸」。此时文档里还不能有「吸气」这几个字 ——
+   * 页面底部那条说明里本来就带着"呼气比吸气长"，所以范围收窄到圆环里。
+   */
+  const ring = page.locator('.mb-breath-orb').locator('..');
+  await expect(page.getByText('跟着呼吸')).toBeVisible();
+  await expect(ring.getByText('吸气', { exact: false })).toHaveCount(0);
+
+  // 起势结束（约 0.9s）进入真正的呼吸节奏
+  await expect(ring.getByText('吸气', { exact: false }).first()).toBeVisible({ timeout: 5000 });
+  await expect(page.getByText('跟着呼吸')).toHaveCount(0);
+
+  // 起势结束后才出现倒计时数字
+  await expect(ring.locator('.tabular-nums')).toBeVisible();
 });

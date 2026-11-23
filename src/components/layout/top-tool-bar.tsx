@@ -36,13 +36,13 @@ export function TopToolBar() {
         aria-label="功能导航"
         className="hidden min-w-0 flex-1 justify-center px-2 lg:flex"
       >
-        <ul className="mb-glass-soft mb-scroll-x flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-full p-1">
+        <ul className="mb-glass-nav mb-scroll-x flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-full p-1">
           {TOOL_ITEMS.map((item) => {
             const Icon = TOOL_ICONS[item.key];
             const active = item.href !== undefined && item.href === pathname;
             const className = cn(
-              'flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[11.5px] tracking-[0.05em] transition-all duration-500',
-              active ? 'mb-pill-active' : 'text-ink-faint hover:bg-white/45 hover:text-ink-soft',
+              'mb-nav-item flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[11.5px] font-medium tracking-[0.05em] transition-all duration-500',
+              active ? 'mb-pill-active' : 'hover:bg-white/55',
             );
             const inner = (
               <>

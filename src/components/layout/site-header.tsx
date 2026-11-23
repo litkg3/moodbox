@@ -65,7 +65,7 @@ export function SiteHeader() {
             <span className="font-display text-[14px] font-normal tracking-[0.26em] text-ink">
               情绪盒子
             </span>
-            <span className="mt-[5px] text-[8.5px] uppercase tracking-[0.42em] text-ink-ghost">
+            <span className="mt-[5px] text-[8.5px] uppercase tracking-[0.42em] text-ink-faint">
               MoodBox
             </span>
           </span>
@@ -80,10 +80,10 @@ export function SiteHeader() {
             href="/"
             aria-current={pathname === '/' ? 'page' : undefined}
             className={cn(
-              'flex h-8 items-center gap-1.5 rounded-full px-3 text-[12px] tracking-[0.06em] transition-all duration-500 sm:h-9',
+              'mb-nav-item flex h-8 items-center gap-1.5 rounded-full px-3 text-[12px] font-medium tracking-[0.06em] transition-all duration-500 sm:h-9',
               pathname === '/'
                 ? 'mb-pill-active'
-                : 'mb-glass-soft text-ink-faint hover:text-ink',
+                : 'mb-glass-nav hover:bg-white/60',
             )}
           >
             <Home size={14} strokeWidth={1.7} aria-hidden="true" />

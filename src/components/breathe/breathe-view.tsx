@@ -5,6 +5,9 @@ import { motion, useReducedMotion } from 'motion/react';
 import { Pause, Play, RotateCcw, Wind } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+/** 起势动画时长；与 .mb-breath-launch 的动画时长一致。 */
+const LAUNCH_MS = 900;
+
 interface BreathPhase {
   key: 'inhale' | 'hold' | 'exhale';
   label: string;
@@ -60,6 +63,13 @@ export function BreatheView() {
   const [cycles, setCycles] = useState(0);
   const [totalSeconds, setTotalSeconds] = useState(0);
   const reduceMotion = useReducedMotion();
+  /**
+   * 点「开始」之后那一下起势动画（约 0.9s）。
+   * 这段时间里圆环从静止的小球鼓到最大，再交给正常的呼吸节奏。
+   */
+  const [launching, setLaunching] = useState(false);
+  const [startPending, setStartPending] = useState(false);
+  const launchTimer = useRef(0);
 
   const phase = mode.phases[phaseIndex] ?? mode.phases[0]!;
   const phaseRef = useRef(phaseIndex);
@@ -68,12 +78,47 @@ export function BreatheView() {
   const totalRef = useRef(0);
 
   const reset = useCallback((nextMode: BreathMode) => {
+    window.clearTimeout(launchTimer.current);
+    setLaunching(false);
+    setStartPending(false);
     setRunning(false);
     setPhaseIndex(0);
     setRemaining(nextMode.phases[0]!.seconds);
     setCycles(0);
     totalRef.current = 0;
     setTotalSeconds(0);
+  }, []);
+
+  /**
+   * 按下「开始」：先起势，再真正开始计时。
+   *
+   * 为什么不让它一开始就跟着吸气涨：数字会立刻从 4 往下走，但圆环还在
+   * 从静止的小球慢慢鼓起来，两边对不上，看起来像计时错了。所以先播
+   * 一段约 0.9s 的「聚气」—— 圆环亮一下、鼓起来，再从吸气开始。
+   */
+  const start = useCallback(() => {
+    if (running || startPending) return;
+    if (reduceMotion) {
+      setRunning(true);
+      return;
+    }
+    setLaunching(true);
+    setStartPending(true);
+    launchTimer.current = window.setTimeout(() => {
+      setLaunching(false);
+      setStartPending(false);
+      setRunning(true);
+    }, LAUNCH_MS);
+  }, [running, startPending, reduceMotion]);
+
+  useEffect(() => () => window.clearTimeout(launchTimer.current), []);
+
+  const pause = useCallback(() => {
+    // 起势途中按停：连起势一起取消，不留一个半开的动画
+    window.clearTimeout(launchTimer.current);
+    setLaunching(false);
+    setStartPending(false);
+    setRunning(false);
   }, []);
 
   useEffect(() => {
@@ -111,15 +156,23 @@ export function BreatheView() {
     reset(next);
   }
 
-  const scale = !running
-    ? 0.82
-    : phase.key === 'inhale'
-      ? 1
-      : phase.key === 'hold'
+  /*
+   * 圆环半径。
+   *
+   * 起势时先冲到 1.04（比吸气顶点再大一点点，像深吸了一口气），
+   * 落回静止态之后才交给正常的吸/停/呼。
+   */
+  const scale = launching
+    ? 1.04
+    : !running
+      ? 0.82
+      : phase.key === 'inhale'
         ? 1
-        : 0.66;
+        : phase.key === 'hold'
+          ? 1
+          : 0.66;
 
-  const duration = !running ? 1.2 : phase.seconds;
+  const duration = launching ? LAUNCH_MS / 1000 : !running ? 1.2 : phase.seconds;
 
   return (
     <div>
@@ -150,7 +203,26 @@ export function BreatheView() {
         </div>
 
         {/* 圆环 */}
-        <div className="relative grid h-[268px] w-[268px] place-items-center sm:h-[320px] sm:w-[320px]">
+        <div
+          className={cn(
+            'relative grid h-[268px] w-[268px] place-items-center sm:h-[320px] sm:w-[320px]',
+            launching && 'mb-breath-launch',
+          )}
+        >
+          {/*
+            起势时从圆心荡开的一圈光。
+            key 换了才会重播；只有点拨那一下存在，动画结束就随
+            launching=false 一起消失，不会在后续呼吸里一直转。
+          */}
+          {launching ? (
+            <>
+              <span aria-hidden="true" className="mb-breath-ripple absolute inset-[6%] rounded-full" />
+              <span
+                aria-hidden="true"
+                className="mb-breath-ripple mb-breath-ripple-late absolute inset-[6%] rounded-full"
+              />
+            </>
+          ) : null}
           <span
             aria-hidden="true"
             className="absolute inset-0 rounded-full border border-[rgba(201,182,232,0.5)]"
@@ -182,7 +254,29 @@ export function BreatheView() {
             现在换成一句「点击开始」，圆环本身也能点 —— 不用再去找下面的按钮。
           */}
           <div className="relative z-10 flex flex-col items-center">
-            {running ? (
+            {launching ? (
+              /*
+               起势的一瞬不给数字：这时候还在"把气聚起来"，
+               给个倒计时反而会让人抢拍子。只留一个字和一条呼吸线。
+              */
+              <motion.div
+                initial={{ opacity: 0, scale: 0.94 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                className="flex flex-col items-center"
+              >
+                <span className="font-display text-[17px] tracking-[0.3em] text-ink">跟着呼吸</span>
+                <span className="mt-2.5 flex items-center gap-1" aria-hidden="true">
+                  {[0, 1, 2].map((index) => (
+                    <span
+                      key={index}
+                      className="mb-breath-dot h-1.5 w-1.5 rounded-full bg-ink-faint"
+                      style={{ animationDelay: `${index * 0.16}s` }}
+                    />
+                  ))}
+                </span>
+              </motion.div>
+            ) : running ? (
               <>
                 <span className="mb-breath-label text-[10.5px] uppercase tracking-[0.4em] text-ink-ghost">
                   {phase.label}
@@ -200,7 +294,7 @@ export function BreatheView() {
             ) : (
               <button
                 type="button"
-                onClick={() => setRunning(true)}
+                onClick={start}
                 className="group flex flex-col items-center rounded-full px-4 py-2"
               >
                 <span className="font-display text-[15px] tracking-[0.16em] text-ink transition-colors group-hover:text-lavender-deep">
@@ -218,7 +312,7 @@ export function BreatheView() {
         <div className="mt-9 flex items-center gap-3">
           <button
             type="button"
-            onClick={() => setRunning((prev) => !prev)}
+            onClick={() => (running || startPending ? pause() : start())}
             className="mb-btn-primary inline-flex h-11 items-center gap-2 rounded-full px-6 text-[13px] tracking-[0.05em] transition-all duration-500 active:scale-[0.98]"
           >
             {running ? (

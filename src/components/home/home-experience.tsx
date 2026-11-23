@@ -177,11 +177,6 @@ export function HomeExperience() {
       </div>
 
       {/*
-        情绪转盘：往下滚就是一整屏。
-        第一屏保持 100dvh，第二屏也做成 100dvh 并垂直居中 —— 这样
-        PC 端滚到底时转盘正好落在屏幕正中，而不是吊在视口下半截。
-      */}
-      {/*
          * 高度锁死 100dvh，不再是 min-height。
          * 用 min-h 时只要内容比一屏高一点，整页高度就不是「2 × 一屏」，
          * 整屏翻页会算错、滚到底还会差几十像素 —— 那正是「卡在两屏中间」的来源。
@@ -190,13 +185,38 @@ export function HomeExperience() {
          * 宽屏单独放宽 max-w：卡片浮在转盘两肩，两块都要装得下。
          */}
       <div className="emotion-screen relative z-10 mx-auto flex h-[100dvh] w-full max-w-[1200px] flex-col items-center justify-center px-5 py-16 sm:px-8 xl:max-w-[1560px]">
-        <p className="mb-1.5 text-center text-[10.5px] tracking-[0.28em] text-ink-faint/80 sm:text-[11.5px]">
-          情绪的背后是需求
-        </p>
-        <h2 className="mb-4 text-center font-display text-[22px] font-light tracking-[0.12em] text-ink/85 sm:mb-6 sm:text-[26px]">
-          情绪转盘
-        </h2>
-        <EmotionWheel className="w-full" />
+        {/*
+          第二屏的入场：整屏翻页上来（或被翻页带走）时，转盘浮上来、淡入。
+          whileInView + once 让它只在第一次露脸时演一遍；靠 IntersectionObserver
+          触发，滚到一半松开也不会半透明地卡在那里（翻页本身会被吸到整屏）。
+        */}
+        <motion.div
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 48, scale: 0.965 }}
+          whileInView={{ opacity: 1, y: 0, scale: 1 }}
+          viewport={{ once: true, amount: 0.25 }}
+          transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
+          className="flex w-full flex-col items-center"
+        >
+          <motion.p
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.4 }}
+            transition={{ duration: 0.7, delay: 0.12, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
+            className="mb-1.5 text-center text-[10.5px] tracking-[0.28em] text-ink-faint/80 sm:text-[11.5px]"
+          >
+            情绪的背后是需求
+          </motion.p>
+          <motion.h2
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 14 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.4 }}
+            transition={{ duration: 0.75, delay: 0.2, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] }}
+            className="mb-4 text-center font-display text-[22px] font-light tracking-[0.12em] text-ink/85 sm:mb-6 sm:text-[26px]"
+          >
+            情绪转盘
+          </motion.h2>
+          <EmotionWheel className="w-full" />
+        </motion.div>
       </div>
 
       <p className="sr-only">{SLOGAN}</p>

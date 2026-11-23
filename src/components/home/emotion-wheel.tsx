@@ -537,14 +537,14 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
         </div>
 
         {showCard && (
-          <div
-            className="emotion-wheel-card-slot"
-            data-visible="true"
-            data-locked={isLocked ? 'true' : 'false'}
-            data-side={cardSide}
-          >
+          <div className="emotion-wheel-card-slot" data-visible="true" data-locked={isLocked ? 'true' : 'false'} data-side={cardSide}>
+            {/*
+              卡片本体不再按情绪 key 重挂。
+              原来 key={focused.id}，盘每转一格就重挂一张卡，于是每秒都重放
+              一遍入场动画，看起来在闪。现在外壳一直在，只有内部几块按 key
+              换成新内容、各自做一次很轻的上浮 —— 换内容有过渡，但不像重开。
+            */}
             <div
-              key={focused.id}
               ref={cardRef}
               /*
                * 用 region + aria-live 而不是 dialog。
@@ -578,17 +578,17 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
                 现在：左边一个情绪词打头，右边接着一句话把它说清楚。
                 不再有眉标、不再有第二个大字。
               */}
-              <h3 className="emotion-wheel-card-title">
+              <h3 key={`t-${focused.id}`} className="emotion-wheel-card-title emotion-wheel-card-swap">
                 <span className="emotion-wheel-card-dot" aria-hidden="true" />
                 {focused.label}
               </h3>
 
-              <p className="emotion-wheel-card-lead">
+              <p key={`l-${focused.id}`} className="emotion-wheel-card-lead emotion-wheel-card-swap">
                 是为了获得<b>{focused.need}</b>
                 <span className="emotion-wheel-card-lead-text">{focused.needs}</span>
               </p>
 
-              <div className="emotion-wheel-card-method">
+              <div key={`m-${focused.id}`} className="emotion-wheel-card-method emotion-wheel-card-swap emotion-wheel-card-swap-late">
                 <span className="emotion-wheel-card-key">可以这样</span>
                 <p className="emotion-wheel-card-text">{focused.method}</p>
               </div>

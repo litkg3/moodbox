@@ -107,9 +107,9 @@ export function AudioPlayer({ compact = false }: { compact?: boolean }) {
               : '打开背景音乐'
         }
         className={cn(
-          'mb-glass-soft group flex h-10 items-center gap-2 rounded-full pl-3 pr-3.5 transition-all duration-500 sm:h-11',
+          'mb-glass-nav mb-nav-item group flex h-10 items-center gap-2 rounded-full pl-3 pr-3.5 transition-all duration-500 sm:h-11',
           'hover:bg-white/65',
-          isPlaying ? 'text-ink' : 'text-ink-faint',
+          isPlaying && 'text-ink',
           /*
            * 窄屏「更多」面板里的那份：按钮缩成图标 + 文字。
            * 播放中换成实底 + 描边的激活态，标签也变成「音乐中」，
