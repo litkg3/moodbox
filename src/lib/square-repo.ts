@@ -63,8 +63,19 @@ export function sortPostsForView(posts: SquarePost[], mode: SquareSortMode): Squ
   return next;
 }
 
+/**
+ * 回复正序：先回复的在上、后回复的在下。
+ *
+ * 同一条时间戳（批量导入的示例数据）时保持原数组顺序，不来回跳。
+ */
 export function sortReplies(replies: SquareReply[]): SquareReply[] {
-  return [...replies].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return replies
+    .map((reply, index) => ({ reply, index }))
+    .sort((a, b) => {
+      const diff = String(a.reply.createdAt).localeCompare(String(b.reply.createdAt));
+      return diff !== 0 ? diff : a.index - b.index;
+    })
+    .map((item) => item.reply);
 }
 
 /**
@@ -240,6 +251,11 @@ export async function addReply(postId: string, draft: ReplyDraft): Promise<Squar
       visitorId: draft.visitorId,
       region: draft.region ?? undefined,
     };
+    /*
+     * 回复一律追加到末尾，不插到前面。
+     * 读出时前端再按 createdAt 正序排一遍（见 square-view 的 orderedReplies），
+     * 两处都保持「先回复的在前」，所以这里追加的顺序就是对话的顺序。
+     */
     const next: SquarePost = { ...existing, replies: [...existing.replies, reply] };
     await db.put('posts', next);
     // 记一笔账：删掉这条回复也退不回来

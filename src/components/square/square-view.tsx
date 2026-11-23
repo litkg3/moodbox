@@ -44,8 +44,8 @@ import { cn } from '@/lib/utils';
 /** 一屏先给十条；再多就等用户自己点「查看更多」，别一次把几百条塞进 DOM。 */
 const PAGE_SIZE = 10;
 
-/** 评论默认只露最新两条，点「回复」再展开全部。 */
-const REPLY_PEEK = 2;
+/** 评论默认只露最早的三条，点「回复」再展开全部。 */
+const REPLY_PEEK = 3;
 
 /**
  * 拥抱的冷却时长。
@@ -265,7 +265,11 @@ export function SquareView() {
         nickname: author,
         alias: me.alias,
         visitorId: me.key,
-        region: shareRegion ? (me.region ?? null) : null,
+        /*
+         * 归属地一定要查到了才算数：没查到（接口超时、被拦、返回空）时
+         * region 就是 null，帖子上不会出现那枚城市小标签，也不写「未知」。
+         */
+        region: shareRegion && me.region ? me.region : null,
         needsSupport: scanForCrisis(content).flagged,
       });
       setComposeOpen(false);
@@ -943,19 +947,35 @@ function PostCard({
   const hugged = Boolean(post.hugged);
 
   /**
-   * 评论默认只露最新两条。
+   * 评论按时间正序：先回复的在上面，后回复的在下面。
    *
-   * 一条热帖可能挂着几十条回复，全铺开会把下面的帖子挤到屏幕外，
-   * 滑半天也翻不到下一条。
+   * 早先取的是 `slice(-2)`（最后两条），配着倒序就变成了「最新在最上」。
+   * 现在统一成对话的顺序 —— 从上往下读就是事情发生的先后。
+   */
+  const orderedReplies = useMemo(
+    () =>
+      visibleReplies
+        .map((reply, index) => ({ reply, index }))
+        .sort((a, b) => {
+          const diff = String(a.reply.createdAt).localeCompare(String(b.reply.createdAt));
+          return diff !== 0 ? diff : a.index - b.index;
+        })
+        .map((item) => item.reply),
+    [visibleReplies],
+  );
+
+  /**
+   * 折叠时只露最早的三条（`slice(0)` 而不是 `slice(-3)`），
+   * 展开后才把后面的接上。一条热帖可能挂着几十条回复，
+   * 全铺开会把下面的帖子挤到屏幕外。
    *
    * 展开状态不单独存一份，直接跟着输入框走：点「回复」一起展开，
-   * 再点一次收起。之前另开了 `repliesExpanded` 且从不置回 false，
-   * 于是第二次点「回复」把框收起时，评论仍然全是摊开的。
+   * 再点一次收起。
    */
   const shownReplies =
-    !replyOpen && visibleReplies.length > REPLY_PEEK
-      ? visibleReplies.slice(-REPLY_PEEK)
-      : visibleReplies;
+    !replyOpen && orderedReplies.length > REPLY_PEEK
+      ? orderedReplies.slice(0, REPLY_PEEK)
+      : orderedReplies;
 
   // 边打字边检查：命中就提示并禁用发送，不用等按下按钮才被拦
   const replyScan = useMemo(() => scanSensitive(replyText), [replyText]);

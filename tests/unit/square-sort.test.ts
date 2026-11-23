@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sortPostsForView } from '@/lib/square-repo';
+import { sortPostsForView, sortReplies } from '@/lib/square-repo';
 import type { SquarePost } from '@/types';
 
 function post(id: string, createdAt: string, hugs: number): SquarePost {
@@ -43,5 +43,36 @@ describe('广场排序', () => {
     const original = posts.map((item) => item.id);
     sortPostsForView(posts, 'hug');
     expect(posts.map((item) => item.id)).toEqual(original);
+  });
+});
+
+describe('回复排序', () => {
+  const reply = (id: string, createdAt: string) => ({
+    id,
+    nickname: '匿名',
+    content: `第 ${id} 条`,
+    createdAt,
+  });
+
+  it('先回复的在上、后回复的在下', () => {
+    const list = [
+      reply('late', '2026-11-19T10:00:00.000Z'),
+      reply('early', '2026-11-19T08:00:00.000Z'),
+      reply('mid', '2026-11-19T09:00:00.000Z'),
+    ];
+    expect(sortReplies(list).map((item) => item.id)).toEqual(['early', 'mid', 'late']);
+  });
+
+  it('时间完全相同时保持原顺序，不会来回跳', () => {
+    const same = '2026-11-19T09:00:00.000Z';
+    const list = [reply('a', same), reply('b', same), reply('c', same)];
+    expect(sortReplies(list).map((item) => item.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('不改动传进来的数组', () => {
+    const list = [reply('b', '2026-11-19T10:00:00.000Z'), reply('a', '2026-11-19T08:00:00.000Z')];
+    const original = list.map((item) => item.id);
+    sortReplies(list);
+    expect(list.map((item) => item.id)).toEqual(original);
   });
 });

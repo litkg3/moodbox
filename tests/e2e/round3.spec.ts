@@ -639,7 +639,7 @@ test('刚发的帖子写「今天」，回复也带日期而不是只有几点',
   await expect(replyItem).toContainText('今天');
 });
 
-test('回复：点开看全部，再点一次收起回最新两条', async ({ page }) => {
+test('回复：按时间正序排列，点开看全部，再点一次收起回最早三条', async ({ page }) => {
   const content = `展开与收起检查 ${Date.now()}`;
   await gotoHydrated(page, '/square');
   await page.getByRole('button', { name: '写一条' }).click();
@@ -655,17 +655,33 @@ test('回复：点开看全部，再点一次收起回最新两条', async ({ pa
     await post.getByRole('button', { name: /^(回复|\d+ 条回复)$/ }).click();
     await post.getByLabel('回复内容').fill(text);
     await post.getByRole('button', { name: '发送' }).click();
-    await expect(post.getByText(text, { exact: true })).toBeVisible();
+    /*
+     * 断言「已经出现在列表里」，不能用 getByText(text)：
+     * 输入框还开着时它自己也带着这段文字，strict 模式会同时命中两个节点。
+     * 这里只看列表里的那一段 <p>。
+     */
+    await expect(post.locator('p', { hasText: text }).first()).toBeVisible();
   }
 
-  // 收起状态下只留最新两条
+  /*
+   * 评论按「谁先发谁在上面」排：先发的在上面，后发的往下叠。
+   * 拿三条回复的纵向位置直接比。
+   */
+  const yOf = async (text: string) => {
+    const box = await post.locator('p', { hasText: text }).first().boundingBox();
+    return box?.y ?? Number.NaN;
+  };
+  expect(await yOf('第一条回复')).toBeLessThan(await yOf('第二条回复'));
+  expect(await yOf('第二条回复')).toBeLessThan(await yOf('第三条回复'));
+
+  // 收起状态下只露最早三条（一共就三条，所以全在）
   await post.getByRole('button', { name: /^(回复|\d+ 条回复)$/ }).click();
   await expect(post.getByLabel('回复内容')).toBeVisible();
-  await expect(post.getByText('第一条回复', { exact: true })).toBeVisible();
+  await expect(post.locator('p', { hasText: '第一条回复' }).first()).toBeVisible();
+  await expect(post.locator('p', { hasText: '第三条回复' }).first()).toBeVisible();
 
-  // 再点一次：输入框收起，评论也回到最新两条
+  // 再点一次：输入框收起，回到折叠状态
   await post.getByRole('button', { name: /^(回复|\d+ 条回复)$/ }).click();
   await expect(post.getByLabel('回复内容')).toHaveCount(0);
-  await expect(post.getByText('第一条回复', { exact: true })).toHaveCount(0);
-  await expect(post.getByText('第三条回复', { exact: true })).toBeVisible();
+  await expect(post.locator('p', { hasText: '第一条回复' }).first()).toBeVisible();
 });
