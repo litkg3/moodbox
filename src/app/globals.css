@@ -1653,6 +1653,21 @@ html[data-theme='night'] .orb-surface {
 }
 
 /*
+ * 被点中的那一刻，盘要"被按停"而不是"原地急刹"。
+ *
+ * 冻结值取的是当前实际角度，所以本来就不会再走格 —— 但读写之间隔着
+ * 一帧，过渡还在跑，那几度会按 0.82s 慢慢耗尽，看着像盘还在飘。
+ * 把时长收到 0.22s，几度在眨眼间落定，手感是"咔"一下停住。
+ *
+ * 只在锁定态生效：收起卡片时要交还自动转动，那时需要回到 0.82s 的
+ * 正常节奏，不能也变快 —— 否则盘会像被抽了一下。
+ */
+.emotion-wheel.has-active .emotion-wheel-spin {
+  transition-duration: 0.22s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/*
  * 反旋层：抵消整盘转动，让扇形里的文字永远水平。
  * 与外层用同样的时长与缓动，两者同步抵消，文字看不出在转。
  * fill-box 让旋转中心落在文字自己的包围盒中心。
@@ -1858,47 +1873,31 @@ html[data-theme='night'] .emotion-wheel-slice-top .emotion-wheel-slice-shape {
 }
 
 /*
- * 广场的帖子卡片：夜间也要更实一层。
+ * 广场的帖子卡片：夜间只调"实不实"，不改"是什么颜色"。
  *
- * 帖子卡片是全站唯一一处「大面积白底 + 大段正文」的浅色块，写在组件里是
- * `bg-white/66`。白天这样刚好：底下的雾色和它混在一起，看着是纸。
- * 夜里就不行了 —— 透下去的星空是一整片亮紫，正文压在上面会发灰、发糊，
- * 长段落读起来很费劲。
+ * 这里踩过一次坑，写清楚免得再犯：`bg-white/66` 里的 white **不是**白色。
+ * 夜间主题把 `--color-white` 重映射成了深紫灰（#322d4e），所以这行在夜里
+ * 表达的是"比底色亮一点的深紫层"，这是全站 60 多处浅色底共用的写法。
  *
- * 这里不改组件里的 class（那是全站共用的白底写法，别处不该跟着变），
- * 单开一个 .mb-post-card，只在广场的帖子卡片上挂。夜间抬到 0.8 上下：
- * 一眼还是浅色的纸，但底下的星点不再透字。
+ * 上一轮想让卡片"更实"，直接写了一个 rgba(255,255,255,0.8) —— 于是夜里
+ * 广场冒出一块块真·白卡片，在一片深紫里像贴了纸。再把字改成深色去救，
+ * 等于把一张白天卡片搬进了夜色，怎么调都不搭。
+ *
+ * 正确做法：颜色继续交给 --color-white（跟着主题走），只把不透明度抬上去。
+ * 0.66 → 0.88，透上来的星点基本看不见了，但它仍然是"夜里的一层纸"。
  */
 html[data-theme='night'] .mb-post-card {
-  background-color: rgba(255, 255, 255, 0.8);
-  border-color: rgba(255, 255, 255, 0.86);
+  background-color: color-mix(in srgb, var(--color-white) 88%, transparent);
+  border-color: color-mix(in srgb, #ffffff 14%, transparent);
 }
 
 html[data-theme='night'] .mb-post-card:hover {
-  background-color: rgba(255, 255, 255, 0.86);
+  background-color: color-mix(in srgb, var(--color-white) 94%, transparent);
 }
 
-/*
- * 卡片变实之后，里面的字得跟着回到深色。
- *
- * 全站的文字色走 --color-ink* 这一套令牌，夜间是浅紫白（给深底用的）。
- * 帖子卡片是夜里的唯一一块浅色底，浅底 + 浅字就是一片糊 —— 截图里正文
- * 和昵称几乎看不见。所以卡片内单独换回浅色主题的墨色：
- * 正文 --color-ink-soft、昵称/时间 --color-ink-faint/ghost 都压回深一档。
- *
- * 只在这个类的作用域里改令牌，不碰全局 —— 卡片外面的页面仍然是夜间的浅字。
- */
-html[data-theme='night'] .mb-post-card {
-  --color-ink: #332c3c;
-  --color-ink-soft: #4c4457;
-  --color-ink-faint: #6b6377;
-  --color-ink-ghost: #7d7589;
-  color: var(--color-ink-soft);
-}
-
-/* 帖子之间的骨架屏也跟着实一点，免得加载时是一排会闪的洞 */
+/* 骨架屏同理：跟着 --color-white 走，别写死白色 */
 html[data-theme='night'] .mb-post-skeleton {
-  background-color: rgba(255, 255, 255, 0.6);
+  background-color: color-mix(in srgb, var(--color-white) 62%, transparent);
 }
 
 /* ---------------- 详情卡 ---------------- */
@@ -2292,8 +2291,32 @@ html[data-theme='night'] .emotion-wheel-card {
   background: color-mix(in srgb, var(--slice-color) 26%, transparent);
 }
 
+/*
+ * 夜间那块「可以这样」的底。
+ *
+ * 原来写的是 `var(--slice-color) 14%` —— 但 slice-color 是**浅色**（雾面糖色，
+ * 给白天浅底用的）。把它 14% 叠在深紫卡片上，得到的是一块比卡片本身更亮的
+ * 灰紫块：边缘生硬、像贴了张半透明胶带，里面的浅色正文压上去还发灰。
+ *
+ * 现在反过来做：不从"给深底加浅色"出发，而是把深底**压深一点**，
+ * 只借情绪色的一点点色相 —— 同一族的深紫打底，再叠 7% 情绪色。
+ *
+ * 也不要给它加 border。宽屏下这一块是卡片的右栏，本来就有一条
+ * border-left 分栏线；再加一圈四边框，会出现"框里套线"的双层边界，
+ * 夜里尤其明显（截图里那块方方正正的亮框就是这么来的）。
+ * 右栏靠底色深浅区分就够了，不需要画框。
+ */
 html[data-theme='night'] .emotion-wheel-card-method {
-  background: color-mix(in srgb, var(--slice-color) 14%, transparent);
+  background: color-mix(in srgb, var(--slice-color) 7%, rgba(24, 20, 40, 0.8));
+}
+
+/* 深底上正文要提亮一档，别用白天那套 ink-soft */
+html[data-theme='night'] .emotion-wheel-card-method .emotion-wheel-card-text {
+  color: rgba(238, 232, 250, 0.9);
+}
+
+html[data-theme='night'] .emotion-wheel-card-method .emotion-wheel-card-key {
+  color: color-mix(in srgb, var(--slice-color) 55%, rgba(238, 232, 250, 0.5));
 }
 
 .emotion-wheel-card-close {
@@ -2446,6 +2469,18 @@ html[data-theme='night'] .emotion-wheel-card-method {
     border-radius: 0;
     background: transparent;
     border-left: 1px solid color-mix(in srgb, var(--slice-edge) 26%, transparent);
+  }
+
+  /*
+   * 宽屏下这块是卡片右栏，夜里保持透明，只用一条极淡的分栏线分隔。
+   *
+   * 试过给它铺一层深色底：因为卡片本身是 168° 的渐变，右栏铺纯色之后
+   * 必然比某一边更亮或更暗，于是总能看到一个方方正正的色块 —— 那正是
+   * "右边看着不自然"的来源。渐变面前，最好的分隔是留白 + 一条线。
+   */
+  html[data-theme='night'] .emotion-wheel-card-method {
+    background: transparent;
+    border-left-color: color-mix(in srgb, var(--slice-color) 20%, transparent);
   }
 
   .emotion-wheel-card-close {

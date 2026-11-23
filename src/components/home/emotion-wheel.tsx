@@ -108,6 +108,11 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
    * 自动转动走到第几步（每步 45°）。
    * 起始步数是随机的：每次进页面，指针第一次指着的扇形都不一样，
    * 不然永远是同一个情绪打头，看着像写死的。
+   *
+   * 这里**允许是小数**：收起卡片时要把盘从"当前实际角度"接回自动步进，
+   * 只有小数步长才能让两者严丝合缝对上（见 close 里的注释）。整数部位
+   * 表示"第几格"，小数部分表示"偏了这一格多少"。读格子时一律先
+   * Math.round，别让 3.7 去索引数组。
    */
   const [step, setStep] = useState(0);
   /** 鼠标悬停暂停时停在哪一格；为空表示没有悬停。 */
@@ -138,6 +143,24 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
   const titleId = useId();
   const stageRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  /*
+   * 盘面那层 <g> 的 DOM 引用。
+   *
+   * 点击时要读它的**实际**角度（见 readLiveSpin），不能只看 React 里的
+   * 目标值 —— 两者在过渡期间差着一整格，差的就是那 45° 的"点完还自己转"。
+   */
+  const spinRef = useRef<SVGGElement>(null);
+  /** 盘（正方形那块）的引用，用来判断"点到盘外了没有"。 */
+  const boardRef = useRef<HTMLDivElement>(null);
+  /**
+   * 盘面目标角度的最新值。
+   *
+   * selectSlice / close 都是 useCallback，依赖数组里没有 spinGroup ——
+   * 它们闭包里拿到的是**创建时**那一刻的 spinGroup。用旧值去归一化
+   * 实际角度，圈数会算错一整圈，盘就会朝着反方向甩 360°。
+   * 用 ref 存最新值，回调里读它，永远是对的。
+   */
+  const spinTargetRef = useRef(0);
   /** 锁定的那一格也用 ref 存一份，供 window 级事件读取最新值。 */
   const lockedRef = useRef<string | null>(null);
   lockedRef.current = lockedId;
@@ -208,7 +231,11 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
     if (!autoActive || !inView) return;
     const timer = window.setInterval(() => {
       if (!autoRef.current) return;
-      setStep((current) => current + 1);
+      /*
+       * floor + 1：step 可能是小数（收起卡片时按实际角度对齐过），
+       * 直接 +1 会让盘长期停在两格之间，指针指着扇形边界。先归到下一整格。
+       */
+      setStep((current) => Math.floor(current) + 1);
     }, STEP_MS);
     return () => window.clearInterval(timer);
   }, [autoActive, inView]);
@@ -288,6 +315,27 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
    */
   const baseSpin = -SLICE_DEG / 2 - step * SLICE_DEG;
 
+  /**
+   * 盘此刻**实际**停在多少度。
+   *
+   * 为什么需要这个：CSS 过渡要 0.82s，而 React 里的 baseSpin 早就跳到
+   * 终点了。过渡途中读 baseSpin，读到的是"它要去哪"，不是"它现在在哪"。
+   * 点击时若把"要去哪"冻起来，盘会自己把剩下那半格走完 —— 实测点中的
+   * 那一格在点击后还会转 45°，看起来就是"点完它自己跑到指针下面去了"。
+   *
+   * 所以从计算样式里把当前矩阵解出来，再归一到离 spinGroup 最近的等价角
+   * （矩阵只能给出 -180~180，直接拿去用会让盘绕着反方向转一整圈）。
+   */
+  const readLiveSpin = () => {
+    const el = spinRef.current;
+    const target = spinTargetRef.current;
+    if (!el) return target;
+    const matrix = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+    const raw = (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI;
+    const turns = Math.round((target - raw) / 360);
+    return raw + turns * 360;
+  };
+
   /** 锁定的那一格（下标）；没锁定就是 null。 */
   const lockIndex = lockedId ? Math.max(0, EMOTION_SLICES.findIndex((slice) => slice.id === lockedId)) : null;
 
@@ -301,6 +349,8 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
    * 这样「鼠标在盘上挪」和「盘怎么转」彻底解耦，点标签之后也不会乱动。
    */
   const spinGroup = frozenSpin !== null ? frozenSpin : ready ? baseSpin : initialSpin;
+  // 同步给 ref，供事件回调（闭包）读最新目标角度
+  spinTargetRef.current = spinGroup;
 
   /*
    * 盘还「在路上」。
@@ -333,8 +383,8 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
    * 盘是从上一步刚转过来的，两者可能差一格。取 mod(step) 会让高亮和
    * 卡片侧判断都偏掉一格，看起来就是"点完之后指针自己跳到别的格上去了"。
    */
-  const hoverFocus = hovering ? (settled ? hoverIndex : mod(step)) : null;
-  const focusIndex = lockIndex ?? hoverFocus ?? mod(step);
+  const hoverFocus = hovering ? (settled ? hoverIndex : mod(Math.round(step))) : null;
+  const focusIndex = lockIndex ?? hoverFocus ?? mod(Math.round(step));
   /** 正对指针的那一格（用来打 .emotion-wheel-slice-top）。 */
   const pointerIndex = focusIndex;
   // 显式收窄类型：EMOTION_SLICES 是 readonly 数组，索引访问会被推成可能为空
@@ -356,6 +406,20 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
 
 
 
+  /**
+   * 把盘从"当前实际角度"接回自动步进，一次不出戏。
+   *
+   * step 允许小数正是为了这一步：解出使 baseSpin 恰好等于 live 的 step，
+   * 于是 frozenSpin 清掉的那一帧，spinGroup 前后两个值完全相等 ——
+   * 盘不会为了"归位"突然甩一下。之后的自动步进在它基础上继续每步 45°。
+   */
+  const handBackToAuto = (live: number) => {
+    // baseSpin = -SLICE_DEG / 2 - step * SLICE_DEG，反解出与 live 对齐的 step
+    setStep((-SLICE_DEG / 2 - live) / SLICE_DEG);
+    setFrozenSpin(null);
+    setAutoOn(true);
+  };
+
   const selectSlice = useCallback(
     (slice: EmotionSlice, index: number | null) => {
       if (lockedId === slice.id) {
@@ -365,22 +429,25 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
          * 注意这里是 cardMode='off' 而不是 'follow' —— 自动态下卡片是常驻的，
          * 回到 follow 等于「刚收起又冒出来」，用户会以为没点中。
          */
+        handBackToAuto(readLiveSpin());
         setLockedId(null);
         setHoverIndex(null);
-        setFrozenSpin(null);
-        setAutoOn(true);
         setCardMode('off');
         return;
       }
       /*
-       * 关键：点下去之后盘不再重算角度，就停在这一刻的位置。
+       * 点下去那一刻盘停在哪，就冻在哪 —— 注意取的是**实际角度**。
        *
-       * 之前的写法把 hoverIndex 清成 null，盘于是一路转回「自动步进」
-       * 算出来的那个角度 —— 表现出来就是「点一下，被点的标签自己跑到
-       * 指向上方去了」。现在先把当前盘面角度冻结进 frozenSpin，
-       * hoverIndex 清掉（鼠标可能马上离开），锁定的内容照样停在原处。
+       * 取 spinGroup（React 里的目标值）会出这个岔子：盘正在从 A 转向 B
+       * 的途中被点，frozenSpin 记的是 B，于是盘点完还得自己把剩下那半格
+       * 走完。用户视角就是"我点中这一格，它却自己转到了指针下面"，
+       * 幅度正好是 45° × 进度。
+       *
+       * 读实际角度则相反：冻结值 = 此刻所见，盘当场停住，一格都不多走。
+       * 再加上 .is-locked 把过渡时长收到 0.22s，观感是"被指尖按停"，
+       * 而不是硬生生卡断。
        */
-      setFrozenSpin(spinGroup);
+      setFrozenSpin(readLiveSpin());
       setHoverIndex(null);
       autoRef.current = false;
       setLockedId(slice.id);
@@ -391,23 +458,36 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
   );
 
   const close = useCallback(() => {
+    handBackToAuto(readLiveSpin());
     setLockedId(null);
     setHoverIndex(null);
-    setFrozenSpin(null);
-    setAutoOn(true);
     // 收起之后不再让卡片跟着指针冒出来，用户是主动想关掉它
     setCardMode('off');
   }, []);
 
   /*
-   * 点击转盘外的空白处关闭。
-   * 只判断是否落在整个转盘舞台上，转盘内部空白（圆环中间）不会误关。
+   * 点击「转盘以外」的任何地方关闭。
+   *
+   * 两个例外必须放行，否则会出现"一点就没了"的错觉：
+   *   1. 转盘舞台内部 —— 包括圆环中间的洞，用户在那里点一下不该算退出；
+   *   2. 详情卡片内部 —— 卡片是 stage 的**兄弟节点**，不在 stage 里，
+   *      只判断 stage 会让"点卡片里的文字、点返回按钮"变成先关卡片。
+   *      真凶是 pointerdown 比 click 早：手指按下去卡就收了，
+   *      返回按钮的 click 自然落空。
    */
   useEffect(() => {
     if (!lockedId) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
-      if (stageRef.current && stageRef.current.contains(target)) return;
+      /*
+       * 判据是「盘」而不是「舞台」。
+       *
+       * .emotion-wheel-stage 是 flex 居中容器，宽屏下它铺满整行（1375px），
+       * 盘才 558px —— 用 stage 判断等于把左右两大片空白也当成了转盘，
+       * 用户点那里明明在"别的区域"，卡片却赖着不走。
+       */
+      if (boardRef.current && boardRef.current.contains(target)) return;
+      if (cardRef.current && cardRef.current.contains(target)) return;
       close();
     };
     document.addEventListener('pointerdown', onPointerDown);
@@ -437,7 +517,7 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
       </h2>
 
       <div ref={stageRef} className="emotion-wheel-stage">
-        <div className="emotion-wheel-board">
+        <div ref={boardRef} className="emotion-wheel-board">
           <svg
             viewBox={`0 0 ${SIZE} ${SIZE}`}
             role="radiogroup"
@@ -445,7 +525,7 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
             className="emotion-wheel-svg"
           >
             {/* 整盘旋转层：扇形与文字都在里面 */}
-            <g className="emotion-wheel-spin" style={{ transform: `rotate(${spinGroup}deg)` }}>
+            <g ref={spinRef} className="emotion-wheel-spin" style={{ transform: `rotate(${spinGroup}deg)` }}>
               {EMOTION_SLICES.map((slice, index) => {
                 const startDeg = START_DEG + index * SLICE_DEG;
                 const endDeg = startDeg + SLICE_DEG;

@@ -3,116 +3,163 @@
 import { useEffect } from 'react';
 
 /**
- * 首页整屏吸附。
+ * 首页整屏翻页：跟手拖拽 + 过半吸附。
  *
- * 需求是「一滑就整屏换页，不能卡在两屏中间」。纯 CSS 的
- * `scroll-snap-type: y mandatory` 在鼠标滚轮上其实很不可靠：滚轮的每一下
- * 被浏览器拆成若干次小滚动，强制吸附会在中途反复抢夺位置，滚两下还在原地
- * 抖；触控板上又常常因为惯性滚动而直接跳过一整屏。
+ * 之前是「滚轮一累计 12px 就整屏 scrollTo 过去」—— 页面完全不跟手，滚轮
+ * 一动，画面直接顿到下一屏，像被人拽了一把。用户要的是苹果官网那种：
+ * 滚多少，页就走多少，松手时如果过了半屏，就顺着这股劲儿吸到下一页。
  *
- * 所以这里自己接管：
+ * 所以这里不再"翻页"，改成**驱动滚动位置**：
  *
- * 1. 用户滚完一轮（wheel 停下 140ms / 手指离开 220ms），按总位移判断方向；
- * 2. 位移超过阈值（滚轮 12px、触摸 40px）才翻页，避免手抖也跳一屏；
- * 3. 翻到相邻那一屏，用 `scrollTo({ behavior: 'smooth' })` 走完，
- *    滚动期间（650ms）忽略新的翻页请求，防止连点飞出三屏；
- * 4. 键盘 PageUp / PageDown / Home / End / 空格也走同一套。
+ * 1. wheel 里只做一件事：把位移累加进 target（乘以一点增益，让滚轮一格
+ *    大约走三分之一屏，两格就能过半）；
+ * 2. 每帧用 rAF 让 current 追 target（指数逼近），页面于是连续地滑，
+ *    不是跳；追到 0.4px 以内就贴住，免得无限拖尾；
+ * 3. 停手 120ms 后吸附：以「当前所在屏」为基准，越过半屏就去下一屏，
+ *    否则回本屏。吸附同样走 rAF，所以是"顺过去"，不是"弹过去"。
  *
- * 只在「首页且窗口够高」时启用：矮屏（手机横屏、分屏）里一屏装不下内容，
- * 强吸会把用户锁死在第一屏看不到转盘。`enabled` 由调用方按断点决定。
+ * 为什么不用 CSS `scroll-snap-type: y mandatory`：Chrome 对鼠标滚轮的
+ * snap 是"滚一下、结束后直接跳"，全程没有跟手感；而且我们这两屏是
+ * 100dvh 硬切，snap 一旦算错就卡在半屏。自己驱动位置，行为完全可控，
+ * 也能保证 scrollY 始终是真实值 —— fixed 导航、IntersectionObserver、
+ * 无障碍的 focus 滚动全部照常。
  */
-const WHEEL_IDLE_MS = 140;
-const TOUCH_IDLE_MS = 220;
-/** 滚轮累计到这么多像素才算「想翻页」。 */
-const WHEEL_THRESHOLD = 12;
-/** 手指滑动超过这么多像素才算翻页。 */
-const TOUCH_THRESHOLD = 40;
-/** 一次翻页动画期间不接受新的请求。 */
-const LOCK_MS = 650;
+
+/** 滚轮位移的增益：一格（约 100~120px）走三分之一屏左右。 */
+const WHEEL_GAIN = 2.4;
+/** 停手多久开始吸附。 */
+const IDLE_MS = 120;
+/** 越过半屏就去下一页。 */
+const SNAP_RATIO = 0.5;
+/** 每帧向目标靠近的比例：越大越跟手，越小越飘。 */
+const FOLLOW = 0.28;
+/** 差值小于这个就认为到位了，停止 rAF。 */
+const EPSILON = 0.4;
 
 export function useScreenSnap(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
-    // 用户要求减少动态时别用平滑滚动，直接跳过去
+
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const behavior: ScrollBehavior = reduce ? 'auto' : 'smooth';
 
     /** 一屏的高度：用视口高度，而不是某个元素的 offsetHeight。 */
     const pageHeight = () =>
       Math.max(1, Math.round(window.visualViewport?.height ?? window.innerHeight));
 
-    const pageCount = () => Math.max(1, Math.round(document.documentElement.scrollHeight / pageHeight()));
+    const maxScroll = () =>
+      Math.max(0, document.documentElement.scrollHeight - pageHeight());
 
-    let animatingUntil = 0;
+    const pageCount = () =>
+      Math.max(1, Math.round(document.documentElement.scrollHeight / pageHeight()));
 
-    const goToPage = (index: number) => {
-      const total = pageCount();
-      const target = Math.min(Math.max(index, 0), total - 1);
-      const top = target * pageHeight();
-      if (Math.abs(window.scrollY - top) < 2) return;
-      animatingUntil = performance.now() + LOCK_MS;
-      window.scrollTo({ top, behavior });
+    const clamp = (value: number) => Math.min(Math.max(value, 0), maxScroll());
+
+    /** 目标位置与当前渲染位置。两者分开，才有"追上去"的过程。 */
+    let target = window.scrollY;
+    let current = window.scrollY;
+    let frame = 0;
+    let idleTimer = 0;
+
+    /** 我们自己调 scrollTo 时置位，避免 scroll 监听把自己的写入当成外部滚动。 */
+    let selfScroll = false;
+
+    const follow = () => {
+      if (frame) return;
+      const step = () => {
+        const diff = target - current;
+        if (Math.abs(diff) <= EPSILON) {
+          current = target;
+          selfScroll = true;
+          window.scrollTo({ top: current, behavior: 'instant' });
+          selfScroll = false;
+          frame = 0;
+          return;
+        }
+        current += diff * FOLLOW;
+        selfScroll = true;
+        window.scrollTo({ top: current, behavior: 'instant' });
+        selfScroll = false;
+        frame = window.requestAnimationFrame(step);
+      };
+      frame = window.requestAnimationFrame(step);
     };
 
-    const currentPage = () => window.scrollY / pageHeight();
-
-    /** 按方向翻一屏。`dir` 为 1 向下、-1 向上。 */
-    const step = (dir: number) => {
-      if (performance.now() < animatingUntil) return;
-      // 已经偏离整屏（比如用锚点跳过来的），先回到最近的那一屏
-      const exact = currentPage();
-      const nearest = Math.round(exact);
-      if (Math.abs(exact - nearest) > 0.02) {
-        goToPage(nearest);
+    /**
+     * 吸附到整屏。
+     *
+     * 基准取 floor：`from` 是"现在正看着哪一屏"，`offset` 是"已经拖出去多少"。
+     * 拖出超过半屏就去下一页，否则回来。用 floor + 半屏判断，而不是 round，
+     * 是为了让"刚好一半"也落在下一页 —— 用户心里那是"已经滑了一半了"。
+     */
+    const snap = () => {
+      const height = pageHeight();
+      const from = Math.floor(target / height + 0.0001);
+      const offset = target - from * height;
+      const dest = offset > height * SNAP_RATIO ? from + 1 : from;
+      const next = clamp(dest * height);
+      if (Math.abs(next - current) <= EPSILON) {
+        target = next;
         return;
       }
-      goToPage(nearest + dir);
+      target = next;
+      follow();
     };
 
-    /* ---------------- 滚轮 ---------------- */
-    let wheelSum = 0;
-    let wheelTimer = 0;
-    let lastWheelDir = 0;
+    const scheduleSnap = () => {
+      window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(snap, IDLE_MS);
+    };
 
+    /** 直接把页面送到某一屏（键盘、进页面归位用）。 */
+    const goToPage = (index: number) => {
+      const total = pageCount();
+      const safe = Math.min(Math.max(index, 0), total - 1);
+      target = clamp(safe * pageHeight());
+      follow();
+    };
+
+    /* ---------------- 滚轮 / 触控板 ---------------- */
     const onWheel = (event: WheelEvent) => {
       // 横向手势、或者按住 ctrl（触控板缩放）不拦
       if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
-      /*
-       * 只有一屏可滚时把自己当普通页面，别把事件吃掉。
-       * 交还给浏览器默认行为：我们不做 preventDefault，只在下一次翻页前判断。
-       */
+      // 只有一屏可滚时把自己当普通页面
       if (pageCount() < 2) return;
 
-      if (performance.now() < animatingUntil) {
-        event.preventDefault();
+      const atTop = target <= 1 && event.deltaY < 0;
+      const atBottom = target >= maxScroll() - 1 && event.deltaY > 0;
+      // 顶到底还继续滚，交给浏览器（触控板会回弹），别把事件吃掉
+      if (atTop || atBottom) return;
+
+      event.preventDefault();
+
+      /*
+       * deltaMode：0 = 像素（触控板 / 大多数浏览器），1 = 行（部分 Firefox）。
+       * 行模式直接乘 16 当像素，别让它只挪几像素。
+       */
+      const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+
+      if (reduce) {
+        // 关掉动画时退化成"一格一屏"，但仍然不用浏览器默认滚动
+        target = clamp(target + delta);
+        current = target;
+        window.scrollTo({ top: target, behavior: 'instant' });
+        scheduleSnap();
         return;
       }
 
-      /*
-       * 已经贴在页首/页尾还继续往外滚，交给浏览器（会触发回弹），
-       * 不拦，否则页尾一点反应都没有，像卡死了。
-       */
-      const atTop = window.scrollY <= 1;
-      const atBottom = window.scrollY + pageHeight() >= document.documentElement.scrollHeight - 2;
-      if ((atTop && event.deltaY < 0) || (atBottom && event.deltaY > 0)) return;
-
-      // 拦住浏览器自己的滚动，位置完全由我们决定
-      event.preventDefault();
-
-      if (Math.sign(event.deltaY) !== lastWheelDir) wheelSum = 0;
-      lastWheelDir = Math.sign(event.deltaY);
-      wheelSum += event.deltaY;
-
-      window.clearTimeout(wheelTimer);
-      wheelTimer = window.setTimeout(() => {
-        const sum = wheelSum;
-        wheelSum = 0;
-        if (Math.abs(sum) < WHEEL_THRESHOLD) return;
-        step(sum > 0 ? 1 : -1);
-      }, WHEEL_IDLE_MS);
+      target = clamp(target + delta * WHEEL_GAIN);
+      follow();
+      scheduleSnap();
     };
 
     /* ---------------- 触摸 ---------------- */
+    /*
+     * 触摸保持"抬手判断"的老逻辑，不做 1:1 跟手。
+     *
+     * iOS 的滚动惯性由系统接管，一旦 preventDefault 接管 touchmove，
+     * 惯性没了、橡皮筋没了，手感反而更差。手机上"滑一下翻一屏"本来就
+     * 是系统级的手势预期，不需要跟手；PC 的滚轮才是这回要修的地方。
+     */
     let touchStartY = 0;
     let touchSum = 0;
     let touchTimer = 0;
@@ -127,27 +174,29 @@ export function useScreenSnap(enabled: boolean) {
       const y = event.touches[0]?.clientY ?? touchStartY;
       touchSum = touchStartY - y;
       window.clearTimeout(touchTimer);
-      // 手指停下来才判断，跟着惯性一路滑过去不算翻页手势
       touchTimer = window.setTimeout(() => {
-        if (Math.abs(touchSum) < TOUCH_THRESHOLD) return;
-        step(touchSum > 0 ? 1 : -1);
+        if (Math.abs(touchSum) < 40) return;
+        const dir = touchSum > 0 ? 1 : -1;
+        goToPage(Math.round(target / pageHeight()) + dir);
         touchSum = 0;
-      }, TOUCH_IDLE_MS);
+      }, 220);
     };
 
     /* ---------------- 键盘 ---------------- */
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      const tag = (event.target as HTMLElement | null)?.tagName;
+      const el = event.target as HTMLElement | null;
+      const tag = el?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if ((event.target as HTMLElement | null)?.isContentEditable) return;
+      if (el?.isContentEditable) return;
 
+      const page = Math.round(target / pageHeight());
       if (event.key === 'PageDown') {
         event.preventDefault();
-        step(1);
+        goToPage(page + 1);
       } else if (event.key === 'PageUp') {
         event.preventDefault();
-        step(-1);
+        goToPage(page - 1);
       } else if (event.key === 'Home') {
         event.preventDefault();
         goToPage(0);
@@ -158,32 +207,47 @@ export function useScreenSnap(enabled: boolean) {
     };
 
     /*
-     * passive: false —— 滚轮与触摸都要能 preventDefault 才拦得住浏览器自己的滚动。
-     * 触摸用 touchstart/touchmove 而不是 pointer 系列，是为了和 iOS 的滚动惯性对齐。
+     * 外部滚动（锚点跳转、浏览器恢复位置、focus 带过来的滚动）要把
+     * target/current 同步过去，否则下一次吸附会把用户拽回原处。
      */
+    const onScroll = () => {
+      if (selfScroll) return;
+      if (Math.abs(window.scrollY - current) > 2) {
+        current = window.scrollY;
+        target = current;
+      }
+    };
+
     window.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('touchstart', onTouchStart, { passive: true });
     window.addEventListener('touchmove', onTouchMove, { passive: true });
     window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('scroll', onScroll, { passive: true });
 
     /*
-     * 进页面时如果带着 hash 或者上一次的滚动位置落在了半屏，
-     * 立刻对齐到最近的一整屏 —— 否则第一眼就是「卡在中间」。
+     * 进页面时如果带着 hash、或者上一次的滚动位置落在半屏，立刻对齐到
+     * 最近的一整屏 —— 否则第一眼就是"卡在中间"。
      */
-    const onLoadAlign = () => {
+    const align = () => {
       const exact = window.scrollY / pageHeight();
-      if (Math.abs(exact - Math.round(exact)) > 0.05 && exact > 0.2) goToPage(Math.round(exact));
+      if (Math.abs(exact - Math.round(exact)) > 0.04 && pageCount() > 1) {
+        goToPage(Math.round(exact));
+      }
     };
-    window.addEventListener('load', onLoadAlign);
+    const alignTimer = window.setTimeout(align, 120);
+    window.addEventListener('load', align);
 
     return () => {
-      window.clearTimeout(wheelTimer);
+      window.clearTimeout(idleTimer);
       window.clearTimeout(touchTimer);
+      window.clearTimeout(alignTimer);
+      if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener('wheel', onWheel);
       window.removeEventListener('touchstart', onTouchStart);
       window.removeEventListener('touchmove', onTouchMove);
       window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('load', onLoadAlign);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('load', align);
     };
   }, [enabled]);
 }

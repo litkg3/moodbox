@@ -275,7 +275,7 @@ test('情绪转盘：点空白处关闭详情，点击已选中扇形也能收�
   await expect(card).toHaveCount(0);
 });
 
-test('首页整屏翻页：一滑就是一整屏，不会停在两屏中间', async ({ page }) => {
+test('首页整屏翻页：跟手拖、过半吸附，不会停在两屏中间', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openHome(page);
   await page.waitForTimeout(600);
@@ -287,25 +287,51 @@ test('首页整屏翻页：一滑就是一整屏，不会停在两屏中间', as
   expect(Math.abs(docH - vh * 2)).toBeLessThanOrEqual(2);
 
   expect(await y()).toBe(0);
-
-  // 很小的滚动量也要被补成一整屏
   await page.mouse.move(1200, 450);
-  await page.mouse.wheel(0, 60);
-  await page.waitForTimeout(1300);
+
+  /*
+   * 一、页面要「跟手」：滚动过程中必须出现中间位置。
+   *
+   * 旧的实现在滚轮事件里直接 scrollTo 到整屏，采样只会得到 0 和 900
+   * 两个值 —— 画面是"顿"过去的。这里要求至少抓到一个落在中间的采样点，
+   * 才说明页面真的是被拖着走的。
+   */
+  const trail: number[] = [];
+  const sampler = setInterval(async () => {
+    try {
+      trail.push(await y());
+    } catch {
+      /* 页面正在关闭时忽略 */
+    }
+  }, 40);
+  await page.mouse.wheel(0, 400);
+  await page.waitForTimeout(1000);
+  clearInterval(sampler);
+  expect(trail.some((value) => value > 40 && value < vh - 40)).toBe(true);
+
+  // 越过半屏，吸附到第二屏
   expect(await y()).toBe(vh);
 
-  // 往上一点同理
-  await page.mouse.wheel(0, -30);
-  await page.waitForTimeout(1300);
+  // 二、不到半屏就回弹：滚 60 只走一小段，停手后还是第一屏
+  await page.mouse.wheel(0, -400);
+  await page.waitForTimeout(1000);
+  expect(await y()).toBe(0);
+  await page.mouse.wheel(0, 60);
+  await page.waitForTimeout(1000);
   expect(await y()).toBe(0);
 
-  // 连滚两下只会前进一屏，不会飞出去
-  await page.mouse.wheel(0, 120);
-  await page.mouse.wheel(0, 120);
-  await page.waitForTimeout(1300);
+  // 三、过半就去下一页（400 × 增益 ≈ 0.96 屏）
+  await page.mouse.wheel(0, 400);
+  await page.waitForTimeout(1000);
   expect(await y()).toBe(vh);
 
-  // 键盘也一样
+  // 连滚两下也不会飞出页面
+  await page.mouse.wheel(0, 400);
+  await page.mouse.wheel(0, 400);
+  await page.waitForTimeout(1000);
+  expect(await y()).toBe(vh);
+
+  // 键盘走同一套吸附
   await page.keyboard.press('PageUp');
   await page.waitForTimeout(1200);
   expect(await y()).toBe(0);
@@ -518,8 +544,40 @@ test('情绪转盘：点中的标签停在原位，不会被转到指针下面',
   const readTransform = () =>
     page.locator('.emotion-wheel-spin').evaluate((el) => getComputedStyle(el).transform);
 
+  /*
+   * 点击那一瞬间读一次实际角度，点完立刻再读一次。
+   *
+   * 这一条盯的是最常见的那个 bug：盘在从 A 转向 B 的途中被点，如果
+   * 冻结的是 React 里的目标值 B，盘会自己把剩下那半格走完 —— 实测
+   * 那一瞬间能甩出 45°，用户看到的就是"我点了它，它却跑到指针下面"。
+   * 冻结实际角度时，两者之差只剩一帧的位移（约 1°）。
+   */
+  const spinAngle = () =>
+    page.locator('.emotion-wheel-spin').evaluate((el) => {
+      const m = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+      return (Math.atan2(m.b, m.a) * 180) / Math.PI;
+    });
+
+  /** 被点那一格此刻在屏幕上的方位（相对盘心），用来验证"它没挪窝"。 */
+  const sliceAngle = () =>
+    slice.evaluate((el) => {
+      const shape = el.querySelector('.emotion-wheel-slice-shape')!;
+      const box = shape.getBoundingClientRect();
+      const board = document.querySelector('.emotion-wheel-board')!.getBoundingClientRect();
+      const cx = board.x + board.width / 2;
+      const cy = board.y + board.height / 2;
+      return (Math.atan2(box.y + box.height / 2 - cy, box.x + box.width / 2 - cx) * 180) / Math.PI;
+    });
+
+  const beforeClick = await spinAngle();
+  const beforeSlice = await sliceAngle();
   await slice.evaluate((el) => (el as SVGGElement).dispatchEvent(new MouseEvent('click', { bubbles: true })));
   await expect(page.locator('.emotion-wheel-card-close')).toBeVisible();
+  await page.waitForTimeout(280);
+  const afterClick = await spinAngle();
+  // 归一化到 [-180, 180] 再取绝对值
+  const jumped = Math.abs((((afterClick - beforeClick + 540) % 360) + 360) % 360 - 180);
+  expect(jumped).toBeLessThan(8);
 
   // 等过渡走完，读一个稳定值
   await page.waitForTimeout(900);
@@ -529,19 +587,15 @@ test('情绪转盘：点中的标签停在原位，不会被转到指针下面',
   expect(await readTransform()).toBe(frozen);
 
   /*
-   * 被点的那一格仍在它原来的方位上 —— 也就是它此刻的扇心角
-   * 不等于 -90°（正上方）。真被"转上去"的话这个角度会正好是 -90°。
+   * 被点的那一格仍在它原来的方位上。
+   *
+   * 这里比的是「点击前后同一个扇形的角度」，而不是「它离正上方多远」——
+   * 后者会随盘的随机起始位置变，某次点到的格子恰好本来就在正上方，
+   * 用例就会假失败（真遇到过）。角度差与盘的位置无关，才是稳的判据。
    */
-  const angle = await slice.evaluate((el) => {
-    const shape = el.querySelector('.emotion-wheel-slice-shape')!;
-    const box = shape.getBoundingClientRect();
-    const board = document.querySelector('.emotion-wheel-board')!.getBoundingClientRect();
-    const cx = board.x + board.width / 2;
-    const cy = board.y + board.height / 2;
-    return (Math.atan2(box.y + box.height / 2 - cy, box.x + box.width / 2 - cx) * 180) / Math.PI;
-  });
-  // 允许 ±6° 的包围盒误差，但明显不能落在 -90°（正上方）附近
-  expect(Math.abs(angle + 90)).toBeGreaterThan(20);
+  const afterSlice = await sliceAngle();
+  const moved = Math.abs((((afterSlice - beforeSlice + 540) % 360) + 360) % 360 - 180);
+  expect(moved).toBeLessThan(6);
 
   // 锁定之后正上方的指针收起：它表示"停在最上面"，容易误读成标签被转上去了
   await expect(page.locator('.emotion-wheel-pointer')).not.toHaveClass(/is-on/);
@@ -602,7 +656,7 @@ test('夜间主题：转盘压低饱和度，导航与帖子卡更实', async ({
     const fg = getComputedStyle(p!).color;
     const parse = (c: string) => (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
     const lum = (rgb: number[]) => {
-      const [r, g, b] = rgb.map((v) => {
+      const [r = 0, g = 0, b = 0] = rgb.map((v) => {
         const s = v / 255;
         return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
       });
