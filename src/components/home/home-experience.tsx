@@ -33,21 +33,6 @@ export function HomeExperience() {
   const { showToast } = useToast();
   const reduceMotion = useReducedMotion();
   const timers = useRef(new Map<EmotionId, number>());
-  /*
-   * 是否已经滚过第一屏（情绪球那一屏）。
-   * 滚到转盘区域后小球要整片淡出 —— 它们不该跟着页面往下跑，更不该错位。
-   */
-  const [pastHero, setPastHero] = useState(false);
-
-  useEffect(() => {
-    const onScroll = () => {
-      const viewport = window.innerHeight || 1;
-      setPastHero(window.scrollY > viewport * 0.5);
-    };
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
 
   // 组件卸载时把还没到点的「飞回」定时器清掉
   useEffect(() => {
@@ -107,7 +92,6 @@ export function HomeExperience() {
         burstingId={burstingId}
         onSelect={handleSelect}
         onBurstComplete={handleBurstComplete}
-        className={pastHero ? 'opacity-0' : undefined}
       />
 
       {/*
@@ -186,7 +170,7 @@ export function HomeExperience() {
         className="relative z-10 mx-auto w-full max-w-[720px] px-5 pb-24 pt-16 sm:px-8 lg:pb-32"
       >
         <p className="mb-2 text-center text-[11px] tracking-[0.28em] text-ink-faint/80 sm:text-[12px]">
-          每一种情绪，都在替你要点什么
+          情绪的背后是需求
         </p>
         <h2 className="mb-8 text-center font-display text-[24px] font-light tracking-[0.12em] text-ink/85 sm:text-[28px]">
           情绪转盘

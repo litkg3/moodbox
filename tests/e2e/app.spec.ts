@@ -128,16 +128,18 @@ test('键盘可以访问情绪球并打开面板', async ({ page }) => {
   await expect(page.getByRole('dialog', { name: /开心/ })).toBeVisible();
 });
 
-test('滚到转盘后情绪球淡出，第一屏底部有向下箭头', async ({ page }) => {
+test('滚到转盘后情绪球随页面滚走，第一屏底部有向下箭头', async ({ page }) => {
   await openHome(page);
 
   // 第一屏底部有向下滑动的箭头（无文字）
   const hint = page.locator('.mb-scroll-hint');
   await expect(hint).toBeVisible();
 
-  // 滚到转盘区域，情绪球整片淡出（第二屏不显示小球）
+  // 滚到转盘区域后，情绪球已经随页面滚出视口（不再只是原地渐隐）
   await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
-  await expect(page.locator('.emotion-sky')).toHaveClass(/opacity-0/);
+  const skyBox = await page.locator('.emotion-sky').boundingBox();
+  // 天空（含小球）已经滚到视口上方之外
+  expect(skyBox && skyBox.y + skyBox.height).toBeLessThanOrEqual(0);
 });
 
 test('情绪转盘：8 个扇形，点击放大并展示完整信息，可返回关闭', async ({ page }) => {
@@ -153,16 +155,16 @@ test('情绪转盘：8 个扇形，点击放大并展示完整信息，可返回
   await expect(slices).toHaveCount(8);
   await expect(page.getByRole('heading', { name: '情绪转盘' }).first()).toBeVisible();
 
-  // 点「愤怒」，弹出详情卡，其余扇形半透明
-  const anger = page.locator('.emotion-wheel-slice', { hasText: '愤怒' });
-  await anger.click();
-  const card = page.getByRole('dialog', { name: /愤怒/ });
+  // 点「迷茫」，弹出详情卡，其余扇形半透明
+  const lost = page.locator('.emotion-wheel-slice', { hasText: '迷茫' });
+  await lost.click();
+  const card = page.getByRole('dialog', { name: /迷茫/ });
   await expect(card).toBeVisible();
   await expect(card).toContainText('是为了获得');
   await expect(card).toContainText('处理方法');
 
   // 其余扇形进入半透明态（被点中的那一个 aria-checked=true）
-  await expect(anger).toHaveAttribute('aria-checked', 'true');
+  await expect(lost).toHaveAttribute('aria-checked', 'true');
   const other = page.locator('.emotion-wheel-slice[aria-checked="false"]').first();
   // 过渡是 0.45s，等它走完再读计算样式
   await expect
@@ -172,7 +174,7 @@ test('情绪转盘：8 个扇形，点击放大并展示完整信息，可返回
   // 返回按钮关闭
   await card.getByRole('button', { name: '返回转盘' }).click();
   await expect(card).toBeHidden();
-  await expect(anger).toHaveAttribute('aria-checked', 'false');
+  await expect(lost).toHaveAttribute('aria-checked', 'false');
 });
 
 test('情绪转盘：点空白处关闭详情，点击已选中扇形也能收起', async ({ page }) => {

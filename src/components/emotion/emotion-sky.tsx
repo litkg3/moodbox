@@ -62,7 +62,9 @@ export function EmotionSky({
       Math.min(window.visualViewport?.height ?? Number.POSITIVE_INFINITY, window.innerHeight);
 
     const measure = () => {
-      const top = el.getBoundingClientRect().top;
+      // 用「相对文档的顶部偏移」而不是 getBoundingClientRect().top：
+      // 后者会随页面滚动变成负数，导致滚动时把天空越量越高、球跟着重排错位。
+      const top = el.offsetTop;
       const available = Math.round(visibleHeight() - top);
       if (available <= 0) return;
       // 只在「第一次量」或「宽高都变大」时更新，避免地址栏收放把天空反复缩放
@@ -112,7 +114,7 @@ export function EmotionSky({
         // 天空的起点要在页头之下 —— 桌面端页头还多一条九项导航，
         // 否则最上面那颗球会压在导航条上。
         // 高度由上面的脚本按 visualViewport 钉住（见注释），这里给一个兜底值。
-        'emotion-sky pointer-events-none fixed inset-x-0 top-[72px] min-h-[440px] transition-[opacity,transform] duration-[1400ms] ease-[cubic-bezier(0.22,1,0.36,1)] lg:top-[80px]',
+        'emotion-sky pointer-events-none absolute inset-x-0 top-[72px] min-h-[440px] transition-[opacity,transform] duration-[1400ms] ease-[cubic-bezier(0.22,1,0.36,1)] lg:top-[80px]',
         receded && 'scale-[0.965] opacity-30',
         // 矮屏换一套扁舞台的坐标，球一颗不少
         short && 'emotion-sky-short',
