@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 
 /*
  * ------------------------------------------------------------------
- * 情绪转盘：8 个彩色扇形 + 中心一个低头连帽的小孩，站在路灯下。
+ * 情绪转盘：8 个彩色扇形。
  *
  * 交互约定：
  * - 点一个扇形 → 它放大一点、投下阴影，其余扇形缩小并半透明；
@@ -201,7 +201,7 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
                   className="emotion-wheel-slice-shape"
                 />
 
-                {/* 扇形文字：标题 + 「是为了获得……」 */}
+                {/* 扇形文字：标题居中，副标题在下方（移动端副标题由 CSS 收起） */}
                 <text
                   textAnchor="middle"
                   className="pointer-events-none"
@@ -209,7 +209,8 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
                 >
                   <tspan
                     x="0"
-                    dy="-0.2em"
+                    dy="0"
+                    dominantBaseline="central"
                     className="emotion-wheel-slice-label"
                     fill={slice.ink}
                     fontSize="20"
@@ -220,7 +221,7 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
                   </tspan>
                   <tspan
                     x="0"
-                    dy="1.7em"
+                    dy="1.55em"
                     className="emotion-wheel-slice-sub"
                     fill={slice.ink}
                     fontSize="11.5"
@@ -232,11 +233,6 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
               </g>
             );
           })}
-
-          {/* 中心：低头连帽的小孩，站在路灯下（线稿插画） */}
-          <g className="pointer-events-none">
-            <CenterChild />
-          </g>
         </svg>
 
         {/* 详情卡：点中后浮出，讲解完整信息 */}
@@ -294,48 +290,5 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
         )}
       </div>
     </section>
-  );
-}
-
-/**
- * 中心简笔小孩：一个低头、戴着帽兜、站在一盏路灯下的小人。
- * 纯 SVG 线稿，颜色跟着转盘的雾面色走，不做成抢眼的视觉焦点。
- */
-function CenterChild() {
-  return (
-    <g transform={`translate(${CX} ${CY})`}>
-      {/* 头顶的路灯光 */}
-      <g stroke="#C9B6E8" strokeWidth="2.2" strokeLinecap="round" fill="none" opacity="0.9">
-        <line x1="0" y1="-62" x2="0" y2="-44" />
-        <path d="M -14 -62 Q 0 -72 14 -62" />
-      </g>
-      <circle cx="0" cy="-66" r="6" fill="#F5DFA4" opacity="0.9" />
-      <circle cx="0" cy="-66" r="13" fill="#F5DFA4" opacity="0.18" />
-
-      {/* 小孩身体：低头，所以脸只露出一小块 */}
-      <g transform="translate(0 8)">
-        {/* 身体 */}
-        <path
-          d="M -22 18 C -22 -6 -14 -18 0 -18 C 14 -18 22 -6 22 18 Z"
-          fill="#D8D2EE"
-          stroke="#A79ED0"
-          strokeWidth="2.2"
-          strokeLinejoin="round"
-        />
-        {/* 帽兜（低头，兜帽盖住后脑） */}
-        <path
-          d="M -18 -14 C -18 -32 -8 -40 2 -40 C 12 -40 20 -32 20 -14 C 18 -24 10 -30 2 -30 C -8 -30 -16 -24 -18 -14 Z"
-          fill="#CBB6E8"
-          stroke="#9C80C8"
-          strokeWidth="2.2"
-          strokeLinejoin="round"
-        />
-        {/* 脸：低头只露下巴一线，用更浅的色点一下 */}
-        <ellipse cx="0" cy="-14" rx="7" ry="4" fill="#F4EFFB" />
-        {/* 双手插兜，两条短袖口 */}
-        <path d="M -20 2 C -26 6 -24 16 -18 20" stroke="#A79ED0" strokeWidth="2.2" fill="none" strokeLinecap="round" />
-        <path d="M 20 2 C 26 6 24 16 18 20" stroke="#A79ED0" strokeWidth="2.2" fill="none" strokeLinecap="round" />
-      </g>
-    </g>
   );
 }

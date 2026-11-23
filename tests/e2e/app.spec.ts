@@ -128,45 +128,16 @@ test('键盘可以访问情绪球并打开面板', async ({ page }) => {
   await expect(page.getByRole('dialog', { name: /开心/ })).toBeVisible();
 });
 
-test('中央液态玻璃气泡：桌面端罩住文字并真的模糊，手机端不出现', async ({ page }) => {
+test('滚到转盘后情绪球淡出，第一屏底部有向下箭头', async ({ page }) => {
   await openHome(page);
 
-  const veil = page.locator('.mb-bubble-veil');
-  const blob = page.locator('.mb-blob');
-  await expect(veil).toBeVisible();
-  await expect(blob).toBeVisible();
+  // 第一屏底部有向下滑动的箭头（无文字）
+  const hint = page.locator('.mb-scroll-hint');
+  await expect(hint).toBeVisible();
 
-  // 文字整块落在气泡里，而不是溢出到玻璃外面
-  const bubble = await page.locator('.mb-bubble').boundingBox();
-  const veilBox = await veil.boundingBox();
-  const title = await page.getByRole('heading', { level: 1 }).boundingBox();
-  expect(bubble && veilBox && title).toBeTruthy();
-  expect(veilBox!.width).toBeGreaterThan(bubble!.width);
-  expect(veilBox!.x).toBeLessThan(title!.x);
-  expect(veilBox!.x + veilBox!.width).toBeGreaterThan(title!.x + title!.width);
-
-  /*
-   * 模糊必须真的生效。
-   *
-   * 这里专门守一件事：手写 `-webkit-backdrop-filter` 会让构建器丢掉标准写法，
-   * 于是 `getComputedStyle` 读回 `none`，玻璃层看上去还是玻璃，其实一点都没糊。
-   */
-  const blur = await veil.evaluate((el) => getComputedStyle(el).backdropFilter);
-  expect(blur).toContain('blur');
-
-  // 形变与扰动由 SMIL 驱动，不是 JS 定时器；浮动是慢的、小的
-  const animateCount = await blob.evaluate((el) => el.querySelectorAll('animate').length);
-  expect(animateCount).toBeGreaterThan(0);
-  const motion = await page.locator('.mb-bubble').evaluate((el) => {
-    const cs = getComputedStyle(el);
-    return { name: cs.animationName, duration: parseFloat(cs.animationDuration) };
-  });
-  expect(motion.name).toBe('mb-bubble-float');
-  expect(motion.duration).toBeGreaterThan(6);
-
-  // 手机端：这一层整个不出现，文字回到原来的纯排版
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(veil).toBeHidden();
+  // 滚到转盘区域，情绪球整片淡出（第二屏不显示小球）
+  await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
+  await expect(page.locator('.emotion-sky')).toHaveClass(/opacity-0/);
 });
 
 test('情绪转盘：8 个扇形，点击放大并展示完整信息，可返回关闭', async ({ page }) => {

@@ -3,12 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'motion/react';
-import { MessageCircleHeart } from 'lucide-react';
+import { ChevronDown, MessageCircleHeart } from 'lucide-react';
 import { EmotionPanel } from '@/components/emotion/emotion-panel';
 import { enterSquare } from '@/components/layout/square-entrance';
 import { EmotionSky } from '@/components/emotion/emotion-sky';
 import { EmotionWheel } from '@/components/home/emotion-wheel';
-import { LiquidBubble } from '@/components/home/liquid-bubble';
 import { MeteorShower } from '@/components/home/meteor-shower';
 import { useToast } from '@/components/ui/toast';
 import { HOME_BLESSING_LINES, SLOGAN } from '@/data/emotions';
@@ -34,6 +33,21 @@ export function HomeExperience() {
   const { showToast } = useToast();
   const reduceMotion = useReducedMotion();
   const timers = useRef(new Map<EmotionId, number>());
+  /*
+   * 是否已经滚过第一屏（情绪球那一屏）。
+   * 滚到转盘区域后小球要整片淡出 —— 它们不该跟着页面往下跑，更不该错位。
+   */
+  const [pastHero, setPastHero] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const viewport = window.innerHeight || 1;
+      setPastHero(window.scrollY > viewport * 0.5);
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   // 组件卸载时把还没到点的「飞回」定时器清掉
   useEffect(() => {
@@ -93,6 +107,7 @@ export function HomeExperience() {
         burstingId={burstingId}
         onSelect={handleSelect}
         onBurstComplete={handleBurstComplete}
+        className={pastHero ? 'opacity-0' : undefined}
       />
 
       {/*
@@ -102,13 +117,7 @@ export function HomeExperience() {
       <MeteorShower />
 
       <div className="pointer-events-none relative z-10 flex min-h-[100dvh] flex-col items-center justify-center px-5 pb-24 pt-[96px] lg:pb-28 lg:pt-[108px]">
-        <div className="home-copy mb-bubble relative flex w-full max-w-[440px] flex-col items-center text-center">
-          {/*
-            桌面端那颗液态玻璃气泡：形状、虹彩、扰动全在 SVG 里，
-            手机端由 CSS 整个藏掉。见 components/home/liquid-bubble.tsx。
-          */}
-          <LiquidBubble />
-
+        <div className="home-copy relative flex w-full max-w-[440px] flex-col items-center text-center">
           {/* 标题与寄语：刻意做轻，不跟球抢视线 */}
           <motion.h1 {...fade(0.2)} className="flex flex-col items-center">
             <span className="home-title-brand font-display text-[26px] font-light leading-none tracking-[0.2em] text-ink/85 sm:text-[32px]">
@@ -151,10 +160,22 @@ export function HomeExperience() {
             </Link>
           </motion.div>
         </div>
+
+        {/* 底部向下滑动箭头：只示意，不带文字 */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 text-ink-ghost/70"
+        >
+          <ChevronDown
+            size={26}
+            strokeWidth={1.6}
+            className="mb-scroll-hint"
+          />
+        </div>
       </div>
 
       {/*
-        情绪转盘：往下滚就能看到。第一屏（情绪球 + 中央泡泡）保持 100dvh 不变，
+        情绪转盘：往下滚就能看到。第一屏（情绪球）保持 100dvh 不变，
         转盘作为第二屏排在文档流下方。进入视口时从下方滑入（不是淡入）。
       */}
       <motion.div

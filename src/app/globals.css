@@ -1339,7 +1339,6 @@ html[data-theme='night'] .mb-btn-danger {
  */
 .mb-motion-paused .orb-anchor,
 .mb-motion-paused .orb-breath,
-.mb-motion-paused .mb-bubble,
 .mb-motion-paused .mb-star,
 .mb-motion-paused .mb-stardot {
   animation-play-state: paused !important;
@@ -1448,87 +1447,6 @@ html[data-theme='night'] .orb-surface {
   background: radial-gradient(circle, #ffffff 0%, var(--orb-mid) 60%, var(--orb-deep) 100%);
 }
 
-/* ---------------- 首页中央：液态玻璃气泡（仅桌面） ---------------- */
-
-/*
- * 中央那团文字，飘在一颗不规则的液态玻璃气泡里。
- *
- * 形状与虹彩在 components/home/liquid-bubble.tsx 的 SVG 里：
- * - 四套锚点数一致的路径由 SMIL 平滑插值（12s 循环，样条过渡），边缘一直在
- *   缓慢起伏，不是「几秒换一个姿势」；
- * - 描边用粉-紫-蓝-青-黄的渐变，gradientTransform 在转，颜色沿轮廓流动；
- * - feTurbulence + feDisplacementMap 给整条轮廓加低频液态扰动，强度 6→11→6 呼吸。
- *
- * 这里只负责三件事：
- * - `.mb-bubble-veil`：一层按轮廓裁剪的 backdrop 模糊。遮罩是静态的、比 SVG
- *   的平均轮廓小一圈，形变的误差藏在 2px 描边与 7px 光晕的宽度里；
- * - `.mb-blob`：SVG 的尺寸与定位，随容器拉伸（preserveAspectRatio="none"）；
- * - 尺寸、漂浮动画与断点。手机端与矮窗整块 `display: none`。
- */
-.mb-bubble-veil {
-  display: none;
-}
-
-.mb-blob {
-  display: none;
-}
-
-@media (min-width: 1024px) and (min-height: 640px) {
-  .home-stage .home-copy.mb-bubble {
-    width: clamp(460px, 36vw, 520px);
-    max-width: none;
-    min-height: clamp(290px, 32vh, 340px);
-    padding: clamp(28px, 3.2vh, 38px) clamp(38px, 3.2vw, 50px);
-    justify-content: center;
-    animation: mb-bubble-float 11s cubic-bezier(0.45, 0, 0.55, 1) infinite;
-    will-change: transform;
-  }
-
-  /* 背景模糊：被轮廓遮罩裁成一团玻璃形状，本身完全透明 */
-  .mb-bubble-veil {
-    display: block;
-    position: absolute;
-    inset: -20px -32px;
-    z-index: -1;
-    pointer-events: none;
-    -webkit-mask-image: var(--blob-mask);
-    mask-image: var(--blob-mask);
-    -webkit-mask-size: 100% 100%;
-    mask-size: 100% 100%;
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
-    backdrop-filter: blur(14px) saturate(1.18);
-  }
-
-  .mb-blob {
-    position: absolute;
-    inset: -20px -32px;
-    z-index: -1;
-    display: block;
-    width: calc(100% + 64px);
-    height: calc(100% + 40px);
-    pointer-events: none;
-  }
-
-  /* 文字浮在气泡里：上提 2px 落在光学中心，且不随轮廓形变移动 */
-  .mb-bubble > *:not(.mb-bubble-veil):not(.mb-blob) {
-    position: relative;
-    z-index: 1;
-    transform: translateY(-2px);
-  }
-}
-
-/* 上下各 7px，一个来回九秒半 —— 比呼吸还慢，才像悬着 */
-@keyframes mb-bubble-float {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0);
-  }
-  50% {
-    transform: translate3d(0, -7px, 0);
-  }
-}
-
 /*
  * 桌面端鼠标悬停在情绪球上：多一点点「它在回应你」的细节。
  *
@@ -1618,6 +1536,45 @@ html[data-theme='night'] .emotion-wheel-card {
 @media (prefers-reduced-motion: reduce) {
   .emotion-wheel-slice {
     transition: none;
+  }
+}
+
+/*
+ * 移动端转盘扇形只留标题两个字，「是为了获得…」的副标题整行收起，
+ * 完整说明仍由点击后的详情卡提供，不塞在扇形里。
+ */
+@media (max-width: 1023px) {
+  .emotion-wheel-slice-sub {
+    display: none;
+  }
+}
+
+/* ---------------- 首页向下滑动箭头 ---------------- */
+
+/*
+ * 一个没有文字、只在第一屏底部轻轻上下浮动的向下箭头。
+ * 它只说明「下面还有内容」，不打断视线，也不抢球的风头。
+ */
+.mb-scroll-hint {
+  animation: mb-scroll-hint 2.2s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes mb-scroll-hint {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.75;
+  }
+  50% {
+    transform: translateY(9px);
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mb-scroll-hint {
+    animation: none;
   }
 }
 
@@ -1864,7 +1821,6 @@ html[data-theme='night'] .mb-only-night {
   .mb-aurora,
   .orb-anchor,
   .orb-breath,
-  .mb-bubble,
   .mb-star,
   .mb-stardot,
   .mb-fade-in {
