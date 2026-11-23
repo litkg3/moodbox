@@ -567,3 +567,70 @@ test('呼吸页：点开始先播起势动画，再进入吸气', async ({ page 
   // 起势结束后才出现倒计时数字
   await expect(ring.locator('.tabular-nums')).toBeVisible();
 });
+
+test('夜间主题：转盘压低饱和度，导航与帖子卡更实', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // 默认主题按当前小时决定，这里显式钉成夜间，免得白天跑测试时用例自己变了
+  await page.addInitScript(() => window.localStorage.setItem('moodbox-theme', 'night'));
+
+  await gotoHydrated(page, '/square');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
+
+  /*
+   * 导航：夜里靠不透明度压住星空。0.9 是这次的底线 ——
+   * 低于它，星星会从字缝里透出来。
+   */
+  const navAlpha = await page.locator('.mb-glass-nav').first().evaluate((el) => {
+    const layers = getComputedStyle(el).backgroundImage.match(/rgba?\([^)]+\)/g) ?? [];
+    return Math.max(...layers.map((c) => Number(c.match(/[\d.]+(?=\))/)?.[0] ?? 0)));
+  });
+  expect(navAlpha).toBeGreaterThanOrEqual(0.9);
+
+  /*
+   * 帖子卡：变实之后文字必须跟着回到深色，否则浅底浅字是一片糊。
+   * 这里直接量对比度 —— 比断言具体色值稳，以后微调颜色也不会误伤。
+   */
+  await page.getByRole('button', { name: '写一条' }).click();
+  const composer = page.getByRole('dialog');
+  await composer.locator('textarea').first().fill('夜里也要看得清的一条。');
+  await composer.getByRole('button', { name: '发出去' }).click();
+  await expect(page.locator('.mb-post-card')).toBeVisible({ timeout: 15_000 });
+
+  const prose = await page.locator('.mb-post-card').evaluate((card) => {
+    const p = card.querySelector('p');
+    const bg = getComputedStyle(card).backgroundColor;
+    const fg = getComputedStyle(p!).color;
+    const parse = (c: string) => (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const lum = (rgb: number[]) => {
+      const [r, g, b] = rgb.map((v) => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const [l1, l2] = [lum(parse(fg)), lum(parse(bg))].sort((a, b) => b - a);
+    return { ratio: (l1! + 0.05) / (l2! + 0.05) };
+  });
+  // 正文是 13.5px，按 WCAG 小字标准要 4.5:1，给一点渲染误差的余量
+  expect(prose.ratio).toBeGreaterThan(4.5);
+
+  /*
+   * 转盘：扇形整体被压暗、降饱和，比白天那版沉。
+   *
+   * 不能直接读第 0 格 —— 鼠标此时可能正停在哪一格上，那格读到的会是
+   * 悬停版的 filter（更亮一档）。所以取所有扇形里饱和度最低的那个值，
+   * 它一定来自没有悬停的格子。
+   */
+  await gotoHydrated(page, '/');
+  await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
+  await expect(page.locator('.emotion-wheel-slice-shape').first()).toBeVisible();
+  const saturations = await page.locator('.emotion-wheel-slice-shape').evaluateAll((els) =>
+    els.map((el) => {
+      const m = getComputedStyle(el).filter.match(/saturate\(([\d.]+)\)/);
+      return m ? Number(m[1]) : 1;
+    }),
+  );
+  expect(Math.min(...saturations)).toBeCloseTo(0.78, 2);
+  // 降饱和是真的生效了，而不是全都被悬停规则盖掉（那样最低值会接近 1）
+  expect(Math.min(...saturations)).toBeLessThan(0.85);
+});

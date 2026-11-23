@@ -606,7 +606,7 @@ export function SquareView() {
             {[0, 1, 2].map((index) => (
               <div
                 key={index}
-                className="h-[128px] animate-pulse rounded-[22px] border border-white/60 bg-white/46"
+                className="mb-post-skeleton h-[128px] animate-pulse rounded-[22px] border border-white/60 bg-white/46"
               />
             ))}
           </div>
@@ -991,7 +991,7 @@ function PostCard({
   }
 
   return (
-    <article className="rounded-[22px] border border-white/80 bg-white/66 p-5 transition-colors duration-500 hover:bg-white/74 sm:p-6">
+    <article className="mb-post-card rounded-[22px] border border-white/80 bg-white/66 p-5 transition-colors duration-500 hover:bg-white/74 sm:p-6">
       <header className="flex flex-wrap items-center gap-2 text-[11px] text-ink-ghost">
         <span className="text-ink-faint">{post.nickname}</span>
         {post.region ? (

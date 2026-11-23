@@ -392,7 +392,13 @@ html[data-theme='night'] .mb-glass-soft {
 }
 
 html[data-theme='night'] .mb-glass-nav {
-  background: linear-gradient(155deg, rgba(58, 52, 88, 0.86) 0%, rgba(40, 35, 64, 0.78) 100%);
+  /*
+   * 夜间的导航要更实一层（0.86/0.78 → 0.93/0.88）。
+   * 白天靠亮底压得住内容，夜里靠的只有不透明度 —— 星空和光斑都是亮的，
+   * 透一点过来就会把导航文字糊掉。抬到 0.9 上下，仍然看得出是层玻璃，
+   * 但字始终是字。
+   */
+  background: linear-gradient(155deg, rgba(58, 52, 88, 0.93) 0%, rgba(40, 35, 64, 0.88) 100%);
   backdrop-filter: blur(20px) saturate(1.04);
   border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow:
@@ -1809,6 +1815,90 @@ html[data-theme='night'] .orb-surface {
  */
 .emotion-wheel-pointer.is-locked {
   opacity: 0;
+}
+
+/*
+ * 夜空里的转盘：把白天的雾面糖色压一档。
+ *
+ * 白天那 8 个扇形是照着"雾面色盘"调的，压在浅色背景上刚好。放到夜空的
+ * 深紫底上时，同一批颜色会显得又亮又艳 —— 深底会把明度反差拉大，饱和度
+ * 也会被读得更浓，看起来像八块荧光糖。
+ *
+ * 所以夜间不换色相（八种情绪的辨识度得留着），只做两件事：
+ *   saturate(0.78) 收饱和度 —— 从"糖色"回到"雾色"；
+ *   brightness(0.9) 压明度 —— 让它们沉到星光底下，而不是浮在夜空前面。
+ *
+ * 用 filter 而不是给每格再写一套夜间色值：颜色只有一份，白天黑夜的差别
+ * 只在这一行里，以后调色不会出现"改了一边忘了另一边"。
+ * 注意只作用在扇形本体（.emotion-wheel-slice-shape），文字不跟着降亮度 ——
+ * 字是用 ink 深色写的，再压暗就糊了。
+ */
+html[data-theme='night'] .emotion-wheel-slice-shape {
+  filter: saturate(0.78) brightness(0.9);
+}
+
+/*
+ * 悬停/被点中那一格的提亮，要在夜间的基础上叠加，不能把上面那条覆盖掉。
+ *
+ * 白天那几条悬停规则本来就写了 filter（brightness / saturate / drop-shadow），
+ * 而且选择器更具体，会整条盖掉上面那个"夜间基底"。一旦盖掉，悬停的那一格
+ * 就会突然变回白天的亮度 —— 夜里看着像手电筒照上去。
+ * 所以这里把夜间基底写进同一条 filter 里重写一遍，不靠优先级去赌。
+ */
+html[data-theme='night'] .emotion-wheel-slice:hover .emotion-wheel-slice-shape,
+html[data-theme='night'] .emotion-wheel-slice-hot .emotion-wheel-slice-shape {
+  filter:
+    saturate(0.82)
+    brightness(0.96)
+    drop-shadow(0 8px 16px color-mix(in srgb, var(--slice-edge) 26%, transparent));
+}
+
+html[data-theme='night'] .emotion-wheel-slice-top .emotion-wheel-slice-shape {
+  filter: saturate(0.8) brightness(0.95);
+}
+
+/*
+ * 广场的帖子卡片：夜间也要更实一层。
+ *
+ * 帖子卡片是全站唯一一处「大面积白底 + 大段正文」的浅色块，写在组件里是
+ * `bg-white/66`。白天这样刚好：底下的雾色和它混在一起，看着是纸。
+ * 夜里就不行了 —— 透下去的星空是一整片亮紫，正文压在上面会发灰、发糊，
+ * 长段落读起来很费劲。
+ *
+ * 这里不改组件里的 class（那是全站共用的白底写法，别处不该跟着变），
+ * 单开一个 .mb-post-card，只在广场的帖子卡片上挂。夜间抬到 0.8 上下：
+ * 一眼还是浅色的纸，但底下的星点不再透字。
+ */
+html[data-theme='night'] .mb-post-card {
+  background-color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.86);
+}
+
+html[data-theme='night'] .mb-post-card:hover {
+  background-color: rgba(255, 255, 255, 0.86);
+}
+
+/*
+ * 卡片变实之后，里面的字得跟着回到深色。
+ *
+ * 全站的文字色走 --color-ink* 这一套令牌，夜间是浅紫白（给深底用的）。
+ * 帖子卡片是夜里的唯一一块浅色底，浅底 + 浅字就是一片糊 —— 截图里正文
+ * 和昵称几乎看不见。所以卡片内单独换回浅色主题的墨色：
+ * 正文 --color-ink-soft、昵称/时间 --color-ink-faint/ghost 都压回深一档。
+ *
+ * 只在这个类的作用域里改令牌，不碰全局 —— 卡片外面的页面仍然是夜间的浅字。
+ */
+html[data-theme='night'] .mb-post-card {
+  --color-ink: #332c3c;
+  --color-ink-soft: #4c4457;
+  --color-ink-faint: #6b6377;
+  --color-ink-ghost: #7d7589;
+  color: var(--color-ink-soft);
+}
+
+/* 帖子之间的骨架屏也跟着实一点，免得加载时是一排会闪的洞 */
+html[data-theme='night'] .mb-post-skeleton {
+  background-color: rgba(255, 255, 255, 0.6);
 }
 
 /* ---------------- 详情卡 ---------------- */
