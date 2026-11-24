@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 
 /**
  * 全屏浮层共用的行为：
- * - 锁定页面滚动；
+ * - 锁定页面滚动（iOS Safari 能生效的那一套）；
  * - Esc 关闭、Tab 焦点留在浮层内；
  * - 关闭后把焦点还给原来的触发元素。
  *
@@ -19,6 +19,24 @@ const FOCUSABLE = [
   'select:not([disabled])',
   '[tabindex]:not([tabindex="-1"])',
 ].join(', ');
+
+/**
+ * 把页面滚回原位。
+ *
+ * 坑：全站 `html { scroll-behavior: smooth }`，`scrollTo` 会变成一段动画，
+ * 而当时 `scroll-snap-type: y mandatory` 已经挂回去 —— 两下一夹，页面常常停在
+ * 半路（实测从第三屏关掉面板，落点是 81px，不是 1688px）。
+ * 所以这里临时把 scroll-behavior 收成 auto，同步落到目标点，再还回去。
+ */
+function restoreScroll(y: number) {
+  const root = document.documentElement;
+  const previous = root.style.scrollBehavior;
+  root.style.scrollBehavior = 'auto';
+  window.scrollTo(0, y);
+  // 读一次布局，确保这次滚动已经生效，再把 smooth 还回去
+  void root.offsetHeight;
+  root.style.scrollBehavior = previous;
+}
 
 /**
  * 打开浮层时焦点该落在哪。
@@ -71,9 +89,18 @@ const overlayStack: symbol[] = [];
 export function useOverlayBehavior<T extends HTMLElement = HTMLDivElement>({
   open,
   onClose,
+  returnFocusTo = null,
 }: {
   open: boolean;
   onClose: () => void;
+  /**
+   * 关闭后焦点回到谁。
+   *
+   * 不传就退回 `document.activeElement` —— 桌面端够用。但 iOS Safari 点按
+   * `<button>` **不会**让它获得焦点，那时 activeElement 还是 body，焦点就
+   * 丢了。所以卡片这类"由按钮打开"的浮层要把元素显式传进来。
+   */
+  returnFocusTo?: HTMLElement | null;
 }) {
   const containerRef = useRef<T | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
@@ -102,14 +129,40 @@ export function useOverlayBehavior<T extends HTMLElement = HTMLDivElement>({
     overlayStack.push(id);
 
     restoreFocusRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      returnFocusTo ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
 
-    const originalOverflow = document.body.style.overflow;
-    const originalPaddingRight = document.body.style.paddingRight;
+    /*
+     * 锁背景滚动。
+     *
+     * 只写 `body { overflow: hidden }` 在 iOS Safari 上是**无效**的：滚动条
+     * 挂在 html 上，页面照样滚，工具栏跟着收放，固定定位的面板就会被"顶"得
+     * 忽上忽下；关掉之后落点也变了。所以这里用业界通用的那套：
+     * 记下 scrollY → body 变 fixed 顶到 -scrollY → 关闭时还原并滚回原位。
+     *
+     * 顺序很重要：先打标记（让翻页器立刻停手），再改布局。
+     */
+    const unmarkPaused = markOverlayOpen();
+
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const original = {
+      overflow: body.style.overflow,
+      paddingRight: body.style.paddingRight,
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+    };
     // 补偿滚动条宽度，避免打开浮层时页面横向跳动
     const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-    document.body.style.overflow = 'hidden';
-    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
+    body.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`;
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
 
     const focusTimer = window.setTimeout(() => {
       const container = containerRef.current;
@@ -151,13 +204,21 @@ export function useOverlayBehavior<T extends HTMLElement = HTMLDivElement>({
     };
 
     document.addEventListener('keydown', onKeyDown);
-    const unmarkMotion = markOverlayOpen();
     return () => {
       window.clearTimeout(focusTimer);
       document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = originalOverflow;
-      document.body.style.paddingRight = originalPaddingRight;
-      unmarkMotion();
+
+      body.style.overflow = original.overflow;
+      body.style.paddingRight = original.paddingRight;
+      body.style.position = original.position;
+      body.style.top = original.top;
+      body.style.left = original.left;
+      body.style.right = original.right;
+      body.style.width = original.width;
+
+      // 顺序：先撤掉"暂停"标记与样式，文档重新可滚，再滚回原位
+      unmarkPaused();
+      restoreScroll(scrollY);
 
       const index = overlayStack.lastIndexOf(id);
       if (index !== -1) overlayStack.splice(index, 1);
@@ -176,16 +237,20 @@ export function useOverlayBehavior<T extends HTMLElement = HTMLDivElement>({
  * 关掉上面那层不应当把球重新放出来，所以用一个计数器而不是单一布尔。
  */
 const MOTION_PAUSE_CLASS = 'mb-motion-paused';
+/** 浮层开着：翻页器据此停手（比去读 body 的内联样式稳） */
+const OVERLAY_OPEN_CLASS = 'mb-overlay-open';
 let overlayDepth = 0;
 
 export function markOverlayOpen(): () => void {
   overlayDepth += 1;
-  document.documentElement.classList.add(MOTION_PAUSE_CLASS);
+  document.documentElement.classList.add(MOTION_PAUSE_CLASS, OVERLAY_OPEN_CLASS);
   let released = false;
   return () => {
     if (released) return;
     released = true;
     overlayDepth = Math.max(0, overlayDepth - 1);
-    if (overlayDepth === 0) document.documentElement.classList.remove(MOTION_PAUSE_CLASS);
+    if (overlayDepth === 0) {
+      document.documentElement.classList.remove(MOTION_PAUSE_CLASS, OVERLAY_OPEN_CLASS);
+    }
   };
 }

@@ -66,6 +66,44 @@ test('点击情绪球打开陪伴面板，可以切换文案并关闭', async ({
   await expect(dialog).toBeHidden();
 });
 
+test('首页情绪球：中间那块文案不吃点击，「委屈」「烦躁」也点得到', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openHome(page);
+
+  /*
+   * 首屏那块文案（文案 + 寄语 + 按钮）是一整块 350×200 的矩形，正好压在右侧
+   * 两颗球上。它一旦吃掉指针事件，球在漂移，压进去就点不动 —— 表现就是
+   * "有概率点不到"。这里直接量球心那一点到底命中了谁。
+   */
+  const hits = await page.evaluate(() => {
+    const out: { label: string; ok: boolean; hit: string }[] = [];
+    for (const label of ['委屈', '烦躁']) {
+      const btn = document.querySelector<HTMLButtonElement>(`button[aria-label^="${label}"]`);
+      if (!btn) {
+        out.push({ label, ok: false, hit: 'missing' });
+        continue;
+      }
+      const rect = btn.getBoundingClientRect();
+      const center = document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      );
+      out.push({
+        label,
+        ok: center?.closest('button') === btn,
+        hit: center ? `${center.tagName.toLowerCase()}.${center.className}`.slice(0, 40) : 'none',
+      });
+    }
+    return out;
+  });
+
+  for (const item of hits) expect(item.ok, `${item.label} 的球心被 ${item.hit} 挡住了`).toBe(true);
+
+  // 真的按一下：球一直在漂，用 force 绕开"元素不稳定"的等待
+  await page.getByRole('button', { name: /^委屈/ }).click({ force: true });
+  await expect(page.getByRole('dialog', { name: /委屈/ })).toBeVisible();
+});
+
 test('开心罐里可以创建、刷新后保留、编辑并删除一份快乐', async ({ page }) => {
   const jar = await openJar(page);
   const content = '傍晚的云是粉色的，我在楼下站了五分钟才回家。';

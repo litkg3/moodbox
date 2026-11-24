@@ -957,3 +957,61 @@ html.classList.toggle('mb-snap-inner', detach);   // -> scroll-snap-type: none
 | 缓动手感 | `PAGE_SCROLL.EASING`：`easeInOutCubic` ↔ `easeInOutQuart` |
 | 进场时机 | `PAGE_SCROLL.REVEAL_AT`（按位移，0.6） |
 | 手机分组字号/头像 | `.mb-mbti` 里的 `--mbti-avatar / --mbti-code-size / --mbti-tagline-size` |
+
+---
+
+## 第十四轮：iOS 上「点开卡片，面板浮起来」和「有概率点不到球」
+
+两个都定位到了具体原因，不是玄学。
+
+### 一、面板浮动：命中的是 3、4、6，不是 1
+
+按可疑点逐条排查（Chromium 390×844 + 真机行为对照）：
+
+| # | 可疑点 | 结论 | 证据 |
+| --- | --- | --- | --- |
+| 1 | `fixed` 被祖先 transform / filter / backdrop-filter 改包含块 | **不是** | Portal 挂在 `body` 下，祖先链 `transform / filter / perspective` 全是 `none`（已有用例逐级断言） |
+| 2 | 触屏 `:hover` 残留 | **命中（次要）** | `.mb-mbti-card:hover` 写在裸选择器里，Safari 点按后会一直保持 hover：卡片停在 `translateY(-2px)`、阴影与头像放大 |
+| 3 | 只用 `body { overflow: hidden }` 锁滚 | **命中（主因）** | 实测面板开着时 `window.scrollTo(0,0)` 仍从 1688 滚到 1047；`html` 还是 `overflow: visible`。关掉后落点变成 0 |
+| 4 | `100vh` / `dvh` 随工具栏伸缩 | **命中（次要）** | 面板 `bottom: 0` 是**布局视口**的底边，布局视口不随工具栏变；可视高度从 844 变到 900 时面板底边跟着从 844 跳到 900 |
+| 5 | 被 section 的 `overflow` 裁切 / 层级打架 | 不是 | 面板 110 > 遮罩 100 > 圆点 45 > 页头 50 > 内容 |
+| 6 | 吸附滚动在弹层打开时仍在响应 | **命中** | 面板开着时 `html` 仍是 `scroll-snap-type: y mandatory`，背景一滚就自己翻屏 |
+| 7 | 打开/关闭的布局抖动 | 不是 | 头像 `width/height` 固定，面板高度实测全程 347px 不变 |
+
+所以真正的组合是 **3 + 6 + 4**：`overflow: hidden` 在 iOS 上锁不住滚动 → 背景照样滚、工具栏跟着收放 → 贴底的面板既被工具栏压住、又跟着 dvh 变；而整页强制吸附还在，滚一下就翻屏。2 是"看起来也怪"的那一半。
+
+修法（`use-overlay-behavior.ts` / `mbti-detail-sheet.tsx` / `globals.css`）：
+
+1. **锁滚整套**：记 `scrollY` → `body { position: fixed; top: -scrollY; width: 100% }` → 关闭时还原并 `scrollTo(0, scrollY)`。还原必须瞬时：全站 `scroll-behavior: smooth` 会让这次 `scrollTo` 变成动画，再被 `scroll-snap` 一夹，实测从第三屏关掉面板落点是 **81px**（应为 1688）。所以临时把 `scroll-behavior` 收成 `auto`。
+2. **暂停翻页**：锁滚同时给 `html` 打 `mb-overlay-open`，翻页器的 `isPaused()` 认这个类（比读 body 内联样式可靠）。同时 `html.mb-overlay-open { overflow: hidden; overscroll-behavior: none }` 并摘掉 `scroll-snap` —— iOS 在 body 固定时仍会整页橡皮筋。
+3. **面板贴"看得见"的底边**：`position: fixed; inset: auto 0 0 0`，`bottom` 用 `--mb-sheet-bottom`，由 `visualViewport` 算 `innerHeight - (height + offsetTop)`。工具栏吃掉多少就抬多少。
+4. **入场只动 transform + opacity**：`translateY(100%) → 0`，280ms `cubic-bezier(.22,.61,.36,1)`。代价是不能再套 motion 的包裹层 —— 那层 transform 本身就是可疑点 1。
+5. **hover 收进 `@media (hover: hover) and (pointer: fine)`**，另加 `:active { transform: scale(.98) }`、`-webkit-tap-highlight-color: transparent`、`touch-action: manipulation`。
+
+顺手修掉的两个真问题：
+
+- **拖拽判定用 state 会漏**：一次快扫整个发生在同一帧时，`pointerup` 的闭包里 `dragging` 还是 `false`，手一快就"拖了没反应"。改成 `draggingRef`，state 只负责切样式。测试也因此需要等入场动画结束再拖（280ms 内量到的坐标，按下时握把已经在别处）。
+- **双击卡片会立刻关掉**：第一下打开，第二下落在刚升起的遮罩上。遮罩点击加 420ms 静默期。
+
+### 二、情绪球点不动：一块 350×203 的隐形矩形
+
+`.home-copy` 上有 `pointer-events-auto`（上一轮为了让按钮可点加的）。它是一整块矩形，390×844 下实测 `top 321 / bottom 523 / left 20 / right 370` —— 正好压住右侧的「烦躁」(345,368) 与「委屈」(333,311) 两颗球：
+
+```
+elementFromPoint(345, 368) → div.home-copy   ← 点不到球
+```
+
+球在漂移、文案块的纵向位置又随屏高变化，所以是"有概率"点不到，且集中在右中那两颗。
+
+修法：这块文案整体 `pointer-events-none`，只给「树洞广场」按钮那一条恢复 `pointer-events-auto`。文字本身没有交互，让点击穿过去没有任何损失。
+
+复测后 12 颗球（含手机端隐藏的两颗桌面球）球心 `elementFromPoint` 全部命中自己。
+
+### 三、怎么调
+
+| 想改什么 | 改哪 |
+| --- | --- |
+| 面板入场时长/曲线 | `.mb-sheet` 的 `transition`（280ms，同一数值也写在 `mbti-detail-sheet.tsx` 的 `SLIDE_MS`） |
+| 下滑关闭阈值 | `mbti-detail-sheet.tsx` 的 `DISMISS_AT`（88px） |
+| 双击保护时长 | `OPEN_GUARD_MS`（420ms） |
+| 层级 | `globals.css` 顶部的 `--z-*`：面板 / 遮罩 / 圆点 / 页头 |

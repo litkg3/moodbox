@@ -25,12 +25,13 @@ function MbtiCard({
 }: {
   type: MbtiType;
   index: number;
-  onOpen: (type: MbtiType) => void;
+  /** 带上触发元素：关闭面板后焦点要回到这张卡（iOS 点按不会聚焦 button） */
+  onOpen: (type: MbtiType, trigger: HTMLElement) => void;
 }) {
   return (
     <button
       type="button"
-      onClick={() => onOpen(type)}
+      onClick={(event) => onOpen(type, event.currentTarget)}
       className={cn('mb-mbti-card', mbtiToken(type))}
       style={{ '--i': index } as CSSProperties}
       aria-label={`${type.code} ${type.name}，查看完整介绍`}
@@ -72,14 +73,29 @@ export function MbtiSection() {
   const [group, setGroup] = useState<MbtiGroup>('紫粉');
   const [dir, setDir] = useState<1 | -1>(1);
 
+  /** 打开面板的那张卡片，关闭后把焦点还给它 */
+  const triggerRef = useRef<HTMLElement | null>(null);
+  /** 面板是否已经开着：开着时忽略卡片上的重复点击（双击的第二下） */
+  const openRef = useRef(false);
+  openRef.current = detail !== null;
+
   const groupIndex = MBTI_GROUPS.findIndex((item) => item.key === group);
   const groupTypes = typesOfGroup(group);
 
-  const openDetail = useCallback((type: MbtiType) => {
+  const openDetail = useCallback((type: MbtiType, trigger?: HTMLElement) => {
+    if (trigger) triggerRef.current = trigger;
     setDetail(type);
     // 从「下一型」翻到别的组时，关掉面板应该停在那一组上
     setGroup((current) => (current === type.group ? current : type.group));
   }, []);
+
+  const openFromCard = useCallback(
+    (type: MbtiType, trigger: HTMLElement) => {
+      if (openRef.current) return;
+      openDetail(type, trigger);
+    },
+    [openDetail],
+  );
 
   const selectGroup = useCallback(
     (index: number) => {
@@ -117,7 +133,9 @@ export function MbtiSection() {
   const nextType =
     detailIndex >= 0 && detailIndex < MBTI_TYPES.length - 1 ? MBTI_TYPES[detailIndex + 1] : null;
 
-  const closeDetail = useCallback(() => setDetail(null), []);
+  const closeDetail = useCallback(() => {
+    setDetail(null);
+  }, []);
   const closeLightbox = useCallback(() => setLightboxOpen(false), []);
 
   return (
@@ -165,7 +183,7 @@ export function MbtiSection() {
           {/* 桌面：十六张一屏 */}
           <div className="mb-mbti-grid mb-mbti-grid-desktop">
             {MBTI_TYPES.map((type, index) => (
-              <MbtiCard key={type.code} type={type} index={index} onOpen={openDetail} />
+              <MbtiCard key={type.code} type={type} index={index} onOpen={openFromCard} />
             ))}
           </div>
 
@@ -176,7 +194,7 @@ export function MbtiSection() {
             data-dir={dir > 0 ? 'next' : 'prev'}
           >
             {groupTypes.map((type, index) => (
-              <MbtiCard key={type.code} type={type} index={index} onOpen={openDetail} />
+              <MbtiCard key={type.code} type={type} index={index} onOpen={openFromCard} />
             ))}
           </div>
         </div>
@@ -194,6 +212,7 @@ export function MbtiSection() {
         onNext={() => nextType && openDetail(nextType)}
         hasPrev={Boolean(prevType)}
         hasNext={Boolean(nextType)}
+        returnFocusTo={triggerRef.current}
       />
 
       <MbtiLightbox open={lightboxOpen} onClose={closeLightbox} />

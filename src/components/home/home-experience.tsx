@@ -145,8 +145,14 @@ export function HomeExperience() {
           onBurstComplete={handleBurstComplete}
         />
 
+        {/*
+          这一层只放文案，必须整块让点击穿过去 —— 它是一块 350×200 的矩形，
+          正好压住右侧的「烦躁」「委屈」两颗球：球在漂移，压进矩形里就点不动，
+          位置又随屏高变化，表现就是"有概率点不到"。
+          所以：容器和文字都不吃指针事件，只有「树洞广场」按钮那一条恢复。
+        */}
         <div className="pointer-events-none relative z-10 flex h-full flex-col items-center justify-center px-5 pb-24 pt-[96px] lg:pb-28 lg:pt-[108px]">
-          <div className="home-copy pointer-events-auto relative flex w-full max-w-[440px] flex-col items-center text-center">
+          <div className="home-copy relative flex w-full max-w-[440px] flex-col items-center text-center">
             <h1 className="mb-reveal flex flex-col items-center">
               <span className="home-title-brand font-display text-[26px] font-light leading-none tracking-[0.2em] text-ink/85 sm:text-[32px]">
                 MoodBox

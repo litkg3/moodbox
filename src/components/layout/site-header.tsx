@@ -38,7 +38,7 @@ export function SiteHeader() {
      */
     <header
       className={cn(
-        'fixed inset-x-0 top-0 z-50 flex min-h-[60px] items-center',
+        'fixed inset-x-0 top-0 z-[var(--z-nav)] flex min-h-[60px] items-center',
         'transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]',
         scrolled ? 'py-2' : 'py-3 sm:py-3.5',
       )}

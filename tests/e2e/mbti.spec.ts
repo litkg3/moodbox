@@ -385,6 +385,13 @@ test('人格详解（手机）：点卡片从底部升起详情面板，可下�
   await page.locator('.mb-mbti-grid-mobile .mb-mbti-card').first().click();
   const sheet = page.getByRole('dialog', { name: 'INTJ 建筑师' });
   await expect(sheet).toBeVisible();
+  await expect(sheet).toHaveAttribute('data-state', 'open');
+  /*
+   * 等入场滑完（280ms）再量、再拖。
+   * 面板是"从屏幕下方滑上来"的，动画期间它的位置每秒在变 —— 先量到 y 再按下，
+   * 按的时候抓握把已经在别处了，这是测试在追动画，不是用户会做的事。
+   */
+  await page.waitForTimeout(360);
 
   // bottom sheet：贴底、最高 70dvh
   const box = (await sheet.boundingBox())!;
@@ -466,4 +473,165 @@ test('减少动效：进场动画关掉，内容直接可见，翻页仍在', as
   await page.waitForTimeout(400);
   const vh = await page.evaluate(() => window.innerHeight);
   expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(vh * 2);
+});
+
+test('人格详解：详情面板挂在 body 上并固定在视口，祖先链没有 transform / filter', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openHome(page);
+  await goToScreen(page, 'mbti');
+
+  await page.locator('.mb-mbti-grid-mobile .mb-mbti-card').first().click();
+  const sheet = page.getByRole('dialog', { name: 'INTJ 建筑师' });
+  await expect(sheet).toHaveAttribute('data-state', 'open');
+  await page.waitForTimeout(360);
+
+  const info = await sheet.evaluate((el) => {
+    /*
+     * iOS 上「面板浮起来」最常见的原因是祖先带 transform / filter /
+     * backdrop-filter —— 这几样会把 position: fixed 的包含块从视口换成那个
+     * 祖先，面板就跟着页面滚动漂移。所以这里沿着祖先链一路查到 <html>。
+     */
+    const bad: string[] = [];
+    let node: HTMLElement | null = el.parentElement;
+    while (node && node !== document.documentElement) {
+      const cs = getComputedStyle(node);
+      if (
+        cs.transform !== 'none' ||
+        cs.filter !== 'none' ||
+        (cs as CSSStyleDeclaration & { backdropFilter?: string }).backdropFilter !== 'none' ||
+        cs.perspective !== 'none'
+      ) {
+        bad.push(`${node.tagName.toLowerCase()}.${node.className}`);
+      }
+      node = node.parentElement;
+    }
+    const rect = el.getBoundingClientRect();
+    return {
+      parent: el.parentElement?.tagName.toLowerCase(),
+      position: getComputedStyle(el).position,
+      bad,
+      bottom: Math.round(rect.bottom),
+      vh: window.innerHeight,
+    };
+  });
+
+  expect(info.parent).toBe('body');
+  expect(info.position).toBe('fixed');
+  expect(info.bad).toEqual([]);
+  // 贴着视口底边
+  expect(Math.abs(info.bottom - info.vh)).toBeLessThanOrEqual(2);
+
+  // 遮罩与面板是兄弟，且都在 portal 里（body 的直接子元素）
+  const order = await page.evaluate(() => {
+    const scrim = document.querySelector('.mb-sheet-scrim');
+    const panel = document.querySelector('.mb-sheet');
+    return {
+      sameParent: scrim?.parentElement === panel?.parentElement,
+      zScrim: Number(getComputedStyle(scrim!).zIndex),
+      zSheet: Number(getComputedStyle(panel!).zIndex),
+    };
+  });
+  expect(order.sameParent).toBe(true);
+  expect(order.zSheet).toBeGreaterThan(order.zScrim);
+});
+
+test('人格详解：面板打开时背景锁死，关闭后回到原处并把焦点还给卡片', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openHome(page);
+  await goToScreen(page, 'mbti');
+
+  const before = await page.evaluate(() => ({
+    y: Math.round(window.scrollY),
+    snap: getComputedStyle(document.documentElement).scrollSnapType,
+  }));
+  expect(before.y).toBeGreaterThan(0);
+
+  await page.locator('.mb-mbti-grid-mobile .mb-mbti-card').first().click();
+  const sheet = page.getByRole('dialog', { name: 'INTJ 建筑师' });
+  await expect(sheet).toHaveAttribute('data-state', 'open');
+  await page.waitForTimeout(360);
+
+  const locked = await page.evaluate(() => ({
+    position: document.body.style.position,
+    top: document.body.style.top,
+    paused: document.documentElement.classList.contains('mb-overlay-open'),
+    snap: getComputedStyle(document.documentElement).scrollSnapType,
+    overflow: getComputedStyle(document.documentElement).overflow,
+  }));
+  expect(locked.position).toBe('fixed');
+  expect(locked.top).toBe(`-${before.y}px`);
+  // 整页吸附在面板开着时让路（否则背景会自己翻屏）
+  expect(locked.paused).toBe(true);
+  expect(locked.snap).toBe('none');
+
+  // 背景真的滚不动：滚轮压在遮罩上
+  await page.mouse.move(20, 160);
+  await page.mouse.wheel(0, 600);
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(0);
+
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
+  await page.waitForTimeout(300);
+
+  const after = await page.evaluate(() => ({
+    y: Math.round(window.scrollY),
+    body: document.body.getAttribute('style') ?? '',
+    snap: getComputedStyle(document.documentElement).scrollSnapType,
+    focus: document.activeElement?.getAttribute('aria-label'),
+  }));
+  expect(after.y).toBe(before.y);
+  expect(after.body.trim()).toBe('');
+  expect(after.snap).toBe(before.snap);
+  expect(after.focus).toContain('INTJ');
+});
+
+test('人格详解：双击卡片不会把刚打开的面板关掉', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openHome(page);
+  await goToScreen(page, 'mbti');
+
+  const box = (await page.locator('.mb-mbti-grid-mobile .mb-mbti-card').first().boundingBox())!;
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.click(x, y);
+  await page.waitForTimeout(60);
+  // 第二下落在刚升起的遮罩上：属于「打开的余波」，要吞掉
+  await page.mouse.click(x, y);
+  await page.waitForTimeout(600);
+
+  await expect(page.getByRole('dialog', { name: 'INTJ 建筑师' })).toHaveAttribute(
+    'data-state',
+    'open',
+  );
+});
+
+test('人格详解：卡片的悬停效果只写给有鼠标的设备，触屏不会卡在浮起状态', async ({ page }) => {
+  await openHome(page);
+
+  const hoverMedias = await page.evaluate(() => {
+    const found: string[] = [];
+    const walk = (rules: CSSRuleList, media: string) => {
+      for (const rule of Array.from(rules)) {
+        if (rule instanceof CSSMediaRule) walk(rule.cssRules, rule.conditionText);
+        else if (rule instanceof CSSStyleRule && rule.selectorText.includes('.mb-mbti-card:hover')) {
+          found.push(media);
+        }
+      }
+    };
+    for (const sheet of Array.from(document.styleSheets)) {
+      try {
+        walk(sheet.cssRules, '');
+      } catch {
+        /* 跨域样式表读不到，忽略 */
+      }
+    }
+    return found;
+  });
+
+  expect(hoverMedias.length).toBeGreaterThan(0);
+  // 每一条 hover 规则都必须被 (hover: hover) and (pointer: fine) 圈住
+  for (const media of hoverMedias) expect(media).toContain('hover');
 });

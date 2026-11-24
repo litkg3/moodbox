@@ -42,6 +42,33 @@
   --shadow-card: 0 18px 46px -30px rgba(70, 55, 92, 0.32);
 }
 
+/*
+ * 浮层在场时（useOverlayBehavior 打上的标记）：
+ * 关掉整页吸附与回弹。锁滚动用的是 body position: fixed，这里再堵一道 ——
+ * iOS 在 body 固定时仍可能整页橡皮筋，那一下会让底下的面板跟着动。
+ */
+html.mb-overlay-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html.mb-overlay-open.mb-snap {
+  scroll-snap-type: none;
+}
+
+/*
+ * 层级刻度。浮层的 z-index 只从这里取，不要再写 110 / 120 这种裸数字：
+ * 面板 > 遮罩 > 圆点导航 > 页头 > 页面内容。
+ */
+:root {
+  --z-wheel-card: 40;
+  --z-screen-nav: 45;
+  --z-nav: 50;
+  --z-scrim: 100;
+  --z-sheet: 110;
+  --z-lightbox: 120;
+}
+
 /* ---------------- 星空主题的 token 覆写 ---------------- */
 
 html[data-theme='night'] {
@@ -1914,7 +1941,7 @@ html[data-theme='night'] .mb-post-skeleton {
   left: 16px;
   right: 16px;
   bottom: 16px;
-  z-index: 40;
+  z-index: var(--z-wheel-card);
 }
 
 /*
@@ -3166,7 +3193,7 @@ html.mb-js-pager .mb-screen {
   position: fixed;
   right: clamp(14px, 1.5vw, 26px);
   top: 50%;
-  z-index: 45;
+  z-index: var(--z-screen-nav);
   display: none;
   translate: 0 -50%;
   transition: opacity 0.4s ease;
@@ -3441,6 +3468,9 @@ html[data-theme='night'] {
   cursor: pointer;
   box-shadow: var(--shadow-card);
   backdrop-filter: blur(16px) saturate(1.06);
+  /* 点按不要出现 iOS 那块灰色高亮，也不要双击缩放 */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
   opacity: 0;
   translate: 0 18px;
   transition:
@@ -3466,10 +3496,25 @@ html[data-theme='night'] {
   }
 }
 
-.mb-mbti-card:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--mbti-accent) 40%, transparent);
-  box-shadow: 0 22px 44px -28px color-mix(in srgb, var(--mbti-accent) 55%, transparent);
+/*
+ * 触摸屏上没有"悬停"这回事：Safari 会把最后一次点按当成 hover 并一直留着，
+ * 卡片就卡在"浮起来"的状态（translateY + 阴影 + 头像放大），点开面板时
+ * 尤其明显。所以 hover 效果只在真有鼠标的设备上生效。
+ */
+@media (hover: hover) and (pointer: fine) {
+  .mb-mbti-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--mbti-accent) 40%, transparent);
+    box-shadow: 0 22px 44px -28px color-mix(in srgb, var(--mbti-accent) 55%, transparent);
+  }
+
+  .mb-mbti-card:hover .mb-mbti-avatar {
+    transform: scale(1.05) rotate(-1.5deg);
+  }
+}
+
+.mb-mbti-card:active {
+  transform: scale(0.98);
 }
 
 .mb-mbti-card:focus-visible {
@@ -3492,9 +3537,6 @@ html[data-theme='night'] {
   transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.mb-mbti-card:hover .mb-mbti-avatar {
-  transform: scale(1.05) rotate(-1.5deg);
-}
 
 .mb-mbti-meta {
   display: flex;
@@ -3801,11 +3843,51 @@ html[data-theme='night'] {
    人物详情面板：手机上 bottom sheet，桌面上居中弹层
    ============================================================ */
 
+/*
+ * 详情面板的遮罩与本体都是 body 的直接子元素（Portal），彼此是兄弟，
+ * 谁也不在谁的 backdrop-filter 里 —— 见 mbti-detail-sheet.tsx 顶部的说明。
+ */
+.mb-sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-scrim);
+  background: rgba(26, 22, 38, 0.32);
+  backdrop-filter: blur(14px);
+  opacity: 0;
+  transition: opacity 280ms ease;
+  touch-action: none;
+}
+
+.mb-sheet-scrim[data-state='open'] {
+  opacity: 1;
+}
+
+@supports not (backdrop-filter: blur(14px)) {
+  .mb-sheet-scrim {
+    background: rgba(26, 22, 38, 0.44);
+  }
+}
+
+/*
+ * 面板本体。三件事决定它在 iOS 上"稳不稳"：
+ *
+ * 1. `position: fixed` + `inset: auto 0 0 0`：贴视口底边，不参与页面布局，
+ *    页面滚不滚都与它无关；
+ * 2. `bottom` 用 --mb-sheet-bottom（由 JS 按 visualViewport 算）：iOS 的
+ *    布局视口不随工具栏伸缩，`bottom: 0` 会被工具栏压住，工具栏一收又突然
+ *    往下跳。抬起来的这段就是工具栏吃掉的高度；
+ * 3. 入场只动 transform 与 opacity：不碰 height/top，不触发布局，也就不抖。
+ */
 .mb-sheet {
-  position: relative;
+  position: fixed;
+  inset: auto 0 0 0;
+  bottom: var(--mb-sheet-bottom, 0px);
+  z-index: var(--z-sheet);
   display: flex;
   width: 100%;
+  max-width: 560px;
   max-height: 70dvh;
+  margin-inline: auto;
   flex-direction: column;
   overflow: hidden;
   border-radius: 24px 24px 0 0;
@@ -3821,13 +3903,35 @@ html[data-theme='night'] {
   box-shadow: 0 -30px 80px -44px rgba(40, 30, 60, 0.66);
   backdrop-filter: blur(26px) saturate(1.1);
   outline: none;
+  transform: translateY(100%);
+  opacity: 0;
+  transition:
+    transform 280ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 200ms linear;
+}
+
+.mb-sheet[data-state='open'] {
+  transform: translateY(0);
+  opacity: 1;
 }
 
 @media (min-width: 769px) {
   .mb-sheet {
+    inset: 50% 0 auto 0;
+    bottom: auto;
+    max-width: 480px;
     max-height: 78dvh;
     border-radius: 28px;
     box-shadow: 0 40px 100px -60px rgba(40, 30, 60, 0.8);
+    transform: translateY(calc(-50% + 28px));
+  }
+
+  .mb-sheet[data-state='open'] {
+    transform: translateY(-50%);
+  }
+
+  .mb-sheet-scrim {
+    backdrop-filter: blur(10px);
   }
 }
 
@@ -4009,7 +4113,7 @@ html[data-theme='night'] {
 .mb-lightbox {
   position: fixed;
   inset: 0;
-  z-index: 120;
+  z-index: var(--z-lightbox);
   display: flex;
   flex-direction: column;
   background: rgba(18, 15, 28, 0.8);

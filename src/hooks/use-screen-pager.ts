@@ -58,15 +58,23 @@ export function getPagerMode(): PagerMode {
 
 const ease = EASINGS[PAGE_SCROLL.EASING];
 
-/** 弹层 / 灯箱开着时暂停翻页：它们自己要占着滚轮和方向键 */
-function isPaused() {
+/**
+ * 弹层 / 灯箱开着时暂停翻页：它们自己要占着滚轮和方向键。
+ *
+ * `mb-overlay-open` 由 useOverlayBehavior 在锁滚动的同时打上，比读 body 的
+ * 内联样式可靠 —— 锁滚动用的是 `position: fixed`，overflow 只是顺带写的。
+ */
+export function isPagerPaused() {
   if (typeof document === 'undefined') return false;
   return (
+    document.documentElement.classList.contains('mb-overlay-open') ||
     document.body.style.overflow === 'hidden' ||
     document.documentElement.classList.contains('mb-motion-paused') ||
     document.querySelector('.mb-lightbox') !== null
   );
 }
+
+const isPaused = isPagerPaused;
 
 const TYPING = 'input, textarea, select, [contenteditable="true"]';
 
@@ -221,6 +229,8 @@ export function useScreenPager(ids: readonly string[]) {
   useEffect(() => {
     if (mode === 'js') return;
     const compute = () => {
+      // 浮层开着时 body 是 fixed，每屏的位置全变成 0，算出来的"当前屏"是假的
+      if (isPaused()) return;
       const vh = window.innerHeight;
       let best = 0;
       let bestScore = 0.35;
@@ -367,6 +377,7 @@ export function useScreenPager(ids: readonly string[]) {
     };
 
     const onScroll = () => {
+      if (isPaused()) return;
       if (runningRef.current || performance.now() < cooldownRef.current) return;
       const index = nearestIndex();
       if (index !== activeRef.current) commit(index);
