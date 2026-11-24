@@ -46,10 +46,14 @@ test('桌面端：所有入口都在页头那一行，底部不再有第二条�
 
   const nav = page.getByRole('navigation', { name: '功能导航' });
   await expect(nav).toBeVisible();
-  // 八项：开心罐、心事信箱、情绪足迹、呼吸放松、情绪测试、树洞广场、关于、清空数据
-  // 5 个页面链接 + 3 个按钮（开心罐、心事信箱是卡片，清空数据是动作）
-  await expect(nav.getByRole('link')).toHaveCount(5);
+  /*
+   * 九项：AI 陪聊、开心罐、心事信箱、情绪足迹、呼吸放松、情绪测试、树洞广场、
+   * 关于、清空数据 —— 6 个页面链接 + 3 个按钮（开心罐、心事信箱是卡片，清空数据是动作）。
+   * 「AI 陪聊」是第十六轮加的，排在第一位。
+   */
+  await expect(nav.getByRole('link')).toHaveCount(6);
   await expect(nav.getByRole('button')).toHaveCount(3);
+  await expect(nav.getByRole('link', { name: 'AI 陪聊' })).toBeVisible();
   await expect(nav.getByRole('button', { name: '开心罐' })).toBeVisible();
   await expect(nav.getByRole('button', { name: '心事信箱' })).toBeVisible();
   await expect(nav.getByRole('link', { name: '树洞广场' })).toBeVisible();
@@ -66,7 +70,7 @@ test('桌面端：所有入口都在页头那一行，底部不再有第二条�
   await expect(page.locator('.mb-dock')).toHaveCount(0);
 });
 
-test('移动端：右上角只有主页与更多，八个入口都收在更多里', async ({ page }) => {
+test('移动端：右上角只有主页与更多，九个入口都收在更多里', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openHome(page);
 
@@ -76,7 +80,9 @@ test('移动端：右上角只有主页与更多，八个入口都收在更多�
   await page.getByRole('button', { name: '更多' }).click();
   const menu = page.getByRole('menu', { name: '更多功能' });
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitem')).toHaveCount(8);
+  // 九项：AI 陪聊 + 原来那八项（呼吸放松/情绪测试/树洞广场/开心罐/心事信箱/情绪足迹/关于/设置）
+  await expect(menu.getByRole('menuitem')).toHaveCount(9);
+  await expect(menu.getByRole('menuitem', { name: 'AI 陪聊' })).toBeVisible();
   await expect(menu.getByRole('menuitem', { name: '开心罐' })).toBeVisible();
   await expect(menu.getByRole('menuitem', { name: '关于' })).toBeVisible();
 
@@ -423,7 +429,10 @@ test('导航里的每个页面入口都能打开，且没有控制台错误', as
   const hrefs = await nav
     .getByRole('link')
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('href') ?? ''));
-  expect(hrefs.length).toBe(5);
+  // 六个页面入口（含第十六轮新增的 /chat）
+  expect(hrefs.length).toBe(6);
+  // 「AI 陪聊」是最后加的，单独确认它确实在这批里
+  expect(hrefs).toContain('/chat');
 
   for (const href of hrefs) {
     const response = await page.goto(href, { waitUntil: 'domcontentloaded' });

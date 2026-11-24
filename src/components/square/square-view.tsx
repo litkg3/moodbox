@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   ChevronDown,
   Database,
+  Globe2,
   Heart,
   LockOpen,
   MapPin,
@@ -525,13 +526,7 @@ export function SquareView() {
             </button>
           </div>
 
-          {/* 数据存在哪必须写在页面上，不能让人以为换台设备还能看到 */}
-          {source ? (
-            <p className="mt-3 flex items-center gap-1.5 text-[11.5px] leading-relaxed text-ink-ghost">
-              <Database size={12} strokeWidth={1.6} className="shrink-0" aria-hidden="true" />
-              <span className="text-ink-faint">{source.label}</span>
-            </p>
-          ) : null}
+          {source ? <BackendNote label={source.label} /> : null}
 
           {/* 管理员入口不放在页面上，只留一个"已经进来"的提示与退出 */}
           {isAdmin ? (
@@ -876,6 +871,39 @@ function PinnedNotice() {
   );
 }
 
+/**
+ * 数据去向那一行。
+ *
+ * 「这些帖子所有人都能看见」必须写在页面上，不能让人以为只有自己看得到。
+ * 公开时用地球图标 + 大一号的字；本地模式下换成「只存在这台设备上」，
+ * 图标也跟着换 —— 这两句说的不是一件事，混用会让人误判自己的隐私。
+ *
+ * 单独抽成组件：两种文案的排版差异（字号、颜色、图标）值得单独写测试。
+ */
+export function BackendNote({ label }: { label: string }) {
+  const isPublic = label.includes('所有人都能看见');
+  return (
+    <p className="mb-square-note mt-3 flex items-start gap-1.5 text-[13px] leading-[1.8] text-ink-soft">
+      {isPublic ? (
+        <Globe2
+          size={14}
+          strokeWidth={1.7}
+          className="mt-[3px] shrink-0 text-lavender-deep"
+          aria-hidden="true"
+        />
+      ) : (
+        <Database
+          size={14}
+          strokeWidth={1.7}
+          className="mt-[3px] shrink-0 text-ink-ghost"
+          aria-hidden="true"
+        />
+      )}
+      <span>{label}</span>
+    </p>
+  );
+}
+
 /* ---------------- 单条帖子 ---------------- */
 
 function PostCard({
@@ -991,7 +1019,7 @@ function PostCard({
   }
 
   return (
-    <article className="mb-post-card rounded-[22px] border border-white/80 bg-white/66 p-5 transition-colors duration-500 hover:bg-white/74 sm:p-6">
+    <article className="mb-post-card rounded-[22px] p-5 sm:p-6">
       <header className="flex flex-wrap items-center gap-2 text-[11px] text-ink-ghost">
         <span className="text-ink-faint">{post.nickname}</span>
         {post.region ? (

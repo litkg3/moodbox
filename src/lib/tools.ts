@@ -9,6 +9,7 @@
  */
 
 export type ToolKey =
+  | 'chat'
   | 'jar'
   | 'letters'
   | 'calendar'
@@ -32,6 +33,11 @@ export interface ToolItem {
 }
 
 export const TOOL_ITEMS: readonly ToolItem[] = [
+  /*
+   * 「AI 陪聊」排第一：它不是又一个工具，而是"不知道点哪儿时"的入口。
+   * 桌面导航和手机「更多」都按这个顺序渲染。
+   */
+  { key: 'chat', label: 'AI 陪聊', kind: 'route', href: '/chat', hint: '说说话，有人在听' },
   { key: 'jar', label: '开心罐', kind: 'overlay', hint: '把开心的事叠成纸条，收进罐子里' },
   { key: 'letters', label: '心事信箱', kind: 'overlay', hint: '写下说不出口的事，封存或让它过去' },
   { key: 'calendar', label: '情绪足迹', kind: 'route', href: '/calendar', hint: '一个月里，你都经历了什么' },
@@ -45,6 +51,24 @@ export const TOOL_ITEMS: readonly ToolItem[] = [
    */
   { key: 'settings', label: '设置', kind: 'action', hint: '主题、音乐与数据' },
 ] as const;
+
+/**
+ * 「更多」面板的分区。
+ *
+ * 手机屏幕只有那么高，九项平铺会变成一张密密麻麻的表格。所以按
+ * 「常来 → 偶尔 → 这里」分三层：常用项在上，关于/设置在下方次级区，
+ * AI 陪聊单独拎出来当主入口（它同时还是页头那颗实心按钮）。
+ */
+export const MORE_MENU_PRIMARY: readonly ToolKey[] = ['chat'] as const;
+export const MORE_MENU_COMMON: readonly ToolKey[] = [
+  'breathe',
+  'quiz',
+  'square',
+  'jar',
+  'letters',
+  'calendar',
+] as const;
+export const MORE_MENU_SECONDARY: readonly ToolKey[] = ['about', 'settings'] as const;
 
 export const ALL_TOOLS: readonly ToolItem[] = TOOL_ITEMS;
 

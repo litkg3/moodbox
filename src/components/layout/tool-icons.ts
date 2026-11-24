@@ -4,6 +4,7 @@ import {
   Info,
   Mail,
   MessageCircleHeart,
+  MessageCircleMore,
   Settings2,
   Sparkles,
   Trash2,
@@ -14,6 +15,7 @@ import type { ToolKey } from '@/lib/tools';
 
 /** 工具入口的图标映射。集中在这里，避免每个导航组件各写一份。 */
 export const TOOL_ICONS: Record<ToolKey, LucideIcon> = {
+  chat: MessageCircleMore,
   jar: Sparkles,
   letters: Mail,
   calendar: Footprints,

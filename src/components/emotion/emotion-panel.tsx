@@ -10,6 +10,7 @@ import {
   Check,
   HeartHandshake,
   Mail,
+  MessageCircleMore,
   Sparkles,
   Sun,
   Wind,
@@ -212,6 +213,19 @@ function EmotionPanelContent({
 
       {/* 三个主按钮，居中排一排（窄屏换行也保持居中） */}
       <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">
+        {/*
+          「陪我聊聊」排在最前：这颗球带来的情绪，正好是陪聊最需要的上下文。
+          把 emotion 带在 query 上，/chat 会用它拼一句开场，并作为背景交给模型。
+        */}
+        <Link
+          href={`/chat?emotion=${emotion.id}`}
+          prefetch={false}
+          onClick={onClose}
+          className="mb-deep-btn-primary inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-[12.5px] tracking-[0.04em] transition-all duration-300 active:scale-[0.98]"
+        >
+          <MessageCircleMore size={14} strokeWidth={1.7} aria-hidden="true" />
+          陪我聊聊
+        </Link>
         {/*
           只有一句话的球（委屈、麻木）不显示「再给我一点温暖」：
           按下去还是同一句，换个动画重放一遍，用户只会以为按钮坏了。
