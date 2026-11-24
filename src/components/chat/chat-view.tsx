@@ -117,6 +117,17 @@ export function ChatView() {
     const sync = () => {
       root.style.setProperty('--chat-vv-h', `${Math.round(vv.height)}px`);
       /*
+       * `offsetTop` 才是真正把聊天页顶出屏幕的那个值。
+       *
+       * `position: fixed` 是相对**布局视口**定位的，而 iOS 弹出键盘时把
+       * **可视视口**整个向上平移（offsetTop 变成几百像素）。布局视口没动，
+       * fixed 层也没动，但人眼看到的窗口已经滑到下面去了 —— 于是输入栏
+       * 出现在可见区靠上的位置，下方留下一大片背景。
+       *
+       * 把 offsetTop 也写进变量，让聊天层跟着可见窗口一起下移。
+       */
+      root.style.setProperty('--chat-vv-top', `${Math.round(vv.offsetTop)}px`);
+      /*
        * 再单独写一份 `--app-vv-h`：`--chat-vv-h` 只管聊天页自己变矮，
        * 但 `body` 还挂着 `min-height: 100dvh`（812），文档照样可滚。
        * 键盘一弹，iOS 会把整个文档上滚，fixed 的聊天页跟着被推出屏幕 ——
@@ -137,6 +148,7 @@ export function ChatView() {
       vv.removeEventListener('scroll', sync);
       root.style.removeProperty('--chat-vv-h');
       root.style.removeProperty('--app-vv-h');
+      root.style.removeProperty('--chat-vv-top');
       root.style.removeProperty('--chat-kb');
     };
   }, []);
@@ -452,12 +464,7 @@ export function ChatView() {
   const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
 
   return (
-    /*
-     * 两层：外面这层只负责"占位 + 底色"，里面那层才是跟着可视视口收缩的
-     * 交互层。为什么必须分开，见 globals.css 里 `.mb-chat-reading` 的注释。
-     */
-    <div className="mb-chat-reading">
-      <div className="mb-chat-page">
+    <div className="mb-chat-page">
       <div className="mb-chat-grid">
         {/* 桌面 ≥1200 才出现的侧栏 */}
         <aside className="mb-chat-side" aria-label="对话历史">
@@ -611,7 +618,6 @@ export function ChatView() {
             </p>
           </form>
         </div>
-      </div>
       </div>
     </div>
   );

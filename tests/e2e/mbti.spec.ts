@@ -588,6 +588,72 @@ test('人格详解：面板打开时背景锁死，关闭后回到原处并把�
   expect(after.focus).toContain('INTJ');
 });
 
+test('人格详解：卡片在悬停/按下/获得焦点时都不改变几何', async ({ page }) => {
+  await openHome(page);
+  await goToScreen(page, 'mbti');
+
+  /*
+   * 这条是从"点一下卡片就上下抖"那件事里学到的教训。
+   *
+   * 之前两版修法（去掉 scale、压住 :hover:focus-visible）都是在跟具体的
+   * 属性打架，但根因是：卡片的位置由「会被点按改写的属性」决定。只要
+   * `:hover` / `:active` / `:focus-visible` 里还有 transform 或 translate，
+   * 松手、焦点回填、鼠标停留这几个时刻就会把它演成一段看得见的位移 ——
+   * 不同浏览器上还各演各的。
+   *
+   * 所以现在用结构来保证：这三条状态里**一个几何属性都不许有**。
+   * 反馈只走描边、阴影、亮度。
+   */
+  const offenders = await page.evaluate(() => {
+    const bad: string[] = [];
+    const walk = (rules: CSSRuleList) => {
+      for (const rule of Array.from(rules)) {
+        if (rule instanceof CSSMediaRule) walk(rule.cssRules);
+        else if (rule instanceof CSSStyleRule) {
+          if (!rule.selectorText.includes('.mb-mbti-card')) continue;
+          if (!/:hover|:active|:focus-visible/.test(rule.selectorText)) continue;
+          const { transform, translate, top, marginTop } = rule.style;
+          if (transform && transform !== 'none') bad.push(`${rule.selectorText} → transform: ${transform}`);
+          if (translate && translate !== 'none') bad.push(`${rule.selectorText} → translate: ${translate}`);
+          if (top) bad.push(`${rule.selectorText} → top: ${top}`);
+          if (marginTop) bad.push(`${rule.selectorText} → margin-top: ${marginTop}`);
+        }
+      }
+    };
+    for (const sheet of Array.from(document.styleSheets)) {
+      try {
+        walk(sheet.cssRules);
+      } catch {
+        /* 跨域样式表读不到，忽略 */
+      }
+    }
+    return bad;
+  });
+  expect(offenders, '卡片的状态规则里不该有几何属性').toEqual([]);
+
+  // 实机行为也对一遍：悬停 → 按下 → 松开，位置一帧都不能变
+  const card = page.locator('.mb-mbti-grid-desktop .mb-mbti-card').first();
+  await card.scrollIntoViewIfNeeded();
+  const before = await card.boundingBox();
+  if (!before) throw new Error('卡片没渲染出来');
+
+  await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
+  await page.waitForTimeout(200);
+  const onHover = await card.boundingBox();
+
+  await page.mouse.down();
+  await page.waitForTimeout(200);
+  const onActive = await card.boundingBox();
+  await page.mouse.up();
+  await page.waitForTimeout(500);
+  const afterUp = await card.boundingBox();
+
+  for (const [name, box] of Object.entries({ onHover, onActive, afterUp })) {
+    expect(box!.x, `${name} 时横向位置变了`).toBeCloseTo(before.x, 1);
+    expect(box!.y, `${name} 时纵向位置变了`).toBeCloseTo(before.y, 1);
+    expect(box!.height, `${name} 时高度变了`).toBeCloseTo(before.height, 1);
+  }
+});
 test('人格详解：关闭面板后焦点回到卡片，卡片不会因为焦点+悬停而往下晃', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openHome(page);

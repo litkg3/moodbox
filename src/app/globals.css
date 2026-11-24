@@ -3901,27 +3901,38 @@ html[data-theme='night'] {
   touch-action: manipulation;
   opacity: 0;
   translate: 0 18px;
+  /*
+   * 过渡列表里**不写 transform / translate**：卡片一旦有可过渡的几何属性，
+   * 后面任何一条状态规则都可能把它演成位移。入场那段落位由 animation 负责，
+   * 交互反馈只走颜色与阴影。
+   */
   transition:
-    transform 0.45s cubic-bezier(0.22, 0.61, 0.36, 1),
     border-color 0.4s ease,
     box-shadow 0.45s ease;
 }
 
+/*
+ * 入场用 transition，**不用 animation**。
+ *
+ * 原先这里是一条 `animation: … forwards`。`forwards` 的意思是动画结束后
+ * 继续替元素"保管" `translate` 这个属性 —— 也就是说，卡片落位之后，它的
+ * 位置仍然由一段已经跑完的动画决定。Safari 在页面结构发生变化时（比如
+ * 打开详情面板把 body 改成 fixed）会让这类动画重新迭代一次，卡片就会
+ * 从 +18px 再落一遍，看起来就是"点一下，卡片上下抖了一下"。
+ *
+ * transition 只描述"从旧值到新值"这一件事，跑完即结束，不在元素上留下
+ * 任何持续生效的状态。效果一样，但页面后面再怎么重排，它都不会重播。
+ */
 [data-revealed='true'] .mb-mbti-card {
-  animation: mb-mbti-card-in 0.6s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
   /* 十六张依次落位：一张差 18ms，一秒内铺满 */
-  animation-delay: calc(var(--i, 0) * 18ms);
-}
-
-@keyframes mb-mbti-card-in {
-  from {
-    opacity: 0;
-    translate: 0 18px;
-  }
-  to {
-    opacity: 1;
-    translate: 0 0;
-  }
+  --mbti-in-delay: calc(var(--i, 0) * 18ms);
+  opacity: 1;
+  translate: 0 0;
+  transition:
+    opacity 0.6s cubic-bezier(0.22, 0.61, 0.36, 1) var(--mbti-in-delay),
+    translate 0.6s cubic-bezier(0.22, 0.61, 0.36, 1) var(--mbti-in-delay),
+    border-color 0.4s ease,
+    box-shadow 0.45s ease;
 }
 
 /*
@@ -3930,51 +3941,38 @@ html[data-theme='night'] {
  * 尤其明显。所以 hover 效果只在真有鼠标的设备上生效。
  */
 @media (hover: hover) and (pointer: fine) {
+  /*
+   * 悬停只换颜色和阴影，**不动几何**。
+   *
+   * 这里先后写过 `translateY(-2px)` 和 `scale(1.05)`，两次都被人眼读成
+   * "点一下就晃"。根因不在某一个值，而在于「卡片的位置由一个会被点按
+   * 改写的属性决定」这件事本身：`:active` / `:hover` / `:focus-visible`
+   * 会在松手、焦点回填、鼠标停留这几个时刻轮流成立，任何一条带位移，
+   * 过渡都会把它演成一段看得见的移动。
+   *
+   * 与其逐条去压，不如让卡片永远不动 —— 反馈交给描边、阴影和头像亮度。
+   */
   .mb-mbti-card:hover {
-    transform: translateY(-2px);
     border-color: color-mix(in srgb, var(--mbti-accent) 40%, transparent);
     box-shadow: 0 22px 44px -28px color-mix(in srgb, var(--mbti-accent) 55%, transparent);
   }
 
   .mb-mbti-card:hover .mb-mbti-avatar {
-    transform: scale(1.05) rotate(-1.5deg);
-  }
-
-  /*
-   * 点开卡片 → 关闭面板，焦点会回到这张卡上（浏览器把焦点还给触发器），
-   * 而鼠标还停在原处 —— 于是 `:hover` 和 `:focus-visible` **同时**成立。
-   *
-   * 两条规则的 transform 打架：`:hover` 要 -2px 浮起，`:active`（松手瞬间）
-   * 走完了插值，`transition-duration: 0.12s` 又比 hover 的 0.45s 短 ——
-   * 结果卡片先被按下去、再慢慢浮回来，视觉上就是"关掉面板，卡片往下晃一下"。
-   *
-   * 键盘用户真正需要的是那个 outline，不是位移。所以焦点在卡片上时不浮。
-   */
-  .mb-mbti-card:hover:focus-visible {
-    transform: none;
-  }
-
-  .mb-mbti-card:hover:focus-visible .mb-mbti-avatar {
-    transform: none;
+    /* 只提一点亮度。scale 会被读成"头像跳了一下"，而且会牵动卡片内的排版 */
+    filter: brightness(1.03) saturate(1.02);
   }
 }
 
 /*
- * 按压反馈：只沿纵向再压 1px，**不做 scale**。
+ * 按压反馈：只有描边变实、阴影收紧，**没有任何位移**。
  *
- * 以前这里是 `transform: scale(0.98)`，而 hover 写的是 `translateY(-2px)`。
- * 两条规则改的是同一个 `transform`，按下时后者被整个替换掉 —— 浏览器于是
- * 从「位移 -2 / 缩放 1」插值到「位移 0 / 缩放 0.98」，卡片一边往回跳一边缩小，
- * 面积从 327 摆到 322 再弹回来。0.45s 的缓动把这段过程拉得很长，
- * 看起来就是"点一下卡片，整片都在晃"。
- *
- * 现在 transform 里永远只有一个 translateY，插值是一条直线；按下时把时长
- * 收到 120ms（按下去要跟手），松手仍用 450ms 慢慢浮回 —— 快进慢出，不晃。
+ * 上一版这里是 `translateY(-1px)`。1px 在桌面上几乎看不见，但松手后要走完
+ * 0.45s 的过渡才回到原位 —— 手机上这就是一条缓慢的下沉再浮起，读起来
+ * 正是"卡片上下抖了一下"。既然按下的反馈不靠位移也能说清楚，就不冒这个险。
  */
 .mb-mbti-card:active {
-  transform: translateY(-1px);
-  transition-duration: 0.12s;
   border-color: color-mix(in srgb, var(--mbti-accent) 46%, transparent);
+  box-shadow: 0 10px 24px -20px color-mix(in srgb, var(--mbti-accent) 60%, transparent);
 }
 
 .mb-mbti-card:focus-visible {
@@ -4258,7 +4256,7 @@ html[data-theme='night'] {
 
   /* 十六张的错峰在手机上没意义（一次只放四张），改成一张 40ms */
   [data-revealed='true'] .mb-mbti-grid-mobile .mb-mbti-card {
-    animation-delay: calc(var(--i, 0) * 40ms);
+    --mbti-in-delay: calc(var(--i, 0) * 40ms);
   }
 
   .mb-mbti-note {
@@ -4735,11 +4733,17 @@ html[data-theme='night'] {
     transition: none;
   }
 
-  .mb-mbti-card {
+  /*
+   * 两个选择器都要写：`[data-revealed='true'] .mb-mbti-card` 的特异性
+   * 比单个类高，只写 `.mb-mbti-card` 会被它盖掉 —— 那样"减少动效"下
+   * 卡片仍然要慢慢淡进来。
+   */
+  .mb-mbti-card,
+  [data-revealed='true'] .mb-mbti-card {
     opacity: 1;
     translate: none;
     animation: none !important;
-    transition: none;
+    transition: none !important;
   }
 
   .mb-mbti-grid-mobile {
@@ -4760,20 +4764,36 @@ html[data-theme='night'] {
    ============================================================ */
 
 /*
- * 聊天页分两层，是为了让"键盘弹出"这件事真的成立。
+ * 聊天页 = 一块"贴在可视视口上"的固定层。
  *
- * `.mb-chat-page` 是固定层，高度跟着 `--chat-vv-h`（可视视口）收缩 ——
- * 它自己没问题。问题在它下面：`body` 还挂着 `min-height: 100dvh`，
- * 而 dvh 不认键盘，文档永远比屏幕高。iOS 键盘一弹就会把这个高度差
- * 拿去滚页面，fixed 层跟着整屏上移 —— 于是上方只剩一片纯色底、
- * 输入栏沉到屏幕外，正是用户看到的那个样子。
+ * 这里踩过的坑值得写清楚，因为它在桌面浏览器里**复现不出来**：
  *
- * 所以外面再包一层 `.mb-chat-reading`：它只做两件事 ——
- * 把文档高度钉在可视视口上（顺手把底色挪过来，别让 fixed 层带着底色一起跑），
- * 以及给 `:has()` 一个挂钩，让下面那几条 `body / html` 的规则只在聊天页生效。
+ * 1. `position: fixed` 是相对**布局视口**定位的。iOS 弹出键盘时，布局视口
+ *    一点没变，变的是**可视视口** —— 它变矮，而且会被整个向上平移
+ *    （`visualViewport.offsetTop` 变成几百像素）。fixed 层不会跟着平移，
+ *    于是人眼看到的窗口滑走了，输入栏出现在可见区靠上的位置，下面留出
+ *    一大片背景。这就是"点了输入框只看到背景"的真正原因。
+ * 2. 所以高度必须取 `--chat-vv-h`（可视视口高），位置必须再加上
+ *    `--chat-vv-top`（可视视口偏移）。两个变量都由 ChatView 从
+ *    `visualViewport` 同步，resize / scroll 都听。
+ * 3. 页头那段高度用 padding-top 让出来，而不是写成 `top`。写成 `top` 的话，
+ *    键盘一弹 `top` 和 `offsetTop` 会各算一次，底部就会被键盘吃掉一截页头。
+ *
+ * 桌面上没有键盘这回事，两个变量都是原值，行为和不写一样。
  */
-.mb-chat-reading {
-  min-height: calc(var(--app-vv-h, 100dvh) - var(--header-h) - var(--header-safe));
+.mb-chat-page {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  height: var(--chat-vv-h, 100dvh);
+  /* 跟着可视视口一起平移；键盘收起时是 0，等于没写 */
+  transform: translate3d(0, var(--chat-vv-top, 0px), 0);
+  /* 页头（含刘海）占的高度，用内边距让出来 */
+  padding-top: calc(var(--header-h) + var(--header-safe));
+  flex-direction: column;
   background:
     radial-gradient(
       120% 60% at 50% 0%,
@@ -4783,55 +4803,34 @@ html[data-theme='night'] {
     color-mix(in srgb, var(--color-cream) 74%, transparent);
 }
 
-.mb-chat-page {
-  position: fixed;
-  /* 页头高度取同一个变量：页头改成 64px 之后，这里不再跟着写死 60 */
-  inset: calc(var(--header-h) + var(--header-safe)) 0 0 0;
-  z-index: 10;
-  display: flex;
-  height: calc(var(--chat-vv-h, 100dvh) - var(--header-h) - var(--header-safe));
-  flex-direction: column;
-  /* 底色归外层，这一层透明 —— 它会被键盘推着走，不该带着颜色跑 */
-  background: transparent;
-}
-
 /*
- * 把文档钉死：高度跟着可视视口，并且不许滚。
+ * 文档本身也钉住：聊天页是 fixed 的，文档高一点矮一点不影响它，
+ * 但留出滚动余量会让 iOS 在键盘弹出时先去滚文档 —— 滚完再平移可视视口，
+ * 两件事叠加，位置就难算准了。这里索性不给它可滚的余地。
  *
- * 三条缺一不可：
- * - `body` 的 min-height 必须听 `--app-vv-h`，否则 812 这个值会把文档撑回原形；
- * - `#main-content` 加 `contain: size layout`，让它的高度只由自己的 min-height
- *   决定，不再被里面那个 fixed 子元素或者长内容撑开；
- * - `html / body` 的 `overflow: hidden` 兜底，iOS 上键盘滚动的目标常常是
- *   body 而不是 window，光靠 JS 的 scrollTo 拦不住。
- *
- * 只对聊天页生效：其它页面本来就要能滚，`:has()` 在这里当结构开关用。
+ * 注意只写 `body`，**不要**写 `html { overflow: hidden }`：
+ * html 一旦成为滚动容器就会建立层叠上下文，把 `z-index: -1` 的背景层
+ * 抬到内容之上（实测会盖住侧栏按钮）。
  */
-body:has(.mb-chat-reading) {
-  min-height: calc(var(--app-vv-h, 100dvh) - var(--header-h) - var(--header-safe));
+body:has(.mb-chat-page) {
+  height: var(--app-vv-h, 100dvh);
+  min-height: 0;
   overflow: hidden;
   overscroll-behavior: none;
 }
 
-#main-content:has(> .mb-chat-reading) {
+#main-content:has(> .mb-chat-page) {
   contain: size layout;
 }
 
-html:has(> body .mb-chat-reading) {
+html:has(> body .mb-chat-page) {
   overscroll-behavior: none;
 }
 
 @media (min-width: 1024px) {
   .mb-chat-page {
     /* 桌面上给页头下面多留 20px，对话区不贴着导航 */
-    inset: calc(var(--header-h) + var(--header-safe) + 20px) 0 0 0;
-    height: calc(var(--chat-vv-h, 100dvh) - var(--header-h) - var(--header-safe) - 20px);
-  }
-
-  /* 桌面上没有键盘这回事，外层不必占位，底色也交回给固定层 */
-  .mb-chat-reading {
-    min-height: 0;
-    background: none;
+    padding-top: calc(var(--header-h) + var(--header-safe) + 20px);
   }
 }
 

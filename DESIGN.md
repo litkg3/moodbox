@@ -1620,3 +1620,118 @@ Received: "matrix(1, 0, 0, 1, 0, -2)"
 | 键盘多高才算"弹起" | `chat-view.tsx` 里 `--chat-kb` 的算式（`innerHeight - vv.height - vv.offsetTop`） |
 | 卡片按下时的位移手感 | `.mb-mbti-card:active` 的 `translateY` 与 `transition-duration` |
 | 焦点态要不要浮起 | `.mb-mbti-card:hover:focus-visible` |
+
+---
+
+## 第二十一轮：上一版为什么没修好
+
+上一轮的两个"修复"在真机上都没生效。原因不是改错了地方，是**验错了对象**：我用 Chromium 模拟了一个自己想象出来的症状，然后在那个想象里通过了测试。这一轮先把"真机到底做了什么"写清楚，再改。
+
+### 一、聊天页：fixed 不动，动的是可视视口
+
+上一版认定"iOS 会滚动文档，把 fixed 层滚出屏幕"，于是一路加锁：`body` 的 min-height 跟着视口、`#main-content` 加 `contain`、`html/body` 加 `overflow: hidden`。实测（Chromium 里设 `vv.height = 508`）全部通过 —— 然后真机照旧坏。
+
+错在把两件事混成了一件。iOS 弹键盘时其实是：
+
+1. **可视视口变矮**（844 → 508）；
+2. **可视视口被整个向上平移**（`visualViewport.offsetTop` 变成几百像素）。
+
+`position: fixed` 是相对**布局视口**定位的。布局视口一点没动，所以 fixed 层原地不动；但人眼看到的窗口已经滑到下面去了 —— 屏幕坐标 = 布局坐标 − `offsetTop`。于是：
+
+- 聊天层在布局上占 `[0, 508]`，映射到屏幕是 `[-288, 220]`：**上边被切掉，下边只到 220**；
+- 输入栏（布局 508）出现在屏幕 220，正好是"输入框被顶上去了"；
+- 屏幕 220 以下没有任何内容，露出底色 —— **"只看到背景"**。
+
+更糟的是，上一版加的锁正好把"滚文档"这条路堵死了，iOS 只剩"平移视口"这一个选择，等于亲手把症状做成了必然。
+
+#### 这一版怎么改
+
+不看 `dvh`，也不猜浏览器会滚哪个东西，直接让聊天层**贴在可视视口上**：
+
+```css
+.mb-chat-page {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--chat-vv-h, 100dvh);      /* 可视视口的高 */
+  transform: translate3d(0, var(--chat-vv-top, 0px), 0);  /* 可视视口的位移 */
+  padding-top: calc(var(--header-h) + var(--header-safe));
+}
+```
+
+`--chat-vv-h` 和 `--chat-vv-top` 都由 ChatView 从 `visualViewport` 同步（`resize` 与 `scroll` 都听）。页头那段高度用 `padding-top` 让出来，而不是写成 `top` —— 写成 `top` 的话，`top` 和 `offsetTop` 会各算一次，底部就被吃掉一截页头。
+
+上一轮那层 `.mb-chat-reading` 整个删掉了。它当初存在的唯一理由是"承接底色"，结果 fixed 层被顶走时，露出来的正是它 —— 等于把"只剩背景"这件事做得更彻底。
+
+#### 这次的断言是照真机行为写的
+
+测试里把两件事一起模拟：
+
+```ts
+Object.defineProperty(vv, 'height', { value: window.innerHeight - 336 });
+Object.defineProperty(vv, 'offsetTop', { value: 288 });
+vv.dispatchEvent(new Event('resize'));
+vv.dispatchEvent(new Event('scroll'));
+```
+
+然后要求聊天层**按屏幕坐标**对齐：
+
+```ts
+expect(state.pageTop).toBe(state.vvTop);              // 上边贴住可见区顶
+expect(state.pageBottom).toBe(state.visibleBottom);   // 下边贴住可见区底
+expect(state.composerBottom).toBe(state.visibleBottom);
+```
+
+把 `transform` 那行临时改成 `none` 再跑，报的正是：
+
+```
+Error: 聊天层上边要贴住可见区顶部
+Expected: 288
+Received: 0
+```
+
+288 就是上面算出来的那个偏移量。这条测试现在抓的是真机症状，不是我的想象。
+
+### 二、MBTI 卡片：不再跟属性打架，直接让它不能动
+
+上一版把晃动归到 `:hover:focus-visible` 同时成立，加了一条 `transform: none`。真机上还是晃。
+
+这次先逐帧量了一遍点击全过程（每帧记 `getBoundingClientRect().top` 和 `transform`）：
+
+| 时刻 | top | transform |
+| --- | --- | --- |
+| 按下 | 149.8 | `matrix(…, -0.64)` |
+| 按到底 | 149.2 | `matrix(…, -1.23)` |
+| 松手 150ms | 149.4 | `matrix(…, -0.98)` |
+| 松手 450ms | 150.4 | `none` |
+
+摆幅 1.2px，走 450ms —— 在桌面浏览器里几乎看不出来，但在手机上这就是一条"先沉下去、再慢慢浮起来"的曲线，读起来就是"卡片上下抖了一下"。上一版之所以没解决，是因为它只压了"关闭面板之后"那一刻，而**按下到松手这段本身就带位移**。
+
+结论是：问题不在某一个值，而在于「卡片的位置由会被点按改写的属性决定」。`:active` / `:hover` / `:focus-visible` 会在按下、松手、焦点回填、鼠标停留这几个时刻轮流成立，只要其中任何一条写了几何属性，过渡就会把它演成一段看得见的移动 —— 而且各浏览器演得还不一样。
+
+所以这次不逐条压，直接从结构上保证：
+
+- `transition` 列表里**不写** `transform` / `translate`；
+- `:hover` 只换描边、阴影和头像亮度（不做 `scale`，它会牵动卡内排版）；
+- `:active` 只收阴影，**零位移**；
+- 入场从 `animation: … forwards` 改成 **transition**。
+
+最后一条值得单独说。`animation-fill-mode: forwards` 的意思是动画跑完之后继续替元素"保管" `translate` —— 卡片的位置从此由一段已经结束的动画决定。Safari 在页面结构变化时（比如打开详情面板把 `body` 改成 `fixed`）会让这类动画重新迭代一次，卡片就从 `+18px` 再落一遍。这正是"点一下，卡片上下抖了一下"的另一个来源，而它在 Chromium 里同样复现不出来。换成 transition 之后没有持续生效的状态，页面再怎么重排也不会重播。
+
+新增一条结构性断言，扫全部样式表：`.mb-mbti-card` 的 `:hover` / `:active` / `:focus-visible` 规则里**不许出现** `transform`、`translate`、`top`、`margin-top`；再配合实时量一次 `hover → mousedown → mouseup` 三态的 `boundingBox`，要求 x/y/height 全部不变。
+
+顺带修了"减少动效"那条覆盖：原来只写 `.mb-mbti-card`，特异性 (0,1,0) 输给 `[data-revealed='true'] .mb-mbti-card` 的 (0,2,0)，所以"减少动效"下卡片其实还在慢慢淡进来。两个选择器都写上。
+
+### 三、怎么验证的
+
+- `tsc --noEmit` 通过；`vitest` 254 条全绿；
+- `playwright`：`round16` + `mbti` 合计 37 条全绿，其中两条是按真机行为新写/改写的；
+- 两条关键断言都做了反向验证（临时撤掉修复 → 测试必须红），确认不是自我安慰式的绿。
+
+### 四、还没被证实的部分
+
+上面所有结论来自 Chromium 里对 `visualViewport` 的模拟，以及逐帧几何采样。iOS Safari 的真实行为（尤其是键盘动画期间 `offsetTop` 的取值节奏）没法在这里跑。如果真机上还有偏差，最可能的两处是：
+
+| 现象 | 先查这里 |
+| --- | --- |
+| 键盘弹起后仍有一截空白 | `--chat-vv-top` 是否真的被写成非 0（在 Safari 里 `visualViewport.offsetTop` 有时滞后） |
+| 键盘收起后页面没回到原位 | `visualViewport` 的 `resize` 在失焦时是否触发；必要时在 `focusout` 里补一次同步 |

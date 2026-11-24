@@ -865,7 +865,19 @@ test.describe('移动端聊天输入框', () => {
 test.describe('移动端键盘弹出时的整页行为', () => {
   test.use({ viewport: MOBILE, hasTouch: true, isMobile: true });
 
-  test('键盘弹出时主文档没有滚动余量，对话区仍在可视范围内', async ({ page }) => {
+  /*
+   * 这一条模拟的是 iOS 的**完整**行为，不是只有"变矮"。
+   *
+   * 键盘弹出时 iOS 做两件事：
+   *   1. 可视视口变矮（height 从 844 掉到 508）；
+   *   2. 为了让光标露出来，把可视视口整个向上平移（offsetTop 变成几百像素）。
+   *
+   * 第 2 件才是"只看到背景"的真凶：`position: fixed` 相对布局视口定位，
+   * 布局视口没动，所以 fixed 层原样留在原地，而人眼看到的窗口已经滑走了。
+   *
+   * 上一版只模拟了第 1 件，所以在 Chromium 里一直是绿的，真机上照旧坏。
+   */
+  test('键盘把可视视口平移后，聊天层仍然贴在可见区里', async ({ page }) => {
     await gotoHydrated(page, '/chat');
     await expect(page.locator('.mb-chat-page')).toBeVisible();
 
@@ -877,14 +889,17 @@ test.describe('移动端键盘弹出时的整页行为', () => {
       timeout: 20_000,
     });
 
-    // 模拟键盘：iOS 上 innerHeight 不变，只变 visualViewport
-    await page.evaluate(() => {
+    const PAN = 288;
+    await page.evaluate((pan) => {
       const vv = window.visualViewport;
       if (!vv) throw new Error('这个浏览器没有 visualViewport，测不了键盘');
+      // 844 - 508 = 336 的键盘高度；再让可视视口上移 pan
       Object.defineProperty(vv, 'height', { value: window.innerHeight - 336, configurable: true });
+      Object.defineProperty(vv, 'offsetTop', { value: pan, configurable: true });
       vv.dispatchEvent(new Event('resize'));
-    });
-    await page.waitForTimeout(300);
+      vv.dispatchEvent(new Event('scroll'));
+    }, PAN);
+    await page.waitForTimeout(320);
 
     const state = await page.evaluate(() => {
       const html = document.documentElement;
@@ -892,41 +907,44 @@ test.describe('移动端键盘弹出时的整页行为', () => {
         const el = document.querySelector(sel);
         return el ? el.getBoundingClientRect().toJSON() : null;
       };
-      const vvH = Math.round(window.visualViewport!.height);
+      const vv = window.visualViewport!;
+      const vvH = Math.round(vv.height);
+      const vvTop = Math.round(vv.offsetTop);
       // 试着把页面滚下去：不该成功
       window.scrollTo(0, 400);
+      const visibleBottom = vvTop + vvH;
       return {
         vvH,
-        vvTop: Math.round(window.visualViewport!.offsetTop),
+        vvTop,
+        visibleBottom,
         scrollY: Math.round(window.scrollY),
         docScrollable: html.scrollHeight > html.clientHeight,
-        bodyH: Math.round(document.body.getBoundingClientRect().height),
         pageTop: Math.round(box('.mb-chat-page')!.top),
         pageBottom: Math.round(box('.mb-chat-page')!.bottom),
         scrollTop: Math.round(box('.mb-chat-scroll')!.top),
+        composerTop: Math.round(box('.mb-chat-composer')!.top),
         composerBottom: Math.round(box('.mb-chat-composer')!.bottom),
-        headerBottom: Math.round(box('header.mb-header')!.bottom),
         visibleBubble: (() => {
           const bubble = document.querySelector('.mb-chat-bubble-ai')?.getBoundingClientRect();
           if (!bubble) return false;
-          // 气泡至少要有一截落在"页头下方 ~ 输入栏上方"这段可见区里
-          return bubble.bottom > 56 && bubble.top < vvH - 1;
+          // 气泡要真的落在可见窗口里（不是落在布局视口里）
+          return bubble.bottom > vvTop && bubble.top < visibleBottom - 1;
         })(),
       };
     });
 
-    // 页面本身不该能滚 —— 一旦能滚，iOS 就会把 fixed 的聊天层滚出屏幕
+    // 文档不该可滚：能滚的话 iOS 会先滚文档、再平移视口，两件事叠在一起更难算
     expect(state.docScrollable, '主文档不该有滚动余量').toBe(false);
     expect(state.scrollY).toBe(0);
-    expect(state.vvTop).toBe(0);
 
-    // 聊天层贴着页头、贴着可视底边，没有跑出视口
-    expect(state.pageTop).toBe(state.headerBottom);
-    expect(state.pageBottom).toBeLessThanOrEqual(state.vvH + 1);
-    expect(state.composerBottom).toBeLessThanOrEqual(state.vvH + 1);
+    // 聊天层要跟着可视视口一起平移，上下边都对齐到**可见**窗口
+    expect(state.pageTop, '聊天层上边要贴住可见区顶部').toBe(state.vvTop);
+    expect(state.pageBottom, '聊天层下边要贴住可见区底部').toBe(state.visibleBottom);
+    expect(state.composerBottom, '输入栏要正好落在键盘上方').toBe(state.visibleBottom);
 
-    // 上方看得见对话本身
-    expect(state.scrollTop).toBeLessThan(state.composerBottom);
-    expect(state.visibleBubble, '键盘弹起后气泡仍在可见区').toBe(true);
+    // 上方看得见对话本身，而不是一片背景
+    expect(state.scrollTop).toBeGreaterThanOrEqual(state.vvTop);
+    expect(state.scrollTop).toBeLessThan(state.composerTop);
+    expect(state.visibleBubble, '平移后气泡仍在可见区').toBe(true);
   });
 });
