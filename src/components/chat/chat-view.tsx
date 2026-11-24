@@ -143,9 +143,24 @@ export function ChatView() {
     sync();
     vv.addEventListener('resize', sync);
     vv.addEventListener('scroll', sync);
+
+    /*
+     * 有些 iOS 版本收起键盘时只把可视视口还原，**不补一次 resize**。
+     * 那样 `--chat-vv-h` / `--chat-vv-top` 会停在键盘还在时的值，页面
+     * 就卡在偏移状态里。失焦之后隔一拍再同步一次，成本几乎为零。
+     */
+    let blurTimer = 0;
+    const onFocusOut = () => {
+      window.clearTimeout(blurTimer);
+      blurTimer = window.setTimeout(sync, 140);
+    };
+    document.addEventListener('focusout', onFocusOut);
+
     return () => {
       vv.removeEventListener('resize', sync);
       vv.removeEventListener('scroll', sync);
+      document.removeEventListener('focusout', onFocusOut);
+      window.clearTimeout(blurTimer);
       root.style.removeProperty('--chat-vv-h');
       root.style.removeProperty('--app-vv-h');
       root.style.removeProperty('--chat-vv-top');
