@@ -34,17 +34,11 @@ export function SiteHeader() {
 
   return (
     /*
-     * `items-center` + 固定最小高度：页头自己撑出一块确定的高度，
-     * 底下的实底就不会比内容矮半截 —— 否则滚动时缩小了内边距，
-     * 页头底部会露出一条能看见正文的缝。
+     * 高度固定 64px（`.mb-header` 里写死，滚动时也不再缩）。
+     * 以前滚动前后是 68 / 60 两档，页头一缩底下的内容就跟着挪，
+     * 眼睛看到的是"页面被推了一下"；现在只有实底在淡入淡出。
      */
-    <header
-      className={cn(
-        'fixed inset-x-0 top-0 z-[var(--z-nav)] flex min-h-[60px] items-center',
-        'transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]',
-        scrolled ? 'py-2' : 'py-3 sm:py-3.5',
-      )}
-    >
+    <header className="mb-header fixed inset-x-0 top-0 z-[var(--z-nav)] flex items-center">
       <div
         className={cn(
           'pointer-events-none absolute inset-0 -z-10 transition-opacity duration-700',
@@ -55,16 +49,22 @@ export function SiteHeader() {
         <div className="mb-header-veil h-full w-full backdrop-blur-[10px]" />
       </div>
 
-      <div className="mx-auto flex w-full max-w-[1240px] items-center justify-between gap-2 px-5 sm:gap-3 sm:px-8">
+      <div className="mb-header-inner">
         <Link
           href="/"
-          className="group flex min-w-0 shrink items-center gap-2 rounded-full focus-visible:outline-offset-4"
+          className="group mb-brand flex shrink-0 items-center gap-2.5 rounded-full focus-visible:outline-offset-4"
           aria-label="情绪盒子 MoodBox 首页"
         >
-          {/* 卡通盒子站标：hover 时轻轻抬一下，像盒盖被顶起来一点 */}
-          <MoodBoxMark className="h-9 w-9 shrink-0 drop-shadow-[0_5px_12px_rgba(142,118,184,0.35)] transition-transform duration-700 group-hover:-translate-y-[1px] group-hover:scale-[1.06] sm:h-10 sm:w-10" />
-          <span className="flex min-w-0 flex-col leading-none">
-            <span className="whitespace-nowrap font-display text-[13px] font-normal tracking-[0.2em] text-ink sm:text-[14px] sm:tracking-[0.26em]">
+          {/* 站标 36×36，与文字之间 10px（gap-2.5）；hover 时轻轻抬一下，像盒盖被顶起来一点 */}
+          <MoodBoxMark className="h-9 w-9 shrink-0 drop-shadow-[0_5px_12px_rgba(142,118,184,0.35)] transition-transform duration-700 group-hover:-translate-y-[1px] group-hover:scale-[1.06]" />
+          <span className="mb-brand-text flex min-w-0 flex-col justify-center leading-none max-[359px]:hidden">
+            {/*
+              375px 的宽度预算很紧：三颗按钮按规范占 236px，品牌只剩 99px，
+              图标 36 + 间距 10 之后，四个字只有 53px 可用。
+              原来 0.2em 的字距要 62px，字会撑出品牌盒、被圆形按钮压住 ——
+              所以窄屏把字距收到 0.08em，400px 以上再放开。
+            */}
+            <span className="whitespace-nowrap font-display text-[12px] font-normal tracking-[0.08em] text-ink min-[400px]:text-[13px] min-[400px]:tracking-[0.14em] sm:text-[14px] sm:tracking-[0.24em]">
               情绪盒子
             </span>
             {/* 375px 下这里没有位置，英文副标只在 ≥390px 出现 */}
@@ -77,19 +77,16 @@ export function SiteHeader() {
         {/* 桌面：导航与右侧控件同一行 */}
         <TopToolBar />
 
-        {/* 窄屏：主页（图标）、陪聊（主）、更多（次） */}
-        <div className="flex shrink-0 items-center gap-1.5 lg:hidden">
+        {/* 窄屏：主页（图标）、陪聊（主）、更多（次）—— 三颗同高 40px。显隐由 .mb-header-actions 的媒体查询管 */}
+        <div className="mb-header-actions">
           <Link
             href="/"
             aria-current={pathname === '/' ? 'page' : undefined}
             aria-label="主页"
             title="主页"
-            className={cn(
-              'mb-home-icon grid h-11 w-11 place-items-center rounded-full transition-all duration-300',
-              pathname === '/' ? 'mb-home-icon-active' : 'mb-home-icon-idle',
-            )}
+            className="mb-nav-btn mb-nav-btn--icon"
           >
-            <Home size={18} strokeWidth={1.7} aria-hidden="true" />
+            <Home size={20} strokeWidth={1.75} aria-hidden="true" />
           </Link>
 
           <Link
@@ -98,9 +95,9 @@ export function SiteHeader() {
             aria-current={pathname === '/chat' ? 'page' : undefined}
             /* 三颗控件的可访问名保持一致：站标 / 主页 / 陪聊 / 更多功能，读屏时不会忽然断档 */
             aria-label="陪聊"
-            className="mb-chat-cta inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[12.5px] font-medium tracking-[0.04em] transition-all duration-300 active:scale-[0.98]"
+            className="mb-nav-btn mb-nav-btn--primary"
           >
-            <MessageCircleMore size={15} strokeWidth={1.8} aria-hidden="true" />
+            <MessageCircleMore size={20} strokeWidth={1.75} aria-hidden="true" />
             陪聊
           </Link>
 

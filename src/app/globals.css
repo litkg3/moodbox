@@ -43,6 +43,49 @@
 }
 
 /*
+ * 页头与导航按钮的共用刻度。
+ *
+ * 这几项以前散落在三处（Tailwind 类 + 三段独立 CSS），于是「主页」长成
+ * 44×44、「陪聊/更多」停在 36px 高，图标是 18/15/15、描边 1.7/1.8/1.9。
+ * 收成变量之后，三颗按钮只有一个来源：高度、图标、圆角、阴影都从这儿取。
+ */
+:root {
+  --header-h: 64px;
+  /* 手机刘海 / 灵动岛的安全区。没有就退化成 0，不影响普通机型 */
+  --header-safe: env(safe-area-inset-top, 0px);
+  --nav-btn-h: 40px;
+  --nav-icon: 20px;
+  --nav-gap: 10px;
+  --nav-pad-x: 16px;
+
+  /* 页头左侧品牌与右侧按钮组的配色（两套主题各覆写一次） */
+  --nav-btn-bg: rgba(255, 255, 255, 0.46);
+  --nav-btn-border: rgba(120, 100, 160, 0.28);
+  --nav-btn-ink: var(--color-ink-soft);
+  --nav-btn-bg-on: rgba(255, 255, 255, 0.88);
+  --nav-btn-border-on: rgba(120, 100, 160, 0.42);
+  --nav-btn-ink-on: var(--color-ink);
+
+  /*
+   * 三个按钮共用一套阴影。
+   *
+   * y 偏移必须 ≤ 2px：以前「陪聊」是 `0 10px 22px -14px`，比旁边两颗低一截，
+   * 看着就像它往下掉了。层级改为只靠渐变背景表达。
+   */
+  --shadow-btn: 0 2px 6px -3px rgba(70, 55, 92, 0.22);
+}
+
+html[data-theme='night'] {
+  --nav-btn-bg: rgba(255, 255, 255, 0.08);
+  --nav-btn-border: rgba(255, 255, 255, 0.18);
+  --nav-btn-ink: rgba(240, 236, 252, 0.86);
+  --nav-btn-bg-on: rgba(255, 255, 255, 0.18);
+  --nav-btn-border-on: rgba(255, 255, 255, 0.3);
+  --nav-btn-ink-on: #ffffff;
+  --shadow-btn: 0 2px 8px -3px rgba(0, 0, 0, 0.6);
+}
+
+/*
  * 浮层在场时（useOverlayBehavior 打上的标记）：
  * 关掉整页吸附与回弹。锁滚动用的是 body position: fixed，这里再堵一道 ——
  * iOS 在 body 固定时仍可能整页橡皮筋，那一下会让底下的面板跟着动。
@@ -2946,94 +2989,191 @@ html[data-theme='night'] .mb-only-night {
 /* ---------------- 手机页头的三颗按钮 ---------------- */
 
 /*
- * 主页：44×44 的纯图标圆形。它是"回首页"这一个动作，不需要文字 ——
- * 375px 下每多两个字，品牌名就要被迫缩写。
+ * 页头骨架。
+ *
+ * 高度固定 64px，滚动时不再缩 —— 以前滚动前后是 68 / 60 两档，页头一缩，
+ * 底下的内容就跟着挪一行，眼睛会看到"页面被推了一下"。现在只有那层实底
+ * 在淡入淡出，几何完全不动。
+ *
+ * 安全区用 padding-top 让出来，height 里再把它加回去：内容行永远 64px，
+ * 刘海机型上整体下移而不是被压扁。
  */
-.mb-home-icon {
-  color: var(--color-ink-soft);
+.mb-header {
+  height: calc(var(--header-h) + var(--header-safe));
+  padding-top: var(--header-safe);
+  box-sizing: border-box;
+}
+
+/*
+ * 内层：品牌在左、按钮组在右，两端对齐。
+ *
+ * 左右内边距与页面内容区同一套（20 / 32），logo 的左边缘才能和正文对齐 ——
+ * 之前页头是 20px、内页正文也是 20px，但页头 max-w 是 1240 而正文是 1080，
+ * 宽屏上两者会错开一截。
+ */
+.mb-header-inner {
+  display: flex;
+  width: 100%;
+  max-width: 1240px;
+  margin-inline: auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-inline: 20px;
+  box-sizing: border-box;
+}
+
+@media (min-width: 640px) {
+  .mb-header-inner {
+    gap: 16px;
+    padding-inline: 32px;
+  }
+}
+
+/*
+ * 右侧三颗按钮：等距、同高、同中线。
+ *
+ * 显隐写在这里、而不是在 JSX 上挂 `lg:hidden`：Tailwind v4 的工具类住在
+ * `@layer utilities` 里，而未分层的普通规则永远赢过分层规则 —— 一条
+ * `display: flex` 就会把 `lg:hidden` 顶掉，桌面上右侧会多出一排按钮。
+ */
+.mb-header-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--nav-gap);
+}
+
+@media (min-width: 1024px) {
+  .mb-header-actions {
+    display: none;
+  }
+}
+
+/*
+ * 三颗按钮的唯一实现。
+ *
+ * 每一颗都显式 `border: 1px`，没有边框的那颗用 transparent 占位 ——
+ * 不给边框的话它会比邻居窄 2px、高 2px，`align-items: center` 也救不回来。
+ *
+ * 过渡只写颜色类属性，**不写 transform**，也**不做 active 缩放**：
+ * 一点就有 2px 的缩放位移，放在一行里看就是"这颗按钮在动"。
+ */
+.mb-nav-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--nav-btn-h);
+  padding-inline: var(--nav-pad-x);
+  box-sizing: border-box;
   border: 1px solid transparent;
+  border-radius: 999px;
+  background-color: transparent;
+  color: var(--nav-btn-ink);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: var(--shadow-btn);
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease,
+    box-shadow 0.3s ease,
+    filter 0.3s ease;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  cursor: pointer;
 }
 
-.mb-home-icon-idle {
-  background: rgba(255, 255, 255, 0.5);
-  border-color: rgba(255, 255, 255, 0.7);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+/*
+ * 触屏热区 44×44。
+ *
+ * 视觉高度是 40px，用手指去点差那 4px 很别扭。用伪元素上下各探 2px 补到 44，
+ * 不参与布局、不改绘制 —— 字号、间距、视觉尺寸全都保持 40px 的秩序。
+ * 横向也各探 2px：三颗之间还留着 10px 的 gap，探完仍有 6px 空隙，不会误触。
+ *
+ * 写 -3px 而不是 -2px：绝对定位的包含块是 padding box，而按钮有一圈 1px 的
+ * 边框，`inset: -2px` 实际只探出 1px，热区只有 42。多算那 1px 才真的到 44。
+ */
+.mb-nav-btn::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
 }
 
-.mb-home-icon-active {
-  background: rgba(255, 255, 255, 0.86);
-  border-color: rgba(255, 255, 255, 0.9);
-  color: var(--color-ink);
-  box-shadow: 0 6px 16px -12px rgba(70, 55, 92, 0.7);
+/* 图标：一套线性图标，尺寸与笔触统一 */
+.mb-nav-btn > svg {
+  width: var(--nav-icon);
+  height: var(--nav-icon);
+  flex-shrink: 0;
+  color: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-html[data-theme='night'] .mb-home-icon {
-  color: rgba(240, 236, 252, 0.84);
+/* 主页：正方形图标按钮，内边距归零 */
+.mb-nav-btn--icon {
+  width: var(--nav-btn-h);
+  padding-inline: 0;
 }
 
-html[data-theme='night'] .mb-home-icon-idle {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.14);
-}
-
-html[data-theme='night'] .mb-home-icon-active {
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.22);
-  color: #ffffff;
-}
-
-/* 陪聊：页头唯一被填色的按钮，和「更多」拉开权重 */
-.mb-chat-cta {
-  background: var(--accent-gradient);
+/* 陪聊：页头唯一被填色的按钮。层级只来自渐变，阴影与邻居同一套 */
+.mb-nav-btn--primary {
+  background-image: var(--accent-gradient);
+  border-color: rgba(255, 255, 255, 0.55);
   color: var(--accent-ink);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow:
-    0 10px 22px -14px rgba(120, 95, 150, 0.85),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
 }
 
-.mb-chat-cta:hover {
+.mb-nav-btn--primary:hover {
   filter: brightness(1.03);
 }
 
-html[data-theme='night'] .mb-chat-cta {
+html[data-theme='night'] .mb-nav-btn--primary {
   border-color: rgba(255, 255, 255, 0.24);
+}
+
+/* 更多：描边次要按钮，只有一层浅底 */
+.mb-nav-btn--ghost {
+  background-color: var(--nav-btn-bg);
+  border-color: var(--nav-btn-border);
+}
+
+.mb-nav-btn--ghost:hover,
+.mb-nav-btn--ghost.is-open {
+  background-color: var(--nav-btn-bg-on);
+  border-color: var(--nav-btn-border-on);
+  color: var(--nav-btn-ink-on);
+}
+
+/*
+ * 选中态：只换背景与描边颜色。
+ *
+ * 不用 `border-width` 加粗、不加内边距、不做位移 —— 那会让当前页那颗
+ * 比邻居胖一圈，整行跟着重排。需要更强的指示时用 inset 阴影，而不是几何。
+ */
+.mb-nav-btn[aria-current='page']:not(.mb-nav-btn--primary) {
+  background-color: var(--nav-btn-bg-on);
+  border-color: var(--nav-btn-border-on);
+  color: var(--nav-btn-ink-on);
   box-shadow:
-    0 10px 26px -16px rgba(0, 0, 0, 0.95),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    var(--shadow-btn),
+    inset 0 0 0 1px var(--nav-btn-border-on);
 }
 
-/* 更多：描边次要按钮，不填色 */
-.mb-more-btn {
-  background: rgba(255, 255, 255, 0.36);
-  border: 1px solid rgba(120, 100, 160, 0.3);
-  color: var(--color-ink-soft);
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+.mb-nav-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-lavender-deep) 72%, transparent);
+  outline-offset: 2px;
 }
 
-.mb-more-btn:hover,
-.mb-more-btn.is-open {
-  background: rgba(255, 255, 255, 0.62);
-  border-color: rgba(120, 100, 160, 0.45);
-  color: var(--color-ink);
-}
-
-html[data-theme='night'] .mb-more-btn {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.22);
-  color: rgba(240, 236, 252, 0.86);
-}
-
-html[data-theme='night'] .mb-more-btn:hover,
-html[data-theme='night'] .mb-more-btn.is-open {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: #ffffff;
+@media (prefers-reduced-motion: reduce) {
+  .mb-nav-btn {
+    transition: none;
+  }
 }
 
 /* 遮罩：白日是一层灰紫雾，星空是压黑。都带一点模糊，别让底下的字抢戏 */
@@ -3740,8 +3880,22 @@ html[data-theme='night'] {
   }
 }
 
+/*
+ * 按压反馈：只沿纵向再压 1px，**不做 scale**。
+ *
+ * 以前这里是 `transform: scale(0.98)`，而 hover 写的是 `translateY(-2px)`。
+ * 两条规则改的是同一个 `transform`，按下时后者被整个替换掉 —— 浏览器于是
+ * 从「位移 -2 / 缩放 1」插值到「位移 0 / 缩放 0.98」，卡片一边往回跳一边缩小，
+ * 面积从 327 摆到 322 再弹回来。0.45s 的缓动把这段过程拉得很长，
+ * 看起来就是"点一下卡片，整片都在晃"。
+ *
+ * 现在 transform 里永远只有一个 translateY，插值是一条直线；按下时把时长
+ * 收到 120ms（按下去要跟手），松手仍用 450ms 慢慢浮回 —— 快进慢出，不晃。
+ */
 .mb-mbti-card:active {
-  transform: scale(0.98);
+  transform: translateY(-1px);
+  transition-duration: 0.12s;
+  border-color: color-mix(in srgb, var(--mbti-accent) 46%, transparent);
 }
 
 .mb-mbti-card:focus-visible {
@@ -4528,10 +4682,11 @@ html[data-theme='night'] {
 
 .mb-chat-page {
   position: fixed;
-  inset: 60px 0 0 0;
+  /* 页头高度取同一个变量：页头改成 64px 之后，这里不再跟着写死 60 */
+  inset: calc(var(--header-h) + var(--header-safe)) 0 0 0;
   z-index: 10;
   display: flex;
-  height: calc(var(--chat-vv-h, 100dvh) - 60px);
+  height: calc(var(--chat-vv-h, 100dvh) - var(--header-h) - var(--header-safe));
   flex-direction: column;
   background:
     radial-gradient(
@@ -4545,8 +4700,9 @@ html[data-theme='night'] {
 
 @media (min-width: 1024px) {
   .mb-chat-page {
-    inset: 84px 0 0 0;
-    height: calc(var(--chat-vv-h, 100dvh) - 84px);
+    /* 桌面上给页头下面多留 20px，对话区不贴着导航 */
+    inset: calc(var(--header-h) + var(--header-safe) + 20px) 0 0 0;
+    height: calc(var(--chat-vv-h, 100dvh) - var(--header-h) - var(--header-safe) - 20px);
     background: transparent;
     backdrop-filter: none;
   }

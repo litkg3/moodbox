@@ -30,11 +30,71 @@ export const CHAT_LIMITS = {
   maxOutputTokens: 700,
 } as const;
 
+/**
+ * 中国大陆常被问到的几家的默认地址。
+ *
+ * 存在的意义只有一条：用户填了 `CHAT_API_KEY` 却忘了 `CHAT_BASE_URL` 时，
+ * 默认值 OpenAI 的地址在国内直连大概率超时，报错还会长得像"Key 不对"。
+ * 这里只能认**服务商域名**，认不出模型名 —— `deepseek-chat` 这种名字
+ * 在别家可能也有。认不出就如实回到 OpenAI 的默认值，由 health 提示。
+ */
+const KNOWN_HOSTS: { suffix: string; baseUrl: string; note: string }[] = [
+  { suffix: 'deepseek.com', baseUrl: 'https://api.deepseek.com/v1', note: 'DeepSeek' },
+  { suffix: 'moonshot.cn', baseUrl: 'https://api.moonshot.cn/v1', note: 'Moonshot' },
+  {
+    suffix: 'dashscope.aliyuncs.com',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    note: '阿里云百炼',
+  },
+  { suffix: 'bigmodel.cn', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', note: '智谱 GLM' },
+  { suffix: 'volces.com', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', note: '火山方舟' },
+  { suffix: 'siliconflow.cn', baseUrl: 'https://api.siliconflow.cn/v1', note: '硅基流动' },
+];
+
+export const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
+export const DEFAULT_MODEL = 'gpt-4o-mini';
+
+/** 地址里去掉结尾斜杠，顺手去掉手滑粘进来的 `/chat/completions` */
+function normalizeBaseUrl(raw: string | undefined): string {
+  const value = (raw ?? '').trim().replace(/\/+$/, '');
+  if (!value) return DEFAULT_BASE_URL;
+  return value.replace(/\/chat\/completions$/, '');
+}
+
+/** 从模型名、也可从地址反推一个"像是哪家"的标签，纯展示用 */
+export function guessVendor(apiKey: string, baseUrl: string, model: string): string | null {
+  for (const host of KNOWN_HOSTS) {
+    if (baseUrl.includes(host.suffix)) return host.note;
+  }
+  if (!baseUrl || baseUrl === DEFAULT_BASE_URL) {
+    // 用户只填了 Key：OpenAI 的 key 以 sk- 开头且没有别的线索
+    if (apiKey.startsWith('sk-') && /^(gpt|o\d|chatgpt)/i.test(model)) return 'OpenAI';
+  }
+  return null;
+}
+
+/** 只填了 Key、没填地址时，能不能凭模型名认出来 */
+function baseUrlForModel(model: string): string | null {
+  if (/^deepseek/i.test(model)) return 'https://api.deepseek.com/v1';
+  if (/^(moonshot|kimi)/i.test(model)) return 'https://api.moonshot.cn/v1';
+  if (/^(glm|chatglm)/i.test(model)) return 'https://open.bigmodel.cn/api/paas/v4';
+  if (/^qwen/i.test(model)) return 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+  return null;
+}
+
 export function chatProvider(): ChatProvider {
+  const apiKey = (process.env.CHAT_API_KEY ?? process.env.OPENAI_API_KEY ?? '').trim();
+  const model = (process.env.CHAT_MODEL ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
+
+  // 地址没配时，先看能不能从模型名认出来，认不出再回 OpenAI
+  const baseUrl = normalizeBaseUrl(
+    process.env.CHAT_BASE_URL ?? baseUrlForModel(model) ?? DEFAULT_BASE_URL,
+  );
+
   return {
-    apiKey: (process.env.CHAT_API_KEY ?? process.env.OPENAI_API_KEY ?? '').trim(),
-    baseUrl: (process.env.CHAT_BASE_URL ?? 'https://api.openai.com/v1').replace(/\/+$/, ''),
-    model: (process.env.CHAT_MODEL ?? 'gpt-4o-mini').trim(),
+    apiKey,
+    baseUrl,
+    model,
     classifier: process.env.CHAT_CLASSIFIER !== 'off',
   };
 }

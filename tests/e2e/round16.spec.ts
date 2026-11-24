@@ -93,9 +93,11 @@ test.describe('移动端页头', () => {
       const rects = items.map((el) => el.getBoundingClientRect());
       return {
         labels: items.map((el) => el.getAttribute('aria-label')),
-        // 三个控件高度不一（44 / 36 / 36），比的是"垂直中心"落在同一行。
-        // 44 与 36 混排时中心会差半个像素，所以在断言侧给 1px 容差。
+        // 三颗现在都是 40px 高，中心应该完全落在同一条线上（仍给 1px 容差防舍入）
         centers: rects.map((rect) => rect.top + rect.height / 2),
+        tops: rects.map((rect) => Math.round(rect.top)),
+        bottoms: rects.map((rect) => Math.round(rect.bottom)),
+        heights: rects.map((rect) => Math.round(rect.height)),
         right: Math.max(...rects.map((rect) => rect.right)),
         left: Math.min(...rects.map((rect) => rect.left)),
         headerBottom: header.getBoundingClientRect().bottom,
@@ -106,20 +108,26 @@ test.describe('移动端页头', () => {
     expect(boxes!.labels).toEqual(['情绪盒子 MoodBox 首页', '主页', '陪聊', '更多功能']);
     const centers = boxes!.centers.map((center) => center ?? -1);
     expect(centers).toHaveLength(4);
-    // 三颗控件的中心两两相差不超过 1px（44 与 36 混排时差半个像素）
     for (let i = 1; i < centers.length; i += 1) {
       expect(Math.abs(centers[i]! - centers[i - 1]!)).toBeLessThanOrEqual(1);
     }
+    // 三颗上下边缘完全对齐（以前是 44 / 36 / 36，边缘差 4px）
+    const [, ...btnTops] = boxes!.tops;
+    const [, ...btnBottoms] = boxes!.bottoms;
+    const [, ...btnHeights] = boxes!.heights;
+    expect(new Set(btnTops).size).toBe(1);
+    expect(new Set(btnBottoms).size).toBe(1);
+    expect(btnHeights).toEqual([40, 40, 40]);
     // 都在页头里，没有溢到内容区
     expect(centers.every((center) => center < boxes!.headerBottom)).toBe(true);
     expect(boxes!.right).toBeLessThanOrEqual(MOBILE.width);
     expect(boxes!.left).toBeGreaterThan(0);
 
-    // 「主页」只剩图标：圆形、44×44、里面没有可见文字
+    // 「主页」只剩图标：圆形、40×40、里面没有可见文字
     const home = page.getByRole('link', { name: '主页' });
     const homeBox = await home.boundingBox();
-    expect(Math.round(homeBox!.width)).toBe(44);
-    expect(Math.round(homeBox!.height)).toBe(44);
+    expect(Math.round(homeBox!.width)).toBe(40);
+    expect(Math.round(homeBox!.height)).toBe(40);
     expect((await home.innerText()).trim()).toBe('');
     /*
      * 「圆形」的判定：Chrome 会把 `rounded-full` 求值成 `3.35544e+07px`
@@ -127,7 +135,7 @@ test.describe('移动端页头', () => {
      * 只要求圆角半径 ≥ 短边的一半，即整个盒子被抹成圆。
      */
     const radius = await home.evaluate((el) => Number.parseFloat(getComputedStyle(el).borderRadius));
-    expect(radius).toBeGreaterThanOrEqual(44 / 2);
+    expect(radius).toBeGreaterThanOrEqual(40 / 2);
 
     // 「陪聊」是带文字的主按钮，「更多」是描边的次要按钮
     expect((await page.getByRole('link', { name: '陪聊' }).innerText()).trim()).toContain('陪聊');
@@ -141,8 +149,8 @@ test.describe('移动端页头', () => {
         const parts = match[1]!.split(',').map((item) => Number(item.trim()));
         return parts.length === 4 ? (parts[3] ?? 1) : 1;
       };
-      const chat = document.querySelector('.mb-chat-cta');
-      const more = document.querySelector('.mb-more-btn');
+      const chat = document.querySelector('.mb-nav-btn--primary');
+      const more = document.querySelector('.mb-nav-btn--ghost');
       // 主按钮的实底画在 background-image 的渐变里，取其中出现的最小不透明度
       const image = chat ? getComputedStyle(chat).backgroundImage : '';
       const alphas = [...image.matchAll(/rgba\([^)]*?,\s*([\d.]+)\)/g)].map((match) =>
@@ -164,6 +172,190 @@ test.describe('移动端页头', () => {
     // 次要按钮：浅底 + 有描边，明显比主按钮轻
     expect(pair.moreBorder).toBe('1px');
     expect(pair.moreAlpha).toBeLessThan(0.5);
+  });
+
+  test('三颗按钮是同一套刻度：40px 高、20px 图标、1.75 描边、同一层阴影', async ({ page }) => {
+    await gotoHydrated(page, '/');
+
+    const spec = await page.evaluate(() => {
+      const header = document.querySelector('header')!;
+      const brand = header.querySelector<HTMLElement>('a[aria-label="情绪盒子 MoodBox 首页"]')!;
+      const mark = brand.querySelector('svg')!;
+      const labels = ['主页', '陪聊', '更多功能'];
+      const buttons = labels.map((label) => {
+        const el = header.querySelector<HTMLElement>(
+          `a[aria-label="${label}"], button[aria-label="${label}"]`,
+        )!;
+        const rect = el.getBoundingClientRect();
+        const cs = getComputedStyle(el);
+        const icon = el.querySelector('svg')!;
+        const iconRect = icon.getBoundingClientRect();
+        const hitBefore = getComputedStyle(el, '::before');
+        return {
+          label,
+          height: rect.height,
+          top: rect.top,
+          bottom: rect.bottom,
+          fontSize: cs.fontSize,
+          fontWeight: cs.fontWeight,
+          lineHeight: cs.lineHeight,
+          columnGap: cs.columnGap,
+          borderWidth: cs.borderTopWidth,
+          borderStyle: cs.borderTopStyle,
+          boxSizing: cs.boxSizing,
+          shadow: cs.boxShadow,
+          iconW: iconRect.width,
+          iconH: iconRect.height,
+          iconStroke: getComputedStyle(icon).strokeWidth,
+          iconCap: getComputedStyle(icon).strokeLinecap,
+          iconJoin: getComputedStyle(icon).strokeLinejoin,
+          // 热区：伪元素向四周各探出去多少
+          beforeTop: hitBefore.top,
+          beforePosition: hitBefore.position,
+          // ::before 用 inset:-2px 时 top 会算成 -2px
+          beforeInset: hitBefore.inset,
+        };
+      });
+
+      // 热区是否真的覆盖到 44×44：在按钮上方 1.5px 处取点，看命中的是谁
+      const home = header.querySelector<HTMLElement>('a[aria-label="主页"]')!;
+      const hr = home.getBoundingClientRect();
+      const cx = hr.left + hr.width / 2;
+      const hitAbove = document.elementFromPoint(cx, hr.top - 1.5);
+      const hitBelow = document.elementFromPoint(cx, hr.bottom + 1.5);
+
+      const brandRect = brand.getBoundingClientRect();
+
+      return {
+        headerHeight: header.getBoundingClientRect().height,
+        buttons,
+        markW: mark.getBoundingClientRect().width,
+        markH: mark.getBoundingClientRect().height,
+        brandGap: getComputedStyle(brand).columnGap,
+        brandLeft: brandRect.left,
+        brandCenterY: brandRect.top + brandRect.height / 2,
+        /** 热区扩展是否被伪元素接住 */
+        hotAbove: hitAbove?.closest('a[aria-label="主页"]') !== null,
+        hotBelow: hitBelow?.closest('a[aria-label="主页"]') !== null,
+        hotAboveTag: hitAbove?.tagName ?? null,
+      };
+    });
+
+    // 页头高度：移动端 64px，内容行不因滚动而缩短
+    expect(spec.headerHeight).toBe(64);
+
+    for (const btn of spec.buttons) {
+      expect(btn.height, `${btn.label} 高度`).toBe(40);
+      // 字号 14 / 字重 500 / 行高 1（避免基线偏移）
+      expect(btn.fontSize, btn.label).toBe('14px');
+      expect(btn.fontWeight, btn.label).toBe('500');
+      expect(btn.lineHeight, btn.label).toBe('14px');
+      // 图标与文字之间 6px
+      expect(btn.columnGap, btn.label).toBe('6px');
+      // 边框统一 1px；没边框的也要占位，否则会矮 2px
+      expect(btn.borderWidth, btn.label).toBe('1px');
+      expect(btn.borderStyle, btn.label).not.toBe('none');
+      expect(btn.boxSizing, btn.label).toBe('border-box');
+      // 图标 20×20，描边 1.75，端点为圆头
+      expect(btn.iconW, btn.label).toBe(20);
+      expect(btn.iconH, btn.label).toBe(20);
+      expect(btn.iconStroke, btn.label).toBe('1.75px');
+      expect(btn.iconCap, btn.label).toBe('round');
+      expect(btn.iconJoin, btn.label).toBe('round');
+      /*
+       * 阴影 y 偏移不超过 2px（以前「陪聊」是 10px，看着往下掉）。
+       * 按图层拆开、每层只取前两个长度（offsetX offsetY），
+       * 不能跨层两两配对 —— 第 3 个值是 blur、第 4 个是 spread，会被误读成 y。
+       */
+      const yOffsets = btn.shadow.split(/,(?![^(]*\))/).map((layer) => {
+        const nums = [...layer.matchAll(/(-?[\d.]+)px/g)].map((m) => Number(m[1]));
+        return nums.length >= 2 ? Math.abs(nums[1]!) : 0;
+      });
+      expect(yOffsets.length).toBeGreaterThan(0);
+      for (const dy of yOffsets) expect(dy, `${btn.label} 阴影 y`).toBeLessThanOrEqual(2);
+    }
+
+    // 三颗的上下边缘完全一致
+    expect(new Set(spec.buttons.map((b) => Math.round(b.top))).size).toBe(1);
+    expect(new Set(spec.buttons.map((b) => Math.round(b.bottom))).size).toBe(1);
+    /*
+     * 三颗共用同一层基础阴影（形状一致，只是主题色不同）。
+     * 选中态那一颗会多一层 `inset 0 0 0 1px` 当选中指示（规范要求用它，
+     * 而不是加粗 border），比对时把 inset 层剔掉。
+     */
+    const shadowShapes = spec.buttons.map((b) =>
+      b.shadow
+        .split(/,(?![^(]*\))/)
+        .filter((layer) => !layer.includes('inset'))
+        .map((layer) => layer.replace(/rgba?\([^)]*\)/g, 'C').trim())
+        .join(' , '),
+    );
+    expect(new Set(shadowShapes).size).toBe(1);
+
+    // 触屏热区探到 44×44（视觉仍是 40）
+    expect(spec.hotAbove, '主页上方 1.5px 应仍可点').toBe(true);
+    expect(spec.hotBelow, '主页下方 1.5px 应仍可点').toBe(true);
+
+    // logo：图标 36×36、与文字 10px、左边缘在 20px（与内容区一致）
+    expect(spec.markW).toBe(36);
+    expect(spec.markH).toBe(36);
+    expect(spec.brandGap).toBe('10px');
+    expect(spec.brandLeft).toBe(20);
+    // logo 的中线与按钮组的中线是同一条
+    expect(Math.abs(spec.brandCenterY - (spec.buttons[0]!.top + 20))).toBeLessThanOrEqual(1);
+  });
+
+  test('logo 左边缘与内页正文左边缘对齐', async ({ page }) => {
+    // 内页用 PageShell（px-5），正文左边缘有确定的参考值
+    await gotoHydrated(page, '/breathe');
+
+    const align = await page.evaluate(() => {
+      const brand = document.querySelector<HTMLElement>('header a[aria-label*="首页"]')!;
+      const main = document.querySelector('main')!;
+      const mainRect = main.getBoundingClientRect();
+      return {
+        brandLeft: brand.getBoundingClientRect().left,
+        /* 正文起点 = main 的左边缘 + 它自己的左内边距（main 是通栏、靠 padding 让位） */
+        textLeft: mainRect.left + Number.parseFloat(getComputedStyle(main).paddingLeft),
+        mainPadLeft: Number.parseFloat(getComputedStyle(main).paddingLeft),
+      };
+    });
+    expect(align.mainPadLeft).toBe(20);
+    // logo 与正文必须同一个像素起头
+    expect(Math.abs(align.brandLeft - align.textLeft)).toBeLessThanOrEqual(1);
+  });
+
+  test('选中态只换颜色，不改变尺寸与位置', async ({ page }) => {
+    const measure = async () =>
+      page.evaluate(() => {
+        const el = document.querySelector<HTMLElement>('a[aria-label="主页"]')!;
+        const rect = el.getBoundingClientRect();
+        return {
+          w: rect.width,
+          h: rect.height,
+          left: rect.left,
+          top: rect.top,
+          borderWidth: getComputedStyle(el).borderTopWidth,
+        };
+      });
+
+    await gotoHydrated(page, '/');
+    const active = await measure();
+    await expect(page.getByRole('link', { name: '主页' })).toHaveAttribute('aria-current', 'page');
+
+    // 换到非当前页：同一颗按钮不该变胖或位移
+    await gotoHydrated(page, '/chat');
+    const idle = await measure();
+    await expect(page.getByRole('link', { name: '主页' })).not.toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+
+    expect(idle.w).toBe(active.w);
+    expect(idle.h).toBe(active.h);
+    expect(idle.left).toBe(active.left);
+    expect(idle.top).toBe(active.top);
+    expect(idle.borderWidth).toBe(active.borderWidth);
   });
 
   test('更多面板：全宽下拉、有遮罩、分组正确、再点一次关掉', async ({ page }) => {

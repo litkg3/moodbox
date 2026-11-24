@@ -76,12 +76,9 @@ export function MoreMenu() {
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label="更多功能"
-        className={cn(
-          'mb-more-btn flex h-9 items-center gap-1 rounded-full px-3 text-[12.5px] font-medium tracking-[0.04em] transition-all duration-300 active:scale-[0.98]',
-          open && 'is-open',
-        )}
+        className={cn('mb-nav-btn mb-nav-btn--ghost', open && 'is-open')}
       >
-        <MoreHorizontal size={15} strokeWidth={1.9} aria-hidden="true" />
+        <MoreHorizontal size={20} strokeWidth={1.75} aria-hidden="true" />
         更多
       </button>
 

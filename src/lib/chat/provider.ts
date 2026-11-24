@@ -26,6 +26,60 @@ function toWire(messages: ChatMessage[]): WireMessage[] {
 }
 
 /**
+ * 状态码 → 一句"接下来该改什么"。
+ *
+ * 401/403 是最常见的两种情况（Key 填错、Key 没这个模型的权限），
+ * 429 是额度或并发，400 通常是模型名写错或该服务商不认 `max_tokens`。
+ * 说清楚比说"失败了"有用得多 —— 用户没法从 401 数字里看出要改哪儿。
+ */
+function statusHint(status: number): string {
+  switch (status) {
+    case 401:
+      return '模型的 Key 没通过验证';
+    case 403:
+      return '这个 Key 没有调用该模型的权限';
+    case 404:
+      return '地址或模型名不对，模型那边找不到';
+    case 429:
+      return '模型额度或并发到上限了，过一会儿再试';
+    case 400:
+      return '模型没接受这次请求，多半是模型名写错了';
+    default:
+      return status >= 500 ? '模型那边出了点问题，稍后再试' : '模型暂时没有回应';
+  }
+}
+
+/**
+ * 从上游的错误体里摘一句"短、且不含密钥"的说明。
+ *
+ * 只取 `error.message` 这一层的字符串，截到 80 字，并且把任何长得像
+ * `sk-xxxx` 的串替换掉 —— 有的服务商会把请求头原样回显在错误里。
+ * 拿不到就返回空串，宁可不解释也不要漏出去。
+ */
+async function readUpstreamError(response: Response): Promise<string> {
+  try {
+    const text = await response.text();
+    if (!text) return '';
+    let message = '';
+    try {
+      const data = JSON.parse(text) as { error?: unknown; message?: unknown };
+      const node = (data.error ?? data) as { message?: unknown };
+      if (typeof node.message === 'string') message = node.message;
+      else if (typeof data.message === 'string') message = data.message;
+    } catch {
+      message = text.slice(0, 200);
+    }
+    return message
+      .replace(/\b(sk|ak|key)[-_A-Za-z0-9]{6,}/gi, '***')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 80);
+  } catch {
+    return '';
+  }
+}
+
+/**
  * 真模型：解析上游的 SSE。
  *
  * 上游一帧可能是半行、也可能一行里带好几个 data，所以用缓冲把不完整的
@@ -47,13 +101,24 @@ export async function* streamFromModel(
       model: provider.model,
       stream: true,
       temperature: 0.7,
+      /*
+       * 用 `max_tokens` 而不是 `max_completion_tokens`：后者只有新的
+       * OpenAI 模型认，而 DeepSeek / 百炼 / GLM 这些兼容接口多数还停在
+       * 老字段上。改成一个的名字，另一批就报 400。
+       */
       max_tokens: 700,
       messages: [{ role: 'system', content: options.system }, ...toWire(messages)],
     }),
   });
 
   if (!response.ok || !response.body) {
-    throw new Error(`模型暂时没有回应（${response.status}）`);
+    /*
+     * 上游的错误码要翻译成人话，但**不能把上游的报错原文直出到界面**：
+     * 有些服务商会在 401 的 body 里回显一段被截断的 key，那就等于把
+     * 密钥贴到了聊天窗口里。这里只按状态码给对应的下一步动作。
+     */
+    const detail = await readUpstreamError(response);
+    throw new Error(`${statusHint(response.status)}${detail ? `（${detail}）` : ''}`);
   }
 
   const reader = response.body.getReader();

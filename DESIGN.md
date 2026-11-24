@@ -1157,9 +1157,111 @@ WebKit（390×664）实测的解锁帧：`y: 1328 / snap: none / behavior: auto 
 
 | 想改什么 | 改哪 |
 | --- | --- |
-| 三颗按钮的形态与配色 | `globals.css` 的 `.mb-home-icon` / `.mb-chat-cta` / `.mb-more-btn` |
+| 三颗按钮的形态与配色 | `globals.css` 的 `.mb-nav-btn` / `--nav-btn-*` 一组 token（详见第十七轮） |
 | 面板分组与顺序 | `src/lib/tools.ts` 的 `MORE_MENU_PRIMARY` / `_COMMON` / `_SECONDARY` |
 | 卡片透明度与描边 | `--card-bg` / `--card-border` / `--card-shadow`（`html[data-theme='night']` 下覆写） |
 | AI 说话的分寸 | `src/lib/chat/prompt.ts` 的 `CHAT_SYSTEM_PROMPT` |
 | 关怀卡片文案与热线 | `src/lib/chat/safety.ts` 的 `carePayload()` + 环境变量 `CHAT_CRISIS_RESOURCES` |
 | 限流与长度上限 | `src/lib/chat/config.ts` 的 `CHAT_LIMITS` |
+
+---
+
+## 第十七轮：页头三颗按钮对齐、卡片点一下会晃、以及怎么接一个外部模型
+
+这一轮的三件事看起来无关，但都是"用户用一句话描述症状，得往下挖两层才碰到根因"的那类。
+
+### 一、44 vs 36：不是谁多了几个像素，是两套刻度
+
+改之前先量了一遍，实测和用户描述完全对得上：
+
+| 项 | 主页 | 陪聊 | 更多 |
+| --- | --- | --- | --- |
+| 尺寸 | 44 × 44 | 高 36 | 高 36 |
+| 阴影 | `0 2px 6px -3px` | `0 10px 22px -14px` | `0 2px 6px -3px` |
+| 图标 | 18（stroke 1.7） | 15（stroke 1.8） | 15（stroke 1.9） |
+
+三个控件是三段各自独立写出来的 CSS，谁也没参照谁。所以修法不是"把 44 改成 40"这种逐个调像素 —— 那样下一个人加第四颗按钮时还会再歪一次。改成**一套 token 一套类**：
+
+```css
+:root {
+  --header-h: 64px;
+  --nav-btn-h: 40px;   /* 三颗统一高 */
+  --nav-icon: 20px;    /* 图标统一 */
+  --nav-gap: 10px;
+  --shadow-btn: 0 2px 6px -3px rgba(70, 55, 92, 0.22);
+}
+```
+
+`.mb-nav-btn` 只定义形状与刻度（高 40、内边距 0 16、1px 边框、圆角 999、字号 14/500/行高 1），三个修饰符只改颜色来源：`--icon`（圆形、横向内边距归零）、`--primary`（渐变底）、`--ghost`（半透明白底）。**尺寸只在这一处决定**，第四颗按钮加进来自然对齐。
+
+三个坑记一下：
+
+**（1）1px 边框会吃掉外扩。** 热区想做到 44 × 44，用 `::before { inset: -2px }` 实际只外扩了 1px —— 绝对定位的包含块是 padding box，而 1px 边框在它外面。`probe-hot.mjs` 用 `elementFromPoint` 逐点验证：`bottom+1.5` 命中主页、`bottom+3` 命中 header，说明只有 42px。改成 `inset: -3px` 才对。
+
+**（2）`transform` 是整体替换，不是叠加。** `hover { translateY(-2px) }` 配 `active { scale(.98) }`，按下瞬间浏览器从「位移 -2 / 缩放 1」插值到「位移 0 / 缩放 0.98」—— 视觉上按钮先"往下沉一下"，这正是用户说的"陪聊看起来比另外两个低"。修法是过渡只留颜色类属性，不碰 transform；按住时额外给一层 `inset` 阴影表示按下。
+
+**（3）未分层的 CSS 永远赢过 Tailwind 工具类。** `.mb-header-actions { display: flex }` 写在普通层里，会直接顶掉 JSX 上的 `lg:hidden` —— 1440px 的截图里右边凭空多出一排按钮。显隐规则要从 JSX 搬进媒体查询。
+
+顺带两件在 375px 上才暴露的事：三颗按钮占 236px，加上 logo 36 + 间距 10，四个字只剩 53px，而原字距需要 62px ——「情绪盒子」的「子」被圆形按钮压住。字距降到 `0.08em`（≥400px 放开到 0.14em / 0.24em）；320px 实在放不下，`max-[359px]:hidden` 只留图标。
+
+### 二、卡片晃动：一次改了两个属性，浏览器只能插值
+
+现象是"点 MBTI 卡片，整张卡像被推了一下又弹回来"。看上去像布局抖动，但 `probe-shake.mjs` 用 `setInterval` 每 8ms 记一次 `getBoundingClientRect`（比 rAF 可靠 —— 合成层重建时 rAF 会跳帧），抓到的是：
+
+```
+transform: matrix(1,0,0,1,0,0)  →  matrix(0.99595,0,0,0.99595,0,-0.163)
+width: 327.16 → 322.46 → 326.86
+```
+
+宽度在变，是因为 `scale()` 参与了插值，而 `hover` 给的又是 `translateY(-2px)` —— 两条规则改同一个 `transform`，按下时不是"叠加"而是"整条替换"，于是浏览器老老实实从位移 -2、缩放 1 插到位移 0、缩放 0.98，中途每一帧都在缩。
+
+改法：`.mb-mbti-card:active` 只保留 `translateY(-1px)`，缩放交给不触发重排的 `border-color` 和更短的 `transition-duration`。修完跳变点从 8 处降到 1 处（且 `dW:0, dH:0`）。
+
+> 这类 bug 的共同点：单手看不出问题，采样一量就是硬数据。以后再遇到"抖/闪/跳"，先别猜，加个 8ms 的矩形采样。
+
+### 三、接外部 Key：把"配置对不对"变成能自己看的一屏
+
+陪聊本来就有两条路：配了 Key 走模型，没配就 `streamLocalReply` 用规则说话。接入时真正的摩擦不在代码，在于**用户分不清"没生效"和"填错了"**。
+
+先加了 `GET /api/chat/health`，返回 `configured`、`mode`、服务商、地址、模型、分类器开关、热线条数，以及一串按实际情况生成的中文 `hints`：值里带 `=`（把整行粘进去了）、带引号、短于 20 位、填成了网址、`CHAT_BASE_URL` 少了版本号。**它不回显 Key，一个字符都不回** —— 这条路由在公网上匿名可访问，露头尾等于把爆破空间从 40 位砍到 4 位。测试里专门断言响应体不含 Key 的任何片段。
+
+配置解析也做了收敛，目标是"少填两个也能对"：
+
+| 你填的 | 实际走哪 |
+| --- | --- |
+| 只填 `CHAT_API_KEY` + `CHAT_MODEL=deepseek-chat` | 自动认到 `https://api.deepseek.com/v1` |
+| `CHAT_MODEL` 是 `kimi-*` / `glm-*`·`chatglm-*` / `qwen-*` | 分别认到 Moonshot / 智谱 / 百炼 |
+| 地址里带 `deepseek.com`、`moonshot.cn`、`dashscope.aliyuncs.com`、`bigmodel.cn`、`volces.com`、`siliconflow.cn` | 认得出，health 里报服务商名 |
+| 地址结尾多个斜杠、或者手滑粘上了 `/chat/completions` | 吃掉，自动修正 |
+| 认不出的自建网关 | 有 `CHAT_BASE_URL` 就照用；没有则回落 OpenAI 并在 health 里提示核对 |
+
+上游报错也翻译成人话，因为前端是**直接显示** `event.message` 的：401 →「模型的 Key 没通过验证」、403 →「这个 Key 没有调用该模型的权限」、404 →「地址或模型名不对」、429 →「额度或并发到上限了」、400 →「多半是模型名写错了」、5xx →「模型那边出了点问题」。上游 body 里会附一句 80 字内的说明，但先过一遍 `\b(sk|ak|key)[-_A-Za-z0-9]{6,}` 替换成 `***` —— 有服务商会把请求头原样回显在错误里。实测错 Key 时前端收到的是：
+
+```
+模型的 Key 没通过验证（Incorrect API key provided: ***）
+```
+
+另外特意留在 `max_tokens` 而不是 `max_completion_tokens`：后者只有新的 OpenAI 模型认，DeepSeek / 百炼 / GLM 这些兼容接口多数还停在老字段上，改个名字另一批就报 400。
+
+**怎么验证的。** 新增 `tests/unit/chat-provider.test.ts`（12 条）与 `tests/unit/chat-health.test.ts`（10 条），`fetch` 全部用替身接管，CI 不发请求也不花钱：半包 SSE 拼接、`Bearer` 头、401/404/429/502 各自的措辞、错误体里的密钥被替换、host 与模型名的推断矩阵、health 的"不泄露"断言。
+
+真链路的端到端跑了一次，用一个本地假模型服务（`stream: true` 逐帧吐、`stream: false` 回 `SAFE` 给分类器）冒充上游，`CHAT_BASE_URL` 指向它，然后真浏览器输入一句话：
+
+- 普通消息 → 四个 `delta` 帧 + `done`，气泡里逐字出现，页面无 console error；
+- 高风险消息 → 只有一帧 `care`，**不进生成路径**（模型根本没被调用）；
+- 错 Key → 一帧 `error`，文案是上面那句，Key 已经变成 `***`。
+
+没配 Key 时访问 `/api/chat/health` 得到的是 `"configured": false, "mode": "local"`，以及一条"改完 `.env.local` 要重启 dev server —— Next 只在启动时读一次环境变量"的提醒。这条提示写得比看起来重要：热更新不会重载 `process.env`，不然用户会以为是代码没生效。
+
+### 四、怎么调
+
+| 想改什么 | 改哪 |
+| --- | --- |
+| 页头高度、按钮高、图标大小、间距 | `globals.css` 的 `--header-h` / `--nav-btn-h` / `--nav-icon` / `--nav-gap` |
+| 三颗按钮的配色（白日 / 星空） | `--nav-btn-bg` / `-border` / `-ink` 与对应的 `-on` 一组，`html[data-theme='night']` 下覆写 |
+| 按钮阴影 | `--shadow-btn`（y 偏移不要超过 2px，见上文第（2）点） |
+| 接哪家模型 | `.env.local` 的 `CHAT_API_KEY` / `CHAT_BASE_URL` / `CHAT_MODEL`，填完访问 `/api/chat/health` 自检 |
+| 服务商识别名单 | `src/lib/chat/config.ts` 的 `KNOWN_HOSTS` 与 `baseUrlForModel()` |
+| 上游报错的措辞 | `src/lib/chat/provider.ts` 的 `statusHint()` |
+| 热区大小 | `.mb-nav-btn::before` 的 `inset`（注意 1px 边框占掉外扩） |
+
