@@ -21,22 +21,25 @@ const FOCUSABLE = [
 ].join(', ');
 
 /**
- * 把页面滚回原位。
+ * 解锁用的两个临时标记（样式见 globals.css 同名规则）：
  *
- * 坑：全站 `html { scroll-behavior: smooth }`，`scrollTo` 会变成一段动画，
- * 而当时 `scroll-snap-type: y mandatory` 已经挂回去 —— 两下一夹，页面常常停在
- * 半路（实测从第三屏关掉面板，落点是 81px，不是 1688px）。
- * 所以这里临时把 scroll-behavior 收成 auto，同步落到目标点，再还回去。
+ * - `mb-scroll-reset`：把 `scroll-behavior` 收成 auto。全站 `html` 上是 smooth，
+ *   不收的话 `scrollTo` 会变成一段动画 —— 页面从 0 慢慢"滑"回原位。
+ * - `mb-snap-hold`：按住吸附。`scroll-snap-type: y mandatory` 一旦先恢复，
+ *   Safari 会先拿当时还在 0 的位置吸一次，再被 scrollTo 拉走，表现就是
+ *   "关掉面板的瞬间整页抖一下"。
  */
-function restoreScroll(y: number) {
-  const root = document.documentElement;
-  const previous = root.style.scrollBehavior;
-  root.style.scrollBehavior = 'auto';
-  window.scrollTo(0, y);
-  // 读一次布局，确保这次滚动已经生效，再把 smooth 还回去
-  void root.offsetHeight;
-  root.style.scrollBehavior = previous;
-}
+const SCROLL_RESET_CLASS = 'mb-scroll-reset';
+const SNAP_HOLD_CLASS = 'mb-snap-hold';
+
+/**
+ * 解锁轮次。
+ *
+ * 放开吸附要做在两帧之后（见下面的 cleanup），而这两帧里用户完全可能又把
+ * 浮层打开。每次「打开 / 关闭」都把这个数 +1，回调里对不上号就什么都不做，
+ * 免得上一轮的延迟清理把新一轮刚挂上的标记删掉。
+ */
+let unlockEpoch = 0;
 
 /**
  * 打开浮层时焦点该落在哪。
@@ -128,6 +131,14 @@ export function useOverlayBehavior<T extends HTMLElement = HTMLDivElement>({
     const id = Symbol('overlay');
     overlayStack.push(id);
 
+    /*
+     * 新的打开动作：作废上一轮还没执行的"放开吸附"，
+     * 并立刻把上一轮可能残留的临时标记摘掉 —— 否则会 hold 到这一轮关闭。
+     */
+    unlockEpoch += 1;
+    const root = document.documentElement;
+    root.classList.remove(SNAP_HOLD_CLASS, SCROLL_RESET_CLASS);
+
     restoreFocusRef.current =
       returnFocusTo ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
 
@@ -208,6 +219,21 @@ export function useOverlayBehavior<T extends HTMLElement = HTMLDivElement>({
       window.clearTimeout(focusTimer);
       document.removeEventListener('keydown', onKeyDown);
 
+      /*
+       * 解锁。顺序是踩过坑之后定下来的，别随手调：
+       *
+       * 1. 先按住吸附 + 切成瞬时滚动（此时 `mb-overlay-open` 还在，两者效果重叠，
+       *    但这个先后关系是必须的）；
+       * 2. 再把 body 从 fixed 放回文档流 —— 视觉位置暂时没变，因为刚才 body
+       *    是靠 `top: -scrollY` 顶上去的；
+       * 3. 同一帧里 scrollTo 回原位。收掉 `mb-overlay-open` 之后文档才重新
+       *    有高度，这一步必须紧跟着做，中间不能留一帧 —— 留了就会看到页面
+       *    先闪回第一屏、再跳回原处，也就是"关掉面板整页抖一下"；
+       * 4. 两帧之后才放开吸附与 smooth：那时位置已经落在吸附点上，
+       *    snap 恢复不会再把页面吸走一次。
+       */
+      root.classList.add(SNAP_HOLD_CLASS, SCROLL_RESET_CLASS);
+
       body.style.overflow = original.overflow;
       body.style.paddingRight = original.paddingRight;
       body.style.position = original.position;
@@ -216,15 +242,37 @@ export function useOverlayBehavior<T extends HTMLElement = HTMLDivElement>({
       body.style.right = original.right;
       body.style.width = original.width;
 
-      // 顺序：先撤掉"暂停"标记与样式，文档重新可滚，再滚回原位
       unmarkPaused();
-      restoreScroll(scrollY);
+
+      window.scrollTo(0, scrollY);
+      // 读一次布局，确认这次滚动已经落地，而不是排在下一帧
+      void root.offsetHeight;
+
+      const epoch = ++unlockEpoch;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (epoch !== unlockEpoch) return;
+          /*
+           * 兜底：有的浏览器（Safari 尤其）会在解锁这一帧先按"body 刚回到文档流"
+           * 的样子布一次版，把我们刚写的滚动位置抹回 0。这里趁平滑与吸附还按着，
+           * 瞬时拉回一次，再放开 —— 用户看到的仍然只有一帧。
+           */
+          if (Math.abs(window.scrollY - scrollY) > 1) {
+            window.scrollTo(0, scrollY);
+            void root.offsetHeight;
+          }
+          root.classList.remove(SNAP_HOLD_CLASS, SCROLL_RESET_CLASS);
+        });
+      });
 
       const index = overlayStack.lastIndexOf(id);
       if (index !== -1) overlayStack.splice(index, 1);
 
       restoreFocusRef.current?.focus?.({ preventScroll: true });
     };
+    // 故意只跟 open：returnFocusTo 是调用方渲染时读 ref 得到的，值在"打开那一刻"
+    // 就已经定下来，把它写进依赖只会在无关重渲染时重跑一次锁/解锁，反而抖。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   return { containerRef };

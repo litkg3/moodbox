@@ -57,6 +57,23 @@ html.mb-overlay-open.mb-snap {
 }
 
 /*
+ * 关闭浮层后的两三帧（useOverlayBehavior 挂上、下一帧撤掉）。
+ *
+ * 这两条是"关掉面板整页抖一下"的修法：解锁时先把滚动收成瞬时、把吸附按住，
+ * 让 scrollTo 一步落到原位；等位置稳住了再放开 snap，它就不会拿旧位置
+ * （还在 0）再吸一次。
+ */
+html.mb-scroll-reset {
+  scroll-behavior: auto !important;
+  /* 解锁那一帧别让浏览器"帮"我们锚定到别处，位置由 JS 一步写死 */
+  overflow-anchor: none;
+}
+
+html.mb-snap.mb-snap-hold {
+  scroll-snap-type: none;
+}
+
+/*
  * 层级刻度。浮层的 z-index 只从这里取，不要再写 110 / 120 这种裸数字：
  * 面板 > 遮罩 > 圆点导航 > 页头 > 页面内容。
  */

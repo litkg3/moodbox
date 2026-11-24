@@ -1015,3 +1015,53 @@ elementFromPoint(345, 368) → div.home-copy   ← 点不到球
 | 下滑关闭阈值 | `mbti-detail-sheet.tsx` 的 `DISMISS_AT`（88px） |
 | 双击保护时长 | `OPEN_GUARD_MS`（420ms） |
 | 层级 | `globals.css` 顶部的 `--z-*`：面板 / 遮罩 / 圆点 / 页头 |
+
+---
+
+## 第十五轮：关掉面板时那一下抖，是解锁时机不对
+
+上一轮把「点开卡片，面板浮起来」修掉了，但关掉面板那一下还有一下抖动：点遮罩 / 按 Esc 之后，页面像被人从上往下拽了一把。这一轮只动解锁的时序，视觉与文案没碰。
+
+### 一、抖的不是面板，是背景
+
+锁滚动用的是 `body { position: fixed; top: -scrollY }`。锁着的时候 `window.scrollY` 恒为 **0**，但视觉位置是对的 —— body 被顶上去了 `-scrollY`，屏幕上停的仍然是人格那一屏。
+
+问题出在解锁那一瞬间：body 回到文档流 → 文档重新有 3 屏高 → Safari 认为当前在 **0**（第一屏）→ 然后才被 `scrollTo(0, scrollY)` 拉回去。
+
+三样东西在这个窗口期里抢方向盘：
+
+| 抢方向盘的 | 表现 |
+| --- | --- |
+| `html { scroll-behavior: smooth }` | `scrollTo` 不是落位，是一段从顶部滑下去的动画 |
+| `scroll-snap-type: y mandatory`（`mb-overlay-open` 一撤就恢复） | 先拿 0 吸一次，再被 `scrollTo` 拉走，一来一回正好"抖两下" |
+| iOS 在 fixed → static 时的首次排版 | 可能把我们写进去的位置抹回 0 |
+
+桌面 Chromium 上这三步都在同一个任务里完成，画面上看不出来；Safari 会把中间那一帧画出来，于是有了"关掉面板整页抖一下"。
+
+### 二、修法：先按住，再放位，最后松手
+
+`use-overlay-behavior.ts` 的 cleanup 改成固定顺序（注释里写死了，别随手调）：
+
+1. 先给 `html` 挂两个临时类：`mb-scroll-reset`（`scroll-behavior: auto !important` + `overflow-anchor: none`）、`mb-snap-hold`（吸附按住）。**必须在撤掉 `mb-overlay-open` 之前**，否则会出现"snap 已恢复、位置还在 0"的窗口。
+2. 再把 body 的内联样式还回去（回到 `static`）。此刻视觉位置没变。
+3. 同一帧里 `scrollTo(0, scrollY)`，读一次 `offsetHeight` 逼它落地。
+4. 两帧之后（`requestAnimationFrame` 套一层）才放开吸附与 smooth。放开前再核对一次位置，被抹回就瞬时拉回 —— 这时 snap 还没恢复，拉回不会被吸走。
+
+另外记了一个 `unlockEpoch`：这两帧里用户完全可能又把面板打开，旧回调对不上号就什么都不做，不会删掉新一轮的标记。
+
+### 三、怎么验证的
+
+`tests/e2e/mbti.spec.ts` 加了一条「点遮罩关面板，背景不会先闪回第一屏」：点遮罩之前在页面里起一个 rAF 采样器，逐帧记录 `body.style.position`、`window.scrollY`、人格屏的 `rect.top`、`scroll-snap-type`、有没有 `mb-snap-hold`。断言三条：
+
+- 解锁之后不存在任何一帧 `scrollY === 0`（闪回顶部）；
+- 人格屏的 `rect.top` 全程为 0（没有一帧被顶出画面）；
+- 解锁瞬间确实是 `mb-snap-hold` + `snap: none`，最后回到 `y mandatory`，落点与打开前完全一致。
+
+WebKit（390×664）实测的解锁帧：`y: 1328 / snap: none / behavior: auto / body: ''`，两帧后 `snap: y mandatory`。中间没有第二帧。
+
+### 四、怎么调
+
+| 想改什么 | 改哪 |
+| --- | --- |
+| 放开吸附前等几帧 | `use-overlay-behavior.ts` cleanup 里的双层 `requestAnimationFrame`（现在两帧） |
+| 解锁时的滚动行为 | `globals.css` 的 `html.mb-scroll-reset` / `html.mb-snap.mb-snap-hold` |

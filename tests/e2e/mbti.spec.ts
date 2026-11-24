@@ -588,6 +588,80 @@ test('人格详解：面板打开时背景锁死，关闭后回到原处并把�
   expect(after.focus).toContain('INTJ');
 });
 
+test('人格详解：点遮罩关面板，背景不会先闪回第一屏（解锁时按住吸附、瞬时复位）', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openHome(page);
+  await goToScreen(page, 'mbti');
+
+  const before = await page.evaluate(() => Math.round(window.scrollY));
+  expect(before).toBeGreaterThan(0);
+
+  await page.locator('.mb-mbti-grid-mobile .mb-mbti-card').first().click();
+  const sheet = page.getByRole('dialog', { name: 'INTJ 建筑师' });
+  await expect(sheet).toHaveAttribute('data-state', 'open');
+  // 越过打开后的遮罩静默期，否则这一下会被当成"双击的第二下"吞掉
+  await page.waitForTimeout(600);
+
+  /*
+   * 逐帧采样。判据只有一个：**解锁之后不能有任何一帧停在第一屏**。
+   *
+   * 锁滚动用的是 `body { position: fixed; top: -y }`，此时 window.scrollY 是 0；
+   * 一旦 body 回到文档流而 scrollTo 没跟上（或者被 smooth / snap 接走），
+   * 用户看到的就是"页面闪回顶部、再滑回来"，也就是这次的抖动。
+   */
+  await page.evaluate(() => {
+    type Frame = {
+      t: number;
+      unlocked: boolean;
+      y: number;
+      mbtiTop: number;
+      snap: string;
+      hold: boolean;
+    };
+    const root = document.documentElement;
+    const mbti = document.getElementById('mbti')!;
+    const frames: Frame[] = [];
+    (window as unknown as { __frames: Frame[] }).__frames = frames;
+    const t0 = performance.now();
+    const tick = () => {
+      frames.push({
+        t: Math.round(performance.now() - t0),
+        unlocked: document.body.style.position !== 'fixed',
+        y: Math.round(window.scrollY),
+        mbtiTop: Math.round(mbti.getBoundingClientRect().top),
+        snap: getComputedStyle(root).scrollSnapType,
+        hold: root.classList.contains('mb-snap-hold'),
+      });
+      if (performance.now() - t0 < 1400) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+
+  // 点面板上方的空白（遮罩）关闭
+  await page.mouse.click(195, 80);
+  await expect(sheet).toBeHidden();
+  await page.waitForTimeout(600);
+
+  const frames = await page.evaluate(
+    () => (window as unknown as { __frames: Array<Record<string, unknown>> }).__frames,
+  );
+  expect(frames.length).toBeGreaterThan(20);
+
+  const flashed = frames.filter((frame) => frame.unlocked === true && frame.y === 0);
+  expect(flashed, '解锁后出现了停在第一屏的帧').toHaveLength(0);
+
+  // 整个过程里人格屏都填满视口，没有一帧被顶出画面
+  for (const frame of frames) expect(Math.abs(Number(frame.mbtiTop))).toBeLessThanOrEqual(2);
+
+  // 解锁的瞬间吸附被按住（否则 Safari 会拿旧位置先吸一次），随后放开
+  expect(frames.some((frame) => frame.hold === true && frame.snap === 'none')).toBe(true);
+  expect(frames.at(-1)?.snap).toBe('y mandatory');
+
+  expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(before);
+});
+
 test('人格详解：双击卡片不会把刚打开的面板关掉', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openHome(page);
