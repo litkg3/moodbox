@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, MessageCircleHeart, Wind } from 'lucide-react';
+import { ChevronDown, MessageCircleHeart } from 'lucide-react';
 import { EmotionPanel } from '@/components/emotion/emotion-panel';
 import { enterSquare } from '@/components/layout/square-entrance';
 import { EmotionSky } from '@/components/emotion/emotion-sky';
@@ -14,6 +14,7 @@ import { ScrollScreen } from '@/components/home/scroll-screen';
 import { useToast } from '@/components/ui/toast';
 import { HOME_BLESSING_LINES, SLOGAN } from '@/data/emotions';
 import { useMoodBox } from '@/hooks/use-moodbox';
+import { useScreenPager } from '@/hooks/use-screen-pager';
 import { burstLine } from '@/lib/burst-lines';
 import { getEmotion } from '@/lib/emotions';
 import { moodBoxStore } from '@/lib/moodbox-store';
@@ -23,28 +24,29 @@ import type { Emotion, EmotionId } from '@/types';
 const RETURN_DELAY_MS = 2000;
 
 /**
- * 首页 = 四整屏。
+ * 首页 = 三整屏。
  *
- * 情绪天空 → 情绪转盘 → 人格详解 → 树洞广场。
+ * 情绪天空 → 情绪转盘 → 人格详解。
  *
- * 翻页交给 CSS `scroll-snap-type: y mandatory`（html 上的 .mb-snap），
- * 不写 JS 拦截滚轮：浏览器的吸附本身就是"拖到一半、松手滑过去"的手感，
- * 而且滚动条、键盘、读屏、锚点全部免费拿到。
+ * 翻页按宽度分两条路（见 use-screen-pager）：
+ * - 桌面端（≥769px）关掉 CSS 吸附，由 JS 用 1s 的 easeInOutCubic 驱动 scrollTop。
+ *   原生吸附是"拨一下、吸一下"，速度由浏览器定，做不到苹果官网那种慢起缓停；
+ * - 手机端保留原生 scroll-snap —— 触摸的惯性和橡皮筋是系统给的，
+ *   用 JS 接管反而会丢掉手感。
  *
- * 矮屏（< 560px 高，常见于横屏手机）不开吸附：那种高度里一屏装不下
- * 转盘，强吸会把人锁在半屏上，不如让它当普通长页面滚。
+ * 矮屏（< 560px 高，常见于横屏手机）两边都不开，当普通长页面滚。
  */
 const SCREENS = [
   { id: 'sky', label: '情绪天空' },
   { id: 'wheel', label: '情绪转盘' },
   { id: 'mbti', label: '人格详解' },
-  { id: 'square', label: '树洞广场' },
 ] as const;
+
+const SCREEN_IDS = SCREENS.map((screen) => screen.id);
 
 export function HomeExperience() {
   const [selectedEmotion, setSelectedEmotion] = useState<Emotion | null>(null);
   const [burstingId, setBurstingId] = useState<EmotionId | null>(null);
-  const [activeScreen, setActiveScreen] = useState(0);
   const { bursts } = useMoodBox();
   const { showToast } = useToast();
   const timers = useRef(new Map<EmotionId, number>());
@@ -58,115 +60,40 @@ export function HomeExperience() {
     };
   }, []);
 
-  /* ---------------- 整屏吸附 ---------------- */
-  useEffect(() => {
-    const query = window.matchMedia('(min-height: 560px)');
-    const root = document.documentElement;
-    const sync = () => root.classList.toggle('mb-snap', query.matches);
-    sync();
-    query.addEventListener('change', sync);
-    return () => {
-      query.removeEventListener('change', sync);
-      root.classList.remove('mb-snap');
-    };
-  }, []);
+  /* ---------------- 翻页 ---------------- */
 
-  /* 当前在哪一屏：比例最大的那一屏。只影响导航圆点的高亮。 */
-  useEffect(() => {
-    const nodes = SCREENS.map((screen) => document.getElementById(screen.id));
-    const ratios = new Map<Element, number>();
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          ratios.set(entry.target, entry.isIntersecting ? entry.intersectionRatio : 0);
-        }
-        let best = -1;
-        let bestRatio = 0.2;
-        nodes.forEach((node, index) => {
-          if (!node) return;
-          const ratio = ratios.get(node) ?? 0;
-          if (ratio > bestRatio) {
-            bestRatio = ratio;
-            best = index;
-          }
-        });
-        if (best >= 0) setActiveScreen(best);
-      },
-      { threshold: [0, 0.2, 0.4, 0.6, 0.8, 1] },
-    );
-
-    nodes.forEach((node) => node && observer.observe(node));
-    return () => observer.disconnect();
-  }, []);
-
-  const goToScreen = useCallback((index: number) => {
-    const target = SCREENS[index];
-    if (!target) return;
-    const el = document.getElementById(target.id);
-    if (!el) return;
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-  }, []);
+  const { mode, active: activeScreen, goToSection } = useScreenPager(SCREEN_IDS);
 
   /*
-   * 某一屏内部自己还能滚（手机端的人格详解）时，先把整页的强制吸附摘掉。
+   * 两种翻页方式互斥：
+   * - 桌面端挂 .mb-js-pager：关掉 CSS 吸附，并且把 scroll-behavior 收成 auto
+   *   （rAF 每帧写一次 scrollTop，smooth 会让每一帧都变成一段动画）；
+   * - 手机端挂 .mb-snap：原生吸附，一滑一屏由浏览器负责。
    *
-   * 不摘会怎样：滚轮滚到内层底部后会直接穿透到整页，一次滑过两三屏 ——
-   * 因为 snap-stop 只约束"一个滚动容器之内"的位移。
-   * 摘掉之后，内层滚到底、再滚一下才翻到下一屏；离开这一屏（或内层已经到底）
-   * 就立刻挂回来，保住一滑一屏的手感。
+   * 矮屏两边都不挂，页面就是普通长文档。
    */
   useEffect(() => {
     const root = document.documentElement;
-    const scrollers = Array.from(document.querySelectorAll<HTMLElement>('[data-screen-scroll]'));
-    if (scrollers.length === 0) return;
-
-    let detachTimer = 0;
-
-    const canScroll = (el: HTMLElement) => el.scrollHeight - el.clientHeight > 4;
-
-    const innerAtEdge = (el: HTMLElement) =>
-      el.scrollTop <= 1 || el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
-
-    /** 当前这一屏里还有没滚完的内层容器吗 */
-    const blockedByInner = () => {
-      const active = document.getElementById(SCREENS[activeScreen]?.id ?? '');
-      const inner = active?.querySelector<HTMLElement>('[data-screen-scroll]');
-      return Boolean(inner && canScroll(inner) && !innerAtEdge(inner));
-    };
-
-    const sync = () => {
-      window.clearTimeout(detachTimer);
-      const detach = blockedByInner();
-      root.classList.toggle('mb-snap-inner', detach);
-      /*
-       * 离开内层边界后不要立刻挂回：滚轮还会继续派发一两次事件，
-       * 那时吸附已经回来了，人会感觉"卡了一下"。等手停下来再挂。
-       */
-      if (!detach) {
-        detachTimer = window.setTimeout(() => root.classList.remove('mb-snap-inner'), 260);
-      }
-    };
-
-    const onInnerScroll = (event: Event) => {
-      const el = event.currentTarget as HTMLElement;
-      if (el.scrollHeight - el.clientHeight <= 4) return;
-      sync();
-    };
-
-    scrollers.forEach((el) => el.addEventListener('scroll', onInnerScroll, { passive: true }));
-    const observer = new IntersectionObserver(sync, { threshold: [0, 0.5, 1] });
-    document.querySelectorAll('.mb-screen').forEach((node) => observer.observe(node));
-
-    sync();
+    root.classList.toggle('mb-js-pager', mode === 'js');
+    root.classList.toggle('mb-snap', mode === 'snap');
     return () => {
-      window.clearTimeout(detachTimer);
-      scrollers.forEach((el) => el.removeEventListener('scroll', onInnerScroll));
-      observer.disconnect();
-      root.classList.remove('mb-snap-inner');
+      root.classList.remove('mb-js-pager');
+      root.classList.remove('mb-snap');
     };
-  }, [activeScreen]);
+  }, [mode]);
+
+  /*
+   * 其他入口（页头「主页」、将来任何"回到第 N 屏"的按钮）都往这个事件上挂，
+   * 不必知道翻页是 JS 还是原生吸附 —— 这里统一转交给 goToSection。
+   */
+  useEffect(() => {
+    const onGoto = (event: Event) => {
+      const index = (event as CustomEvent<number>).detail;
+      if (typeof index === 'number') goToSection(index);
+    };
+    window.addEventListener('moodbox:goto-section', onGoto);
+    return () => window.removeEventListener('moodbox:goto-section', onGoto);
+  }, [goToSection]);
 
   /* ---------------- 情绪球 ---------------- */
 
@@ -292,35 +219,7 @@ export function HomeExperience() {
 
       <MbtiSection />
 
-      <ScrollScreen id="square" label="树洞广场" className="mb-closing">
-        <div className="mb-closing-inner">
-          <h2 className="mb-reveal mb-closing-title">
-            有些话说不出口，
-            <br />
-            可以先放进树洞
-          </h2>
-          <p className="mb-reveal mb-closing-copy" data-delay="1">
-            那里有人写下今天的一点小崩溃，也有人回一句「我也是」。
-            <br />
-            不必署名，也不必解释。
-          </p>
-          <div className="mb-reveal mb-closing-actions" data-delay="2">
-            <Link href="/square" prefetch={false} onClick={enterSquare} className="mb-btn-warm">
-              <MessageCircleHeart size={15} strokeWidth={1.6} aria-hidden="true" />
-              去树洞广场
-            </Link>
-            <Link href="/breathe" className="mb-btn-ghost">
-              <Wind size={15} strokeWidth={1.6} aria-hidden="true" />
-              呼吸放松
-            </Link>
-          </div>
-          <p className="mb-reveal mb-closing-note" data-delay="3">
-            所有记录只保存在你的浏览器本地
-          </p>
-        </div>
-      </ScrollScreen>
-
-      <ScreenDots items={SCREENS} active={activeScreen} onSelect={goToScreen} />
+      <ScreenDots items={SCREENS} active={activeScreen} onSelect={goToSection} />
 
       <p className="sr-only">{SLOGAN}</p>
 

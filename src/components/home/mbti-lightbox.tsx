@@ -192,7 +192,10 @@ export function MbtiLightbox({ open, onClose }: { open: boolean; onClose: () => 
         />
       </div>
 
-      <p className="mb-lightbox-hint">单指拖动 · 双指缩放 · 双击放大</p>
+      <div className="mb-lightbox-foot">
+        <p className="mb-lightbox-hint">单指拖动 · 双指缩放 · 双击放大</p>
+        <p className="mb-lightbox-note">MBTI 仅供自我探索参考，不具备心理评估或诊断功能。</p>
+      </div>
     </div>,
     document.body,
   );

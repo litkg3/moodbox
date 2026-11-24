@@ -3024,6 +3024,40 @@ html.mb-snap {
   scroll-padding-top: 0;
 }
 
+/*
+ * 桌面端由 JS 翻页器接管（use-screen-pager）：
+ * - 关掉 CSS 吸附，否则浏览器的吸附动画会和我们的 rAF 抢 scrollTop；
+ * - scroll-behavior 必须收回 auto —— rAF 每帧写一次 scrollTop，
+ *   smooth 会让**每一帧**都变成一段独立的滚动动画，画面会抖成一团。
+ */
+html.mb-js-pager {
+  scroll-snap-type: none;
+  scroll-behavior: auto;
+  scroll-padding-top: 0;
+}
+
+html.mb-js-pager .mb-screen {
+  scroll-snap-align: none;
+  scroll-snap-stop: normal;
+}
+
+/*
+ * 离开的那一屏轻微淡出：翻页时"旧的一屏退后半步"，
+ * 比两屏都保持满不透明更像一次转场。
+ *
+ * 转盘锁着一排卡片时不淡出 —— opacity 小于 1 会让内部 position: fixed 的卡片
+ * 改以这一屏为基准，动画一开始卡片就跳位。
+ */
+.mb-screen[data-leaving='true'] {
+  opacity: 0.6;
+  transition: opacity 0.4s ease;
+}
+
+.mb-screen:has(.emotion-wheel.has-active)[data-leaving='true'] {
+  opacity: 1;
+  transition: none;
+}
+
 .mb-screen {
   position: relative;
   display: flex;
@@ -3229,90 +3263,6 @@ html[data-theme='night'] .mb-screen-dot.is-active > span {
   background: color-mix(in srgb, var(--color-lavender-deep) 90%, transparent);
 }
 
-/* ---------------- 第四屏：收束 ---------------- */
-
-.mb-closing {
-  align-items: center;
-  justify-content: center;
-  padding: 108px 24px 72px;
-  text-align: center;
-}
-
-.mb-closing-inner {
-  display: flex;
-  max-width: 620px;
-  flex-direction: column;
-  align-items: center;
-}
-
-.mb-closing-title {
-  font-family: var(--font-display);
-  font-size: clamp(23px, 2.4vw, 33px);
-  font-weight: 300;
-  line-height: 1.62;
-  letter-spacing: 0.1em;
-  color: var(--color-ink);
-}
-
-.mb-closing-copy {
-  margin-top: 18px;
-  font-size: 12.5px;
-  line-height: 2.1;
-  letter-spacing: 0.04em;
-  color: var(--color-ink-faint);
-}
-
-.mb-closing-actions {
-  display: flex;
-  margin-top: 30px;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
-}
-
-.mb-closing-actions > a {
-  display: inline-flex;
-  height: 42px;
-  align-items: center;
-  gap: 8px;
-  border-radius: 999px;
-  padding: 0 22px;
-  font-size: 12.5px;
-  letter-spacing: 0.06em;
-  transition:
-    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
-    filter 0.4s ease,
-    background-color 0.4s ease;
-}
-
-.mb-closing-actions > a:hover {
-  transform: translateY(-1px);
-}
-
-.mb-btn-ghost {
-  border: 1px solid color-mix(in srgb, var(--color-ink-ghost) 26%, transparent);
-  background: color-mix(in srgb, var(--color-white) 46%, transparent);
-  color: var(--color-ink-soft);
-  backdrop-filter: blur(14px) saturate(1.05);
-}
-
-.mb-btn-ghost:hover {
-  background: color-mix(in srgb, var(--color-white) 62%, transparent);
-  color: var(--color-ink);
-}
-
-html[data-theme='night'] .mb-btn-ghost {
-  border-color: rgba(255, 255, 255, 0.14);
-  color: var(--color-ink-soft);
-}
-
-.mb-closing-note {
-  margin-top: 34px;
-  font-size: 10.5px;
-  letter-spacing: 0.14em;
-  color: var(--color-ink-faint);
-}
-
 /* ============================================================
    MBTI 十六型
    ============================================================ */
@@ -3323,8 +3273,7 @@ html[data-theme='night'] .mb-btn-ghost {
    * 1) 压在本站最浅的奶油底 #fbf7f3 上 ≥ 4.5:1（卡片代号是大号文字，但底色会随
    *    主题浮动，所以按最坏情况算）；
    * 2) 压在卡片自身的半透明玻璃底上也要 ≥ 4.5:1，见下面 .mb-mbti-card 的
-   *    白色 78% / soft 42% —— 之前的 56% 太透，底下的背景色把对比度拉到 1.4，
-   *    等于代号根本看不清。
+   *    白色 78% / soft 44% —— 更透的话，底下的背景色会把对比度拉到 1.4。
    * 实测（日间，卡片底）：analyst 7.0 / sentinel 6.0 / diplomat 5.6 / explorer 5.9。
    */
   --mbti-analyst: #4f3570;
@@ -3344,12 +3293,11 @@ html[data-theme='night'] .mb-btn-ghost {
   --mbti-gap: clamp(9px, 1.05vw, 15px);
   --mbti-title-size: clamp(20px, 2.1vw, 29px);
   --mbti-sub-size: clamp(11.5px, 0.9vw, 13px);
-  --mbti-code-size: clamp(17px, 1.55vw, 23px);
-  --mbti-name-size: clamp(11px, 0.82vw, 12.5px);
-  --mbti-body-size: clamp(11px, 0.86vw, 13px);
+  --mbti-avatar: clamp(38px, 3.2vw, 56px);
+  --mbti-code-size: clamp(15px, 1.5vw, 20px);
+  --mbti-name-size: clamp(10.5px, 0.8vw, 12px);
+  --mbti-tagline-size: clamp(11px, 0.92vw, 14px);
   --mbti-note-size: 11px;
-  --mbti-art: clamp(40px, 3.9vw, 60px);
-  --mbti-lines: 3;
 }
 
 html[data-theme='night'] {
@@ -3435,24 +3383,39 @@ html[data-theme='night'] {
   color: var(--color-ink);
 }
 
-.mb-mbti-scroll {
+/* 手机端收成一个小图标按钮，标签只在读屏里出现 */
+.mb-mbti-full-label {
+  display: inline;
+}
+
+/* ---------------- 分组切换（只在手机端出现） ---------------- */
+
+.mb-mbti-segments {
+  display: none;
+}
+
+/* ---------------- 卡片区 ---------------- */
+
+.mb-mbti-body {
   display: flex;
   min-height: 0;
   flex: 1 1 0%;
 }
 
-/*
- * 网格放在可滚容器里，宽度由 align-content 决定会缩成内容宽，
- * 必须自己撑满 + 左对齐，2 列时才能正常铺成两列。
- */
 .mb-mbti-grid {
   display: grid;
   width: 100%;
-  align-content: start;
-  justify-content: start;
+  align-content: stretch;
+  gap: var(--mbti-gap);
+}
+
+.mb-mbti-grid-desktop {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-template-rows: repeat(4, minmax(0, 1fr));
-  gap: var(--mbti-gap);
+}
+
+.mb-mbti-grid-mobile {
+  display: none;
 }
 
 .mb-mbti-card {
@@ -3460,20 +3423,21 @@ html[data-theme='night'] {
   display: flex;
   min-height: 0;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: clamp(4px, 0.65vh, 8px);
+  gap: clamp(3px, 0.5vh, 6px);
   overflow: hidden;
   border-radius: var(--mbti-radius);
   border: 1px solid color-mix(in srgb, var(--mbti-accent) 18%, transparent);
   background:
     radial-gradient(
-      118% 96% at 88% 0%,
+      118% 96% at 50% 0%,
       color-mix(in srgb, var(--mbti-soft) 44%, transparent) 0%,
-      transparent 62%
+      transparent 66%
     ),
     color-mix(in srgb, var(--color-white) 78%, transparent);
   padding: clamp(9px, 1.05vh, 13px) clamp(10px, 0.85vw, 14px);
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   box-shadow: var(--shadow-card);
   backdrop-filter: blur(16px) saturate(1.06);
@@ -3513,19 +3477,60 @@ html[data-theme='night'] {
   outline-offset: 2px;
 }
 
-.mb-mbti-head-row {
+/*
+ * 头像在正常文档流里 —— 之前用绝对定位贴在右上角，手机上 161px 宽的卡
+ * 里正文会绕到它下面去，一眼看过去就是"字压在人头上"。
+ */
+.mb-mbti-avatar {
+  width: var(--mbti-avatar);
+  height: var(--mbti-avatar);
+  flex-shrink: 0;
+  border-radius: 999px;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--mbti-soft) 60%, transparent);
+  box-shadow: 0 8px 20px -14px color-mix(in srgb, var(--mbti-accent) 70%, transparent);
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mb-mbti-card:hover .mb-mbti-avatar {
+  transform: scale(1.05) rotate(-1.5deg);
+}
+
+.mb-mbti-meta {
   display: flex;
-  align-items: baseline;
-  gap: 7px;
-  padding-right: calc(var(--mbti-art) + 4px);
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+/*
+ * 桌面端：头像在左、文字在右。
+ * 四列网格里每张卡有 300px 宽，纯居中会让中间一小团字四周全是空的；
+ * 横排之后信息占满整条，读起来更像"一行一个人"。
+ */
+.mb-mbti-grid-desktop .mb-mbti-card {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 14px;
+  padding: clamp(10px, 1.1vh, 14px) clamp(12px, 1.1vw, 18px);
+  text-align: left;
+}
+
+.mb-mbti-grid-desktop .mb-mbti-avatar {
+  --mbti-avatar: clamp(44px, 3.6vw, 56px);
+}
+
+.mb-mbti-grid-desktop .mb-mbti-meta {
+  align-items: flex-start;
 }
 
 .mb-mbti-code {
   font-family: var(--font-display);
   font-size: var(--mbti-code-size);
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.1;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   color: var(--mbti-accent);
 }
 
@@ -3535,34 +3540,19 @@ html[data-theme='night'] {
   color: var(--color-ink-soft);
 }
 
-.mb-mbti-desc {
-  overflow: hidden;
-  font-size: var(--mbti-body-size);
-  line-height: 1.6;
-  /*
-   * 卡片底的白色只有 78%，背景会透进来一点，所以正文不能停在 ink-faint
-   * （那是在纯底上的安全值），正文要能顺着读，直接用 ink-soft 的实色。
-   */
+/*
+ * 一句话标语：不换行、不截断。
+ *
+ * 卡片内容宽 = (375 - 20*2 - 12) / 2 - 16*2 ≈ 130px，14px 字号下最多放 9 个汉字，
+ * 所以 mbti.json 里的 tagline 都控制在 8 个字以内（14 字是硬上限，但排不下）。
+ */
+.mb-mbti-tagline {
+  margin-top: 2px;
+  font-size: var(--mbti-tagline-size);
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
   color: var(--color-ink-soft);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: var(--mbti-lines);
-}
-
-.mb-mbti-art {
-  position: absolute;
-  top: clamp(8px, 1vh, 11px);
-  right: clamp(8px, 0.7vw, 12px);
-  width: var(--mbti-art);
-  height: var(--mbti-art);
-  border-radius: 14px;
-  object-fit: cover;
-  background: color-mix(in srgb, var(--mbti-soft) 60%, transparent);
-  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.mb-mbti-card:hover .mb-mbti-art {
-  transform: scale(1.06) rotate(-1.5deg);
 }
 
 /* 四组配色：类名只负责把 token 指过去 */
@@ -3592,135 +3582,426 @@ html[data-theme='night'] {
   color: var(--color-ink-faint);
 }
 
-.mb-mbti-hint {
+.mb-mbti-note-hint {
   display: none;
 }
 
-@media (min-width: 1200px) and (min-height: 900px) {
-  :root {
-    --mbti-lines: 4;
-  }
-}
+/* ============================================================
+   手机端（≤768px）：分组分页，一屏四张
+   ============================================================ */
 
-/*
- * 平板与手机：两列、屏内滚。
- *
- * 这一屏内容确实比一屏高，所以它自己是滚动容器。滚动收口交给
- * `.mb-mbti-scroll { scroll-snap-type: y proximity }`（见本文件末尾）：
- * 卡片只是"靠近了吸一下"，不会把人卡在第一行看不完后面。
- */
-@media (max-width: 1199px) {
+@media (max-width: 768px) {
   .mb-mbti {
-    padding-bottom: 10px;
+    /* 顶部让开固定页头，底部让开 iPhone 的小黑条 */
+    padding: calc(76px + env(safe-area-inset-top, 0px)) 20px
+      calc(12px + env(safe-area-inset-bottom, 0px));
   }
 
-  .mb-mbti-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-rows: none;
-    grid-auto-rows: minmax(112px, auto);
-    gap: clamp(8px, 2.2vw, 14px);
-  }
-
-  .mb-mbti-scroll {
-    overflow-y: auto;
-    overscroll-behavior-y: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-right: 2px;
-  }
-
-  .mb-mbti-card {
-    scroll-snap-align: start;
-  }
-
-  .mb-mbti-hint {
-    display: inline;
-    margin-left: 10px;
-    letter-spacing: 0.08em;
-  }
-}
-
-/* 窄屏页头改为竖排：标题独占一行，按钮落到副标题下面 */
-@media (max-width: 899px) {
   .mb-mbti-head {
-    flex-direction: column;
+    flex-direction: row;
     align-items: flex-start;
     gap: 10px;
+    margin-bottom: 0;
   }
 
-  .mb-mbti-full {
-    height: 30px;
-    padding: 0 12px;
-    font-size: 11px;
-  }
-}
-
-@media (max-width: 560px) {
-  :root {
-    --mbti-lines: 3;
-    --mbti-art: 38px;
-  }
-
+  /*
+   * 标题压成一行：22px / 600。
+   * 375px 宽下"MBTI 十六种人格类型 详解"约 240px，右侧图标 32px + 间距 10px，
+   * 刚好在 335px 的可用宽度里 —— 所以字号跟着窄屏收紧一点，别再折成两行。
+   */
   .mb-mbti-title {
-    letter-spacing: 0.08em;
+    font-size: clamp(18px, 5.9vw, 22px);
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
   }
 
   .mb-mbti-sub {
-    letter-spacing: 0.1em;
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--color-ink-faint);
+  }
+
+  /* 「查看完整图」不再是独立一行，只留一枚图标（点按区 40×40） */
+  .mb-mbti-full {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 999px;
+  }
+
+  .mb-mbti-full-label {
+    display: none;
+  }
+
+  .mb-mbti-segments {
+    display: grid;
+    margin-top: 12px;
+    flex-shrink: 0;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--color-ink-ghost) 20%, transparent);
+    background: color-mix(in srgb, var(--color-white) 54%, transparent);
+    padding: 4px;
+    backdrop-filter: blur(16px) saturate(1.06);
+  }
+
+  .mb-mbti-seg {
+    /* 44 + 上下各 4 的内边距 = 52 高，点击区够 44 */
+    height: 44px;
+    border-radius: 999px;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: var(--color-ink-soft);
+    transition:
+      color 0.3s ease,
+      background-color 0.3s ease,
+      box-shadow 0.3s ease;
+  }
+
+  .mb-mbti-seg.is-active {
+    /*
+     * 用 --color-white 当文字色是故意的：日间它是白，夜间它是深紫灰，
+     * 刚好对应"深底白字 / 浅底深字"，两种主题都不用另写一套。
+     */
+    background: var(--mbti-accent);
+    color: var(--color-white);
+    box-shadow: 0 8px 20px -14px color-mix(in srgb, var(--mbti-accent) 90%, transparent);
+  }
+
+  /*
+   * 手机端的字号/头像全部重新定：一屏只放四张，可以给到"看得清"的尺寸。
+   * 全部写在 .mb-mbti 上，卡片只负责用 token。
+   */
+  .mb-mbti {
+    --mbti-avatar: 64px;
+    --mbti-code-size: 20px;
+    --mbti-name-size: 13px;
+    --mbti-tagline-size: 14px;
+    --mbti-radius: 20px;
+  }
+
+  .mb-mbti-body {
+    margin-top: 12px;
+    /* 卡片不再撑满剩余高度，而是居中一块 —— 一屏四张，不该瘦成四根柱子 */
+    align-items: center;
+    touch-action: pan-y;
+  }
+
+  .mb-mbti-grid-desktop {
+    display: none;
+  }
+
+  /*
+   * 2×2 一块，最多 560 宽、每行最多 244 高。
+   *
+   * 不让它拉满剩余高度：390×844 上一拉满就是 169×296 的四根柱子，中间
+   * 一小团字、四周全是空。定住上限再居中，三档尺寸看过去比例都接近。
+   */
+  .mb-mbti-grid-mobile {
+    display: grid;
+    width: 100%;
+    max-width: 560px;
+    height: 100%;
+    max-height: 500px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    align-content: center;
+    gap: 12px;
+    margin-inline: auto;
+    animation: mb-mbti-group-in 0.42s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  }
+
+  .mb-mbti-grid-mobile[data-dir='next'] {
+    --mbti-dir: 1;
+  }
+
+  .mb-mbti-grid-mobile[data-dir='prev'] {
+    --mbti-dir: -1;
+  }
+
+  .mb-mbti-card {
+    gap: 4px;
+    padding: 16px;
+    border-radius: var(--mbti-radius);
+  }
+
+  .mb-mbti-avatar {
+    margin-bottom: 4px;
+  }
+
+  .mb-mbti-meta {
+    gap: 4px;
+  }
+
+  .mb-mbti-code {
+    font-weight: 700;
+  }
+
+  .mb-mbti-name {
+    letter-spacing: 0.06em;
+  }
+
+  .mb-mbti-tagline {
+    margin-top: 2px;
+  }
+
+  /* 十六张的错峰在手机上没意义（一次只放四张），改成一张 40ms */
+  [data-revealed='true'] .mb-mbti-grid-mobile .mb-mbti-card {
+    animation-delay: calc(var(--i, 0) * 40ms);
+  }
+
+  .mb-mbti-note {
+    margin-top: 10px;
+    letter-spacing: 0.06em;
+  }
+
+  .mb-mbti-note-copy {
+    display: none;
+  }
+
+  .mb-mbti-note-hint {
+    display: inline;
   }
 }
 
-/* 详情弹层 */
-.mb-mbti-detail-hero {
+/* 小平板（600~768）：卡片可以再大一点，尺寸跟着宽高一起长 */
+@media (min-width: 600px) and (max-width: 768px) {
+  .mb-mbti {
+    --mbti-avatar: 84px;
+    --mbti-code-size: 23px;
+    --mbti-tagline-size: 15px;
+  }
+
+  .mb-mbti-grid-mobile {
+    max-height: 560px;
+  }
+}
+
+@keyframes mb-mbti-group-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--mbti-dir, 1) * 18px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ============================================================
+   人物详情面板：手机上 bottom sheet，桌面上居中弹层
+   ============================================================ */
+
+.mb-sheet {
+  position: relative;
   display: flex;
-  align-items: flex-start;
-  gap: 16px;
+  width: 100%;
+  max-height: 70dvh;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 24px 24px 0 0;
+  border: 1px solid color-mix(in srgb, var(--color-white) 74%, transparent);
+  background:
+    radial-gradient(
+      120% 70% at 50% 0%,
+      color-mix(in srgb, var(--mbti-soft, var(--color-lavender)) 54%, transparent) 0%,
+      transparent 70%
+    ),
+    color-mix(in srgb, var(--color-white) 88%, transparent);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-shadow: 0 -30px 80px -44px rgba(40, 30, 60, 0.66);
+  backdrop-filter: blur(26px) saturate(1.1);
+  outline: none;
 }
 
-.mb-mbti-detail-art {
-  width: 92px;
-  height: 92px;
+@media (min-width: 769px) {
+  .mb-sheet {
+    max-height: 78dvh;
+    border-radius: 28px;
+    box-shadow: 0 40px 100px -60px rgba(40, 30, 60, 0.8);
+  }
+}
+
+/* 握把：手机上唯一的拖拽区，正文区域不接管手势，滚动照旧 */
+.mb-sheet-grip {
+  display: grid;
+  height: 26px;
   flex-shrink: 0;
-  border-radius: 18px;
-  border: 1px solid color-mix(in srgb, var(--mbti-accent) 22%, transparent);
-  background: color-mix(in srgb, var(--mbti-soft) 55%, transparent);
-  object-fit: cover;
+  place-items: center;
+  touch-action: none;
+  cursor: grab;
 }
 
-.mb-mbti-detail p {
-  font-size: 13.5px;
-  line-height: 1.95;
+.mb-sheet-grip > span {
+  width: 38px;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-ink-ghost) 44%, transparent);
+}
+
+@media (min-width: 769px) {
+  .mb-sheet-grip {
+    display: none;
+  }
+}
+
+.mb-sheet-close {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 2;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--color-ink-faint);
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
+}
+
+.mb-sheet-close:hover {
+  background: color-mix(in srgb, var(--color-white) 70%, transparent);
+  color: var(--color-ink);
+}
+
+.mb-sheet-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 20px 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mb-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  /* 让开关闭按钮（44×44）的位置，别让代号被压到它下面 */
+  padding-right: 46px;
+}
+
+.mb-sheet-art {
+  width: 84px;
+  height: 84px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mbti-soft, var(--color-lavender)) 62%, transparent);
+  object-fit: cover;
+  box-shadow: 0 12px 30px -20px color-mix(in srgb, var(--mbti-accent, var(--color-ink)) 70%, transparent);
+}
+
+.mb-sheet-id {
+  min-width: 0;
+}
+
+.mb-sheet-code {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+  color: var(--mbti-accent, var(--color-ink));
+}
+
+.mb-sheet-name {
+  margin-top: 2px;
+  font-size: 14px;
+  letter-spacing: 0.08em;
   color: var(--color-ink-soft);
 }
 
-.mb-mbti-detail-note {
-  margin-top: 18px;
-  border-top: 1px solid color-mix(in srgb, var(--color-ink-ghost) 18%, transparent);
-  padding-top: 14px;
-  font-size: 11.5px;
-  line-height: 1.9;
+.mb-sheet-tagline {
+  margin-top: 4px;
+  font-size: 13.5px;
+  letter-spacing: 0.02em;
   color: var(--color-ink-faint);
 }
 
-.mb-mbti-back {
-  display: inline-flex;
-  height: 36px;
+.mb-sheet-tags {
+  display: flex;
+  margin: 16px 0 0;
+  padding: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+}
+
+.mb-sheet-tags > li {
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--mbti-accent, var(--color-ink)) 22%, transparent);
+  background: color-mix(in srgb, var(--mbti-soft, var(--color-lavender)) 46%, transparent);
+  padding: 4px 11px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--mbti-accent, var(--color-ink)) 82%, var(--color-ink));
+}
+
+.mb-sheet-desc {
+  margin-top: 14px;
+  font-size: 15px;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+  color: var(--color-ink-soft);
+}
+
+.mb-sheet-foot {
+  display: flex;
+  flex-shrink: 0;
   align-items: center;
+  gap: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--color-ink-ghost) 16%, transparent);
+  padding: 10px 20px 0;
+}
+
+.mb-sheet-step {
+  display: inline-flex;
+  height: 44px;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
   gap: 6px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--color-ink-ghost) 24%, transparent);
-  background: color-mix(in srgb, var(--color-white) 52%, transparent);
-  padding: 0 16px;
-  font-size: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-ink-ghost) 22%, transparent);
+  background: color-mix(in srgb, var(--color-white) 62%, transparent);
+  font-size: 12.5px;
   letter-spacing: 0.06em;
   color: var(--color-ink-soft);
   transition:
     color 0.3s ease,
-    background-color 0.3s ease;
+    background-color 0.3s ease,
+    opacity 0.3s ease;
 }
 
-.mb-mbti-back:hover {
-  background: color-mix(in srgb, var(--color-white) 72%, transparent);
+.mb-sheet-step:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-white) 82%, transparent);
   color: var(--color-ink);
+}
+
+.mb-sheet-step:disabled {
+  opacity: 0.36;
+  cursor: default;
+}
+
+.mb-sheet-note {
+  flex-shrink: 0;
+  padding: 10px 20px 14px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-faint);
 }
 
 /* ---------------- 整图灯箱 ---------------- */
@@ -3748,7 +4029,34 @@ html[data-theme='night'] {
 .mb-lightbox-bar p {
   font-size: 12.5px;
   letter-spacing: 0.12em;
+  white-space: nowrap;
   color: rgba(255, 255, 255, 0.9);
+}
+
+/*
+ * 窄屏：顶栏只留工具。
+ * 375px 宽放不下"标题 + 五个 34px 按钮 + 百分比"，硬塞的结果是关闭按钮被裁掉；
+ * 图本身已经写着是什么，标题留在 aria-label 里给读屏就够了。
+ */
+@media (max-width: 480px) {
+  .mb-lightbox-bar {
+    justify-content: flex-end;
+    padding: 12px 14px;
+  }
+
+  .mb-lightbox-bar p {
+    display: none;
+  }
+
+  .mb-lightbox-tools {
+    gap: 4px;
+  }
+
+  .mb-lightbox-tools button,
+  .mb-lightbox-tools a {
+    width: 38px;
+    height: 38px;
+  }
 }
 
 .mb-lightbox-bar p span {
@@ -3822,13 +4130,24 @@ html[data-theme='night'] {
   -webkit-user-drag: none;
 }
 
-.mb-lightbox-hint {
+.mb-lightbox-foot {
   flex-shrink: 0;
-  padding: 10px 0 16px;
+  padding: 8px 16px calc(14px + env(safe-area-inset-bottom, 0px));
   text-align: center;
+}
+
+.mb-lightbox-hint {
   font-size: 10.5px;
   letter-spacing: 0.16em;
   color: rgba(255, 255, 255, 0.55);
+}
+
+.mb-lightbox-note {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.58);
 }
 
 /* ---------------- 降级与动画偏好 ---------------- */
@@ -3839,7 +4158,7 @@ html[data-theme='night'] {
   }
 
   .mb-mbti-full,
-  .mb-btn-ghost {
+  .mb-sheet {
     background: color-mix(in srgb, var(--color-cream) 96%, transparent);
   }
 }
@@ -3859,46 +4178,7 @@ html[data-theme='night'] {
     transition: none;
   }
 
-  .mb-closing-actions > a {
-    transition: none;
-  }
-}
-
-/*
- * ── 一个必须写在这里的怪癖 ────────────────────────────────────────────────
- *
- * `scroll-snap-type: y proximity` 在 `@media (max-height: X)` 里会整个值被丢掉
- * （CSSOM 读回来只剩 `y`，等于强制吸附），`mandatory` 和 `x proximity` 都正常。
- * 同一台 Chrome、同一份规则，只要把 max-height 换成 max-width 就正常。
- * 这是 Chromium 对 scroll-snap 的解析问题，跟我们的选择器无关。
- *
- * 所以 `proximity` 只声明在 `max-width` 里 —— 见下方；别为了"顺手"把宽度和
- * 高度条件合并到一个媒体查询里，否则手机横屏会变回强制吸附。
- *
- * 另外全局还有一处 `html.mb-snap { scroll-snap-type: y mandatory }`，
- * 窄屏时这一屏自己还能滚，会和整页的强制吸附打架（滚轮在内层滚到边界后会
- * 一口气穿透好几屏）。所以内层真的能滚时，由 [data-screen] / JS 摘掉整页的
- * mandatory，滚到底再挂回来。
- */
-@media (max-width: 1199px) {
-  .mb-mbti-scroll {
-    /* 卡片靠近时吸一下，不硬卡 */
-    scroll-snap-type: y proximity;
-  }
-}
-
-/*
- * 内层还能滚的时候，整页暂时不吸附（由 home-experience 加这个类）。
- * 见 home-experience.tsx 里的说明：强制吸附 + 内层滚动容器同时存在时，
- * 滚轮会从内层边界一口气穿透好几屏。
- */
-html.mb-snap.mb-snap-inner {
-  scroll-snap-type: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  /* 减少动效只关动画，吸附保留（需求里明确要求） */
-  html.mb-snap {
-    scroll-behavior: auto;
+  .mb-mbti-grid-mobile {
+    animation: none;
   }
 }

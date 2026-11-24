@@ -221,7 +221,7 @@ const sheet = `<!doctype html><html><head><meta charset="utf-8"><style>
   footer{position:absolute;left:96px;bottom:44px;font-size:13px;letter-spacing:.16em;color:#968fa1}
 </style></head><body>
   <h1>MBTI 十六种人格类型</h1>
-  <p class="sub">认识自我 · 理解他人 · 成就更好的关系</p>
+  <p class="sub">从人格类型中认识自我，调节自我情绪</p>
   <div class="grid">${rows.join('')}</div>
   <footer>MoodBox · 仅供自我探索参考</footer>
 </body></html>`;

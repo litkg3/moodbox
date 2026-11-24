@@ -275,7 +275,7 @@ test('情绪转盘：点空白处关闭详情，点击已选中扇形也能收�
   await expect(card).toHaveCount(0);
 });
 
-test('首页整屏吸附：CSS scroll-snap 一滑一屏，滚动跟手后自动吸住', async ({ page }) => {
+test('首页整屏翻页：桌面端滚轮一次一屏，1s 缓动；手机端仍是原生吸附', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openHome(page);
   await page.waitForTimeout(600);
@@ -283,58 +283,97 @@ test('首页整屏吸附：CSS scroll-snap 一滑一屏，滚动跟手后自动�
   const y = () => page.evaluate(() => Math.round(window.scrollY));
   const vh = await page.evaluate(() => window.innerHeight);
   const docH = await page.evaluate(() => document.documentElement.scrollHeight);
-  // 四屏：情绪天空 / 情绪转盘 / 人格详解 / 树洞广场
-  expect(Math.abs(docH - vh * 4)).toBeLessThanOrEqual(2);
+  // 三屏：情绪天空 / 情绪转盘 / 人格详解（第四屏已删除）
+  expect(Math.abs(docH - vh * 3)).toBeLessThanOrEqual(2);
 
-  // 吸附是 CSS 给的，不是 JS 驱动的
+  // 桌面端关掉 CSS 吸附，翻页由 JS 接管
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollSnapType)).toBe(
-    'y mandatory',
+    'none',
   );
-  expect(await page.locator('#sky').evaluate((el) => getComputedStyle(el).scrollSnapAlign)).toBe('start');
-  expect(await page.locator('#sky').evaluate((el) => getComputedStyle(el).scrollSnapStop)).toBe('always');
+  expect(
+    await page.evaluate(() => document.documentElement.classList.contains('mb-js-pager')),
+  ).toBe(true);
+  // scroll-behavior 必须是 auto，否则 rAF 每帧写一次 scrollTop 会变成每帧一段动画
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe(
+    'auto',
+  );
 
   expect(await y()).toBe(0);
-  // 落在转盘左侧的空白上：卡片区域会接管滚动，这里专测页面本身
+  // 落在转盘左侧的空白上：卡片区域会接管指针，这里专测页面本身
   await page.mouse.move(300, 450);
 
   /*
-   * 一、跟手：滚动过程中必须出现中间位置。
-   * 原生吸附也是"先跟着走、松手再吸"，采样只出现 0 和 900 就说明是顿过去的。
+   * 一、缓动：滚一屏要花掉接近 1s，而且中间出现大量中间位置。
+   * 之前原生吸附是"拨一下、啪地吸过去"，采样只会有 0 和 900 两个值。
    */
   const trail: number[] = [];
+  const startedAt = Date.now();
   const sampler = setInterval(async () => {
     try {
       trail.push(await y());
     } catch {
       /* 页面正在关闭时忽略 */
     }
-  }, 40);
-  await page.mouse.wheel(0, 600);
-  await page.waitForTimeout(1200);
-  clearInterval(sampler);
-  expect(trail.some((value) => value > 40 && value < vh - 40)).toBe(true);
-  expect(await y()).toBe(vh);
-
-  // 二、一次大幅滑动只翻一屏（snap-stop: always）
-  await page.mouse.wheel(0, 1200);
-  await page.waitForTimeout(1200);
-  expect(await y()).toBe(vh * 2);
-
-  // 三、不够半屏就回弹，停在原来那一屏
-  await page.mouse.wheel(0, 120);
-  await page.waitForTimeout(1000);
-  expect(await y()).toBe(vh * 2);
-
-  // 四、键盘走同一套吸附
-  await page.keyboard.press('PageUp');
-  await page.waitForTimeout(1200);
-  expect(await y()).toBe(vh);
-
-  // 五、圆点导航直接跳到某一屏
-  await page.getByRole('button', { name: '前往树洞广场' }).click();
+  }, 50);
+  await page.mouse.wheel(0, 100);
   await page.waitForTimeout(1400);
-  expect(await y()).toBe(vh * 3);
-  await expect(page.locator('.mb-screen-dot.is-active em')).toHaveText('树洞广场');
+  clearInterval(sampler);
+  const elapsed = Date.now() - startedAt;
+
+  expect(trail.filter((value) => value > 60 && value < vh - 60).length).toBeGreaterThanOrEqual(4);
+  expect(await y()).toBe(vh);
+  // 一次翻页至少要几百毫秒，不能"瞬间跳过去"
+  expect(elapsed).toBeGreaterThan(600);
+
+  // 二、一屏就是一屏：再滚一大截也只翻到第三屏
+  await page.mouse.wheel(0, 1200);
+  await page.waitForTimeout(1400);
+  expect(await y()).toBe(vh * 2);
+
+  // 三、动画中继续滚，不会翻多屏（输入被丢掉）
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(1300);
+  expect(await y()).toBe(0);
+  await page.mouse.wheel(0, 100);
+  await page.waitForTimeout(120);
+  await page.mouse.wheel(0, 100);
+  await page.waitForTimeout(1400);
+  expect(await y()).toBe(vh);
+
+  // 四、键盘走同一套翻页
+  await page.keyboard.press('End');
+  await page.waitForTimeout(1300);
+  expect(await y()).toBe(vh * 2);
+  await page.keyboard.press('ArrowUp');
+  await page.waitForTimeout(1300);
+  expect(await y()).toBe(vh);
+  await page.keyboard.press('ArrowDown');
+  await page.waitForTimeout(1300);
+  expect(await y()).toBe(vh * 2);
+
+  // 五、圆点导航也调同一个 goToSection
+  await page.getByRole('button', { name: '前往人格详解' }).click();
+  await page.waitForTimeout(1300);
+  expect(await y()).toBe(vh * 2);
+  await page.getByRole('button', { name: '前往情绪天空' }).click();
+  await page.waitForTimeout(1300);
+  expect(await y()).toBe(0);
+  await expect(page.locator('.mb-screen-dot.is-active em')).toHaveText('情绪天空');
+});
+
+test('首页翻页：手机端保留原生 scroll-snap，一滑一屏', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openHome(page);
+
+  const state = await page.evaluate(() => ({
+    snap: getComputedStyle(document.documentElement).scrollSnapType,
+    js: document.documentElement.classList.contains('mb-js-pager'),
+    docH: document.documentElement.scrollHeight,
+    vh: window.innerHeight,
+  }));
+  expect(state.snap).toBe('y mandatory');
+  expect(state.js).toBe(false);
+  expect(Math.abs(state.docH - state.vh * 3)).toBeLessThanOrEqual(2);
 });
 
 test('情绪转盘：第二屏撑满一屏，转盘水平居中', async ({ page }) => {
@@ -362,8 +401,8 @@ test('情绪转盘：第二屏撑满一屏，转盘水平居中', async ({ page 
   });
 
   expect(geo).toBeTruthy();
-  // 四屏的页面，第二屏就是转盘
-  expect(geo!.docH).toBeGreaterThanOrEqual(geo!.vh * 4 - 24);
+  // 三屏的页面，第二屏就是转盘
+  expect(geo!.docH).toBeGreaterThanOrEqual(geo!.vh * 3 - 24);
   /*
    * 窄屏（<1280）转盘水平居中（±2px）；
    * 宽屏改成「盘在左、卡片在右」，盘会往左让出一栏，这里只要求它完整在屏内。
