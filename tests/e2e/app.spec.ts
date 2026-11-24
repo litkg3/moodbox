@@ -464,9 +464,18 @@ test('情绪转盘：桌面端自动转到每一格并自动选中，卡片与�
   const readTop = () =>
     page.locator('.emotion-wheel-slice-top .emotion-wheel-slice-label').evaluate((el) => el.textContent ?? '');
 
-  // 待机时每秒转一格：2.2 秒后整盘角度必然变了
+  /*
+   * 待机节奏是 3 秒一格（0.82s 旋转 + 约 2.2s 静止）。
+   *
+   * 先确认「刚转完一格的样子」在一秒内不会变 —— 这一条专门守住"别再把
+   * 间隔改回 1 秒"：1 秒的话这一步必然已经转走了。
+   */
   const first = await readTransform();
-  await page.waitForTimeout(2200);
+  await page.waitForTimeout(900);
+  expect(await readTransform(), '一秒内不该转走，否则说明间隔被改短了').toBe(first);
+
+  // 等到下一个 3 秒点，整盘角度必然变了
+  await page.waitForTimeout(2600);
   expect(await readTransform()).not.toBe(first);
 
   // 盘在转，但卡片一直在（自动选中），而且卡片标题与指针下那一格一致
@@ -475,8 +484,8 @@ test('情绪转盘：桌面端自动转到每一格并自动选中，卡片与�
   expect(await readCard()).toBe(topLabel);
   await expect(page.locator('.emotion-wheel-pointer')).toHaveClass(/is-on/);
 
-  // 再等一格，卡片跟着指针换人 —— 这就是「自动选中」
-  await page.waitForTimeout(1300);
+  // 再等一格（3 秒 + 一点余量），卡片跟着指针换人 —— 这就是「自动选中」
+  await page.waitForTimeout(3600);
   const nextTop = await readTop();
   expect(await readCard()).toBe(nextTop);
 });
@@ -522,13 +531,14 @@ test('情绪转盘：鼠标悬停停住并切到那一格，移开后继续转',
     .evaluate((el) => el.textContent ?? '');
   await expect(page.locator('.emotion-wheel-card-title')).toHaveText(topLabel);
 
+  // 悬停期间跨过不止一个步进点（3 秒一格），角度必须一直不变
   const paused = await readTransform();
-  await page.waitForTimeout(2200);
+  await page.waitForTimeout(4200);
   expect(await readTransform()).toBe(paused);
 
-  // 移开之后重新开始转
+  // 移开之后重新开始转：要等过一个完整的步进间隔才会动
   await page.mouse.move(24, 120, { steps: 8 });
-  await page.waitForTimeout(2400);
+  await page.waitForTimeout(3800);
   expect(await readTransform()).not.toBe(paused);
 });
 

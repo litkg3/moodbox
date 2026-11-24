@@ -588,6 +588,49 @@ test('人格详解：面板打开时背景锁死，关闭后回到原处并把�
   expect(after.focus).toContain('INTJ');
 });
 
+test('人格详解：矮屏下卡片内容也不贴边，头像不顶到卡片上沿', async ({ page }) => {
+  /*
+   * 四行网格把卡片高度压成"剩余高度 / 4"。屏高 560 时每张只剩 84px，
+   * 而卡内内容是 头像 44 + 两行字 ≈ 66px —— 上下各分到 11px，比左右
+   * 内边距（14px）还窄，看起来就是"头像顶到边、字挤在上下框里"。
+   *
+   * 1280×560 是笔记本上很常见的实际高度（浏览器上下工具栏各占一截），
+   * 所以这一档必须真的量一遍，不能只看 1440×900。
+   */
+  await page.setViewportSize({ width: 1280, height: 560 });
+  await openHome(page);
+  await goToScreen(page, 'mbti');
+  await page.waitForTimeout(400);
+
+  const metrics = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll<HTMLElement>('.mb-mbti-grid-desktop .mb-mbti-card')];
+    const visible = cards.filter((card) => card.getBoundingClientRect().width > 0);
+    return visible.slice(0, 4).map((card) => {
+      const box = card.getBoundingClientRect();
+      // 卡内所有可见内容（头像 + 文字块）的最上沿与最下沿
+      const parts = ['.mb-mbti-avatar', '.mb-mbti-meta'].map((sel) =>
+        card.querySelector(sel)!.getBoundingClientRect(),
+      );
+      const style = getComputedStyle(card);
+      return {
+        gapTop: Math.min(...parts.map((part) => part.top)) - box.top,
+        gapBottom: box.bottom - Math.max(...parts.map((part) => part.bottom)),
+        paddingX: parseFloat(style.paddingLeft),
+        cardHeight: box.height,
+      };
+    });
+  });
+
+  expect(metrics.length).toBeGreaterThan(0);
+  for (const item of metrics) {
+    // 上下都要留出比左右内边距更宽的空白，内容才没有"顶到边"
+    expect(item.gapTop, '头像离卡片上沿太近').toBeGreaterThanOrEqual(item.paddingX);
+    expect(item.gapBottom, '文字离卡片下沿太近').toBeGreaterThanOrEqual(item.paddingX);
+    // 余量不能靠把卡片撑出屏幕换 —— 卡片高度本身要有个像样的下限
+    expect(item.cardHeight).toBeGreaterThanOrEqual(100);
+  }
+});
+
 test('人格详解：卡片在悬停/按下/获得焦点时都不改变几何', async ({ page }) => {
   await openHome(page);
   await goToScreen(page, 'mbti');

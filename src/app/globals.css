@@ -4017,6 +4017,21 @@ html[data-theme='night'] {
   text-align: left;
 }
 
+/*
+ * 卡片自己定一个最小高度，保证内容永远不贴边。
+ *
+ * 四行网格会把卡片高度压成 `剩余高度 / 4`：屏高 560 时每张只剩 84px，
+ * 而卡内内容是 头像 44 + 两行字 ≈ 66px —— 上下各分到 11px，比左右内边距
+ * （14px）还窄，看起来就是"头像顶到上沿、字挤在上下框里"。
+ *
+ * 所以给卡片一道下限：`头像 + 两行字 + 上下各 12px`，再用 `min()` 保证
+ * 它不会大到把整屏撑破（矮屏上略微溢出由网格的 align-content 吸收）。
+ * 大屏本来就高于这个下限，一点不受影响。
+ */
+.mb-mbti-grid-desktop .mb-mbti-card {
+  min-height: min(calc(var(--mbti-avatar) + 3.6em + 40px), 21vh);
+}
+
 .mb-mbti-grid-desktop .mb-mbti-avatar {
   --mbti-avatar: clamp(44px, 3.6vw, 56px);
 }
