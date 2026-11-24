@@ -108,11 +108,36 @@ describe('陪聊配置自检', () => {
     expect((await readHealth()).json.hints.join('\n')).toContain('填反了');
   });
 
-  it('baseUrl 少了版本号会被提示', async () => {
+  it('DeepSeek 少写 /v1 不提示：它两种写法都收', async () => {
     process.env.CHAT_API_KEY = KEY;
     process.env.CHAT_BASE_URL = 'https://api.deepseek.com';
     const { json } = await readHealth();
     expect(json.baseUrl).toBe('https://api.deepseek.com');
+    /*
+     * 实测过：DeepSeek 把版本号放在域名下，`/chat/completions` 与
+     * `/v1/chat/completions` 等价，连 `/nope` 都返回同样的 401。
+     * 对它念"补个 /v1"只会让人白折腾。
+     */
+    expect(json.hints.join('\n')).not.toContain('版本号');
+  });
+
+  it('要求版本号的服务商（Moonshot / 百炼 / 智谱）少了就提示', async () => {
+    process.env.CHAT_API_KEY = KEY;
+    for (const base of [
+      'https://api.moonshot.cn',
+      'https://dashscope.aliyuncs.com/compatible-mode',
+      'https://open.bigmodel.cn/api/paas',
+    ]) {
+      process.env.CHAT_BASE_URL = base;
+      const { json } = await readHealth();
+      expect(json.hints.join('\n'), base).toContain('版本号');
+    }
+  });
+
+  it('认不出的自建地址按"要版本号"处理 —— 提示一下无害', async () => {
+    process.env.CHAT_API_KEY = KEY;
+    process.env.CHAT_BASE_URL = 'https://gateway.internal/llm';
+    const { json } = await readHealth();
     expect(json.hints.join('\n')).toContain('版本号');
   });
 

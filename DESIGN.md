@@ -1371,3 +1371,94 @@ width: 327.16 → 322.46 → 326.86
 | 「陪聊」按钮的底与字色 | `--nav-primary-bg` / `--nav-primary-ink`（两套主题各一份） |
 | 输入框字号 | `.mb-chat-input` 的两条 16px 规则（低于 16 会在 iOS 上触发整页放大） |
 | 键位提示 | `.mb-chat-hint` 的媒体查询 |
+
+---
+
+## 第十九轮：两处"提示说得不对"
+
+用户配好 DeepSeek 后把 `/api/chat/health` 的返回贴了回来，其中 `baseUrl` 是 `https://api.deepseek.com`（没有 `/v1`），`model` 是 `deepseek-flash`。两条 hint 里，一条是误报，另一条底下还藏着一个值得记下来的事实。
+
+### 一、DeepSeek 不吃版本号，别对它念 /v1
+
+原来的提示是"地址里看不到 `/v1` 就提醒补上"，规则写得很朴素：
+
+```ts
+if (!/\/v?\d/i.test(provider.baseUrl)) hints.push('多数服务要以版本号结尾（如 /v1）');
+```
+
+对 DeepSeek 这条是错的。直接打它的接口验证了一遍：
+
+| 请求 | 返回 |
+| --- | --- |
+| `POST /v1/chat/completions` | 401 |
+| `POST /chat/completions` | 401（同样的认证失败） |
+| `POST /v9/chat/completions` | 401 |
+| `POST /nope` | 401 |
+| `GET /models`、`GET /v1/models` | 401 |
+
+DeepSeek 把版本号放在域名下，`/v1` 可有可无；而且**它的鉴权发生在路由匹配之前** —— 任何路径都先返回 401。这意味着两件事：一，不带 `/v1` 完全能用；二，光靠错误码没法探测模型名或路径是否存在，只能拿真 Key 去问。
+
+改法是让"要不要版本号"成为服务商的一个属性，而不是一刀切的规则：
+
+```ts
+const KNOWN_HOSTS = [
+  // DeepSeek：requiresVersion 缺省为否
+  { suffix: 'deepseek.com', baseUrl: 'https://api.deepseek.com/v1', note: 'DeepSeek' },
+  { suffix: 'moonshot.cn',  baseUrl: 'https://api.moonshot.cn/v1',   note: 'Moonshot', requiresVersion: true },
+  // …
+];
+```
+
+认不出的自建地址按"要版本号"处理（自建网关通常也是 `/v1` 那套，提示一下无害）；认出是 DeepSeek 就不念。默认地址本身也写成带 `/v1` 的形式 —— 用户抄走时不会抄成更少见的那个。
+
+### 二、`deepseek-flash` 不是模型名，但报错救得回来
+
+DeepSeek 当前公开的模型名是 `deepseek-chat` 与 `deepseek-reasoner`。填 `deepseek-flash` 会在第一句话就 400，界面显示「模型没接受这次请求，多半是模型名写错了」—— 这句话足够让人找到地方改。`GET /models` 配真 Key 能直接列出账号可用的名字，比猜准。
+
+### 三、顺手补上脱敏的第三层
+
+验证错误链路时发现一个真实的疏漏。DeepSeek 的 401 体是：
+
+```
+Authentication Fails, Your api key: ****uvwx is invalid
+```
+
+`uvwx` 是 Key 的后四位。原来的正则只抹"前缀 + 一长串"：
+
+```ts
+.replace(/\b(sk|ak|key)[-_A-Za-z0-9]{6,}/gi, '***')
+```
+
+`key: ****uvwx` 里既没有 `sk-` 也没有 `key-`，一个字都没抹掉，四位尾号原样显示在聊天窗口里。改成两轮：
+
+```ts
+// 1. 完整形态：sk-xxxx / api_key=xxxx（必须带分隔符）
+.replace(/\b(sk|ak|key)([-_])[-_A-Za-z0-9]{4,}/gi, '***')
+// 2. 回显尾号：key: ****uvwx，连 ** 一起删
+.replace(/(api\s*key|key)\s*[:=]?\s*\*{0,4}[A-Za-z0-9]{3,8}\b/gi, '$1 ***')
+```
+
+顺序不能反，而且第一条**必须带分隔符** —— 去掉 `[-_]` 的话，`the key is missing` 这种正常英文会被咬成 `*** missing`。单测里两种情况都钉住了：真实措辞抹干净、普通句子不误伤。
+
+现在界面收到的是：
+
+```
+模型的 Key 没通过验证（Authentication Fails, Your api key *** is invalid …）
+```
+
+### 四、怎么验证的
+
+- 对着真实 DeepSeek 端点跑了 5 组路径/模型组合，确认"路径不敏感、鉴权在先"；
+- 用与用户相同的配置起服务，`health` 的 hints 从 2 条降到 1 条（只剩热线那条），`baseUrl` 原样保留不再被念；
+- 错 Key 走完整链路，确认尾号已经变成 `***`。
+
+`tests/unit/chat-health.test.ts` 改成三条：DeepSeek 不提示、Moonshot/百炼/智谱 缺版本号要提示、自建地址要提示。`tests/unit/chat-provider.test.ts` 加三条：`versionRequired` 的判定矩阵、尾号脱敏、普通英文不误伤。
+
+`tsc` 通过；`vitest` 254 条全绿。
+
+### 五、怎么调
+
+| 想改什么 | 改哪 |
+| --- | --- |
+| 哪家要版本号 | `src/lib/chat/config.ts` 的 `KNOWN_HOSTS[].requiresVersion` 与 `versionRequired()` |
+| 错误体的脱敏规则 | `src/lib/chat/provider.ts` 的 `readUpstreamError()` 两轮 `replace` |

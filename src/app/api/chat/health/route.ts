@@ -4,6 +4,7 @@ import {
   chatProvider,
   crisisResources,
   guessVendor,
+  versionRequired,
 } from '@/lib/chat/config';
 
 /**
@@ -57,7 +58,14 @@ export async function GET() {
     if (/\s/.test(provider.apiKey)) {
       hints.push('CHAT_API_KEY 中间有空格或换行，可能复制时断行了。');
     }
-    if (!/\/v?\d/i.test(provider.baseUrl)) {
+    /*
+     * 地址是否缺版本号。
+     *
+     * 只在"这家服务商确实要求版本号"时才提示：DeepSeek 两种写法都收
+     * （实测 `/v1/chat/completions` 与 `/chat/completions` 等价），
+     * 对它念这句只会让人白跑一趟。
+     */
+    if (versionRequired(provider.baseUrl) && !/\/v?\d/i.test(provider.baseUrl)) {
       hints.push(
         `CHAT_BASE_URL 现在是 ${provider.baseUrl}，多数服务要以版本号结尾（如 /v1）。确认一下再试。`,
       );

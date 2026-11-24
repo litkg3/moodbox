@@ -37,22 +37,65 @@ export const CHAT_LIMITS = {
  * 默认值 OpenAI 的地址在国内直连大概率超时，报错还会长得像"Key 不对"。
  * 这里只能认**服务商域名**，认不出模型名 —— `deepseek-chat` 这种名字
  * 在别家可能也有。认不出就如实回到 OpenAI 的默认值，由 health 提示。
+ *
+ * `requiresVersion` 决定 health 要不要提示"地址少了 /v1"：
+ * **DeepSeek 是例外** —— 它把版本号放在域名下（`/chat/completions` 与
+ * `/v1/chat/completions` 等价），实测连 `/nope` 都返回同样的 401，
+ * 提示用户去补 `/v1` 只会让人白折腾一遍。文档示例带 `/v1`，我们也带。
  */
-const KNOWN_HOSTS: { suffix: string; baseUrl: string; note: string }[] = [
+const KNOWN_HOSTS: {
+  suffix: string;
+  baseUrl: string;
+  note: string;
+  requiresVersion?: boolean;
+}[] = [
   { suffix: 'deepseek.com', baseUrl: 'https://api.deepseek.com/v1', note: 'DeepSeek' },
-  { suffix: 'moonshot.cn', baseUrl: 'https://api.moonshot.cn/v1', note: 'Moonshot' },
+  {
+    suffix: 'moonshot.cn',
+    baseUrl: 'https://api.moonshot.cn/v1',
+    note: 'Moonshot',
+    requiresVersion: true,
+  },
   {
     suffix: 'dashscope.aliyuncs.com',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     note: '阿里云百炼',
+    requiresVersion: true,
   },
-  { suffix: 'bigmodel.cn', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', note: '智谱 GLM' },
-  { suffix: 'volces.com', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', note: '火山方舟' },
-  { suffix: 'siliconflow.cn', baseUrl: 'https://api.siliconflow.cn/v1', note: '硅基流动' },
+  {
+    suffix: 'bigmodel.cn',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    note: '智谱 GLM',
+    requiresVersion: true,
+  },
+  {
+    suffix: 'volces.com',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    note: '火山方舟',
+    requiresVersion: true,
+  },
+  {
+    suffix: 'siliconflow.cn',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    note: '硅基流动',
+    requiresVersion: true,
+  },
 ];
 
 export const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 export const DEFAULT_MODEL = 'gpt-4o-mini';
+
+/**
+ * 这家服务商是不是必须带版本号。
+ *
+ * 认不出来时返回 `true`（自建网关通常也是 `/v1` 那套，提示一下无害）；
+ * 认出是 DeepSeek 则返回 `false` —— 它两种写法都收，不该被念。
+ */
+export function versionRequired(baseUrl: string): boolean {
+  const host = KNOWN_HOSTS.find((item) => baseUrl.includes(item.suffix));
+  if (!host) return true;
+  return host.requiresVersion === true;
+}
 
 /** 地址里去掉结尾斜杠，顺手去掉手滑粘进来的 `/chat/completions` */
 function normalizeBaseUrl(raw: string | undefined): string {

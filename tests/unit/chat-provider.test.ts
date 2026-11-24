@@ -215,3 +215,54 @@ describe('外部模型的流式链路', () => {
     );
   });
 });
+
+/* ---------------- DeepSeek 的版本号例外 ---------------- */
+
+describe('地址版本号的判断', () => {
+  it('DeepSeek 认成"不要求版本号"，其余服务商认成"要求"', async () => {
+    const { versionRequired } = await import('@/lib/chat/config');
+    // 用户实测反馈：DeepSeek 少写 /v1 也能用，实测 /nope 都返回同样的 401
+    expect(versionRequired('https://api.deepseek.com')).toBe(false);
+    expect(versionRequired('https://api.deepseek.com/v1')).toBe(false);
+    expect(versionRequired('https://api.moonshot.cn')).toBe(true);
+    expect(versionRequired('https://dashscope.aliyuncs.com/compatible-mode')).toBe(true);
+    // 认不出的自建网关：按"要"处理，提示一下无害
+    expect(versionRequired('https://gateway.internal/llm')).toBe(true);
+  });
+});
+
+describe('上游错误体里的密钥擦除', () => {
+  it('服务商回显的尾号（****uvwx 这种）也会被抹掉', async () => {
+    // DeepSeek 的真实措辞：Your api key: ****uvwx is invalid
+    const leaky = JSON.stringify({
+      error: { message: 'Authentication Fails, Your api key: ****uvwx is invalid', type: 'authentication_error' },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(leaky, { status: 401 })));
+
+    let caught = '';
+    try {
+      await drain(streamFromModel(messages, { ...provider, apiKey: 'sk-abcdefghijklmnopqrstuvwx' }, { system: '' }));
+    } catch (error) {
+      caught = error instanceof Error ? error.message : String(error);
+    }
+    expect(caught).toContain('Key 没通过验证');
+    expect(caught).not.toContain('uvwx');
+    expect(caught).not.toContain('****');
+    // 还是句人话，不是"（***）"这种残句
+    expect(caught).toContain('api key *** is invalid');
+  });
+
+  it('不带分隔符的普通英文不会被误伤', async () => {
+    // "the key is missing" 里 "key is" 不是密钥，不能被咬掉
+    const plain = JSON.stringify({ error: { message: 'the key is missing from the request' } });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(plain, { status: 401 })));
+
+    let caught = '';
+    try {
+      await drain(streamFromModel(messages, provider, { system: '' }));
+    } catch (error) {
+      caught = error instanceof Error ? error.message : String(error);
+    }
+    expect(caught).toContain('the key is missing');
+  });
+});

@@ -70,7 +70,18 @@ async function readUpstreamError(response: Response): Promise<string> {
       message = text.slice(0, 200);
     }
     return message
-      .replace(/\b(sk|ak|key)[-_A-Za-z0-9]{6,}/gi, '***')
+      /*
+       * 两轮替换，顺序不能反：
+       * 1. 先抹「前缀 + 连字符/下划线 + 一串字母数字」这种完整形态
+       *    （`sk-xxxx`、`api_key=xxxx`）—— 必须带分隔符，否则英文句子里
+       *    的 "key is" 会被当成密钥，把正常句子咬掉一截；
+       * 2. 再抹服务商回显的尾号，例如 DeepSeek 的
+       *    `Your api key: ****uvwx is invalid` —— 这一截没有前缀，
+       *    只有 4 位，且紧跟在 `key:` 之后。连 `****` 一起删掉，
+       *    否则留在界面上还是一句读不懂的话。
+       */
+      .replace(/\b(sk|ak|key)([-_])[-_A-Za-z0-9]{4,}/gi, '***')
+      .replace(/(api\s*key|key)\s*[:=]?\s*\*{0,4}[A-Za-z0-9]{3,8}\b/gi, '$1 ***')
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 80);
