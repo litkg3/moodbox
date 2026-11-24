@@ -144,8 +144,8 @@ export function MoreMenu() {
                   );
                 })}
 
-                <p className="mb-1.5 mt-3 px-1 text-[10px] tracking-[0.22em] text-ink-ghost">常用</p>
-                <ul className="grid grid-cols-2 gap-1">
+                {/* 常用入口直接接在 AI 陪聊下面，不再加一行小标题占位 */}
+                <ul className="mt-2 grid grid-cols-2 gap-1">
                   {MORE_MENU_COMMON.map((key) => {
                     const item = pick(key);
                     if (!item) return null;

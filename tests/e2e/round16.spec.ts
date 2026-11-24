@@ -93,7 +93,7 @@ test.describe('移动端页头', () => {
       const rects = items.map((el) => el.getBoundingClientRect());
       return {
         labels: items.map((el) => el.getAttribute('aria-label')),
-        // 三颗现在都是 40px 高，中心应该完全落在同一条线上（仍给 1px 容差防舍入）
+        // 三颗现在都是 34px 高，中心应该完全落在同一条线上（仍给 1px 容差防舍入）
         centers: rects.map((rect) => rect.top + rect.height / 2),
         tops: rects.map((rect) => Math.round(rect.top)),
         bottoms: rects.map((rect) => Math.round(rect.bottom)),
@@ -117,17 +117,18 @@ test.describe('移动端页头', () => {
     const [, ...btnHeights] = boxes!.heights;
     expect(new Set(btnTops).size).toBe(1);
     expect(new Set(btnBottoms).size).toBe(1);
-    expect(btnHeights).toEqual([40, 40, 40]);
+    // 移动端收到 34：比左边 36px 的站标略小一圈，不再"按钮比 logo 大"
+    expect(btnHeights).toEqual([34, 34, 34]);
     // 都在页头里，没有溢到内容区
     expect(centers.every((center) => center < boxes!.headerBottom)).toBe(true);
     expect(boxes!.right).toBeLessThanOrEqual(MOBILE.width);
     expect(boxes!.left).toBeGreaterThan(0);
 
-    // 「主页」只剩图标：圆形、40×40、里面没有可见文字
+    // 「主页」只剩图标：圆形、34×34、里面没有可见文字
     const home = page.getByRole('link', { name: '主页' });
     const homeBox = await home.boundingBox();
-    expect(Math.round(homeBox!.width)).toBe(40);
-    expect(Math.round(homeBox!.height)).toBe(40);
+    expect(Math.round(homeBox!.width)).toBe(34);
+    expect(Math.round(homeBox!.height)).toBe(34);
     expect((await home.innerText()).trim()).toBe('');
     /*
      * 「圆形」的判定：Chrome 会把 `rounded-full` 求值成 `3.35544e+07px`
@@ -135,7 +136,7 @@ test.describe('移动端页头', () => {
      * 只要求圆角半径 ≥ 短边的一半，即整个盒子被抹成圆。
      */
     const radius = await home.evaluate((el) => Number.parseFloat(getComputedStyle(el).borderRadius));
-    expect(radius).toBeGreaterThanOrEqual(40 / 2);
+    expect(radius).toBeGreaterThanOrEqual(34 / 2);
 
     // 「陪聊」是带文字的主按钮，「更多」是描边的次要按钮
     expect((await page.getByRole('link', { name: '陪聊' }).innerText()).trim()).toContain('陪聊');
@@ -174,7 +175,7 @@ test.describe('移动端页头', () => {
     expect(pair.moreAlpha).toBeLessThan(0.5);
   });
 
-  test('三颗按钮是同一套刻度：40px 高、20px 图标、1.75 描边、同一层阴影', async ({ page }) => {
+  test('三颗按钮是同一套刻度：34px 高、17px 图标、1.75 描边、同一层阴影', async ({ page }) => {
     await gotoHydrated(page, '/');
 
     const spec = await page.evaluate(() => {
@@ -234,31 +235,31 @@ test.describe('移动端页头', () => {
         brandGap: getComputedStyle(brand).columnGap,
         brandLeft: brandRect.left,
         brandCenterY: brandRect.top + brandRect.height / 2,
-        /** 热区扩展是否被伪元素接住 */
-        hotAbove: hitAbove?.closest('a[aria-label="主页"]') !== null,
-        hotBelow: hitBelow?.closest('a[aria-label="主页"]') !== null,
+        /** 热区扩展是否被伪元素接住（用 Boolean 包一层：elementFromPoint 返回 null 时不能算通过） */
+        hotAbove: Boolean(hitAbove?.closest('a[aria-label="主页"]')),
+        hotBelow: Boolean(hitBelow?.closest('a[aria-label="主页"]')),
         hotAboveTag: hitAbove?.tagName ?? null,
       };
     });
 
-    // 页头高度：移动端 64px，内容行不因滚动而缩短
-    expect(spec.headerHeight).toBe(64);
+    // 页头高度：移动端 56px，内容行不因滚动而缩短
+    expect(spec.headerHeight).toBe(56);
 
     for (const btn of spec.buttons) {
-      expect(btn.height, `${btn.label} 高度`).toBe(40);
-      // 字号 14 / 字重 500 / 行高 1（避免基线偏移）
-      expect(btn.fontSize, btn.label).toBe('14px');
+      expect(btn.height, `${btn.label} 高度`).toBe(34);
+      // 字号 12 / 字重 500 / 行高 1（避免基线偏移）
+      expect(btn.fontSize, btn.label).toBe('12px');
       expect(btn.fontWeight, btn.label).toBe('500');
-      expect(btn.lineHeight, btn.label).toBe('14px');
+      expect(btn.lineHeight, btn.label).toBe('12px');
       // 图标与文字之间 6px
       expect(btn.columnGap, btn.label).toBe('6px');
       // 边框统一 1px；没边框的也要占位，否则会矮 2px
       expect(btn.borderWidth, btn.label).toBe('1px');
       expect(btn.borderStyle, btn.label).not.toBe('none');
       expect(btn.boxSizing, btn.label).toBe('border-box');
-      // 图标 20×20，描边 1.75，端点为圆头
-      expect(btn.iconW, btn.label).toBe(20);
-      expect(btn.iconH, btn.label).toBe(20);
+      // 图标 17×17，描边 1.75，端点为圆头
+      expect(btn.iconW, btn.label).toBe(17);
+      expect(btn.iconH, btn.label).toBe(17);
       expect(btn.iconStroke, btn.label).toBe('1.75px');
       expect(btn.iconCap, btn.label).toBe('round');
       expect(btn.iconJoin, btn.label).toBe('round');
@@ -292,7 +293,7 @@ test.describe('移动端页头', () => {
     );
     expect(new Set(shadowShapes).size).toBe(1);
 
-    // 触屏热区探到 44×44（视觉仍是 40）
+    // 触屏热区探到 44×44（视觉仍是 36）
     expect(spec.hotAbove, '主页上方 1.5px 应仍可点').toBe(true);
     expect(spec.hotBelow, '主页下方 1.5px 应仍可点').toBe(true);
 
@@ -301,8 +302,8 @@ test.describe('移动端页头', () => {
     expect(spec.markH).toBe(36);
     expect(spec.brandGap).toBe('10px');
     expect(spec.brandLeft).toBe(20);
-    // logo 的中线与按钮组的中线是同一条
-    expect(Math.abs(spec.brandCenterY - (spec.buttons[0]!.top + 20))).toBeLessThanOrEqual(1);
+    // logo 的中线与按钮组的中线是同一条（按钮高 34，中线在 top + 17）
+    expect(Math.abs(spec.brandCenterY - (spec.buttons[0]!.top + 17))).toBeLessThanOrEqual(1);
   });
 
   test('logo 左边缘与内页正文左边缘对齐', async ({ page }) => {
@@ -394,6 +395,14 @@ test.describe('移动端页头', () => {
     // 第一项是「AI 陪聊」
     const items = menu.getByRole('menuitem');
     await expect(items.first()).toContainText('AI 陪聊');
+
+    /*
+     * 不再有「常用」这行小标题。
+     *
+     * 面板里的每一项都自带图标和文字，分组靠位置和间距就看得懂；
+     * 多一行 10px 的小字反而占掉了两行的高度。
+     */
+    await expect(menu.getByText('常用', { exact: true })).toHaveCount(0);
 
     // 常用项在上，关于/设置在下面
     const order = await menu.evaluate((el) => {
@@ -724,7 +733,13 @@ test.describe('AI 陪聊', () => {
       .not.toBeNull();
 
     await page.getByRole('button', { name: '删除全部记录' }).click();
-    expect(await page.evaluate(() => localStorage.getItem('moodbox-chat-sessions-v1'))).toBeNull();
+    /*
+     * 用 poll 而不是立刻读：点击只是派发了事件，真正清空发生在这一帧的
+     * effect 里，紧接着同步读 localStorage 会偶发拿到旧值（CI 上机器慢时更明显）。
+     */
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem('moodbox-chat-sessions-v1')))
+      .toBeNull();
   });
 });
 
@@ -781,5 +796,56 @@ test.describe('移动端键盘', () => {
     // 输入栏整体落在可见区域内，不会被键盘盖住
     expect(after.composerBottom).toBeLessThanOrEqual(Math.round(after.vvH) + 1);
     await expect(input).toBeVisible();
+  });
+});
+
+/* ---------------- 验收：手机上点输入框不会把整页放大 ---------------- */
+
+test.describe('移动端聊天输入框', () => {
+  test.use({ viewport: MOBILE, hasTouch: true, isMobile: true });
+
+  test('输入框字号 ≥ 16px —— iOS 就是靠这条决定要不要自动放大', async ({ page }) => {
+    await gotoHydrated(page, '/chat');
+
+    const input = page.getByLabel('输入消息');
+    await input.focus();
+    await input.fill('点一下输入框试试');
+
+    const spec = await page.evaluate(() => {
+      const el = document.querySelector<HTMLTextAreaElement>('.mb-chat-input')!;
+      const cs = getComputedStyle(el);
+      const composer = document.querySelector<HTMLElement>('.mb-chat-composer')!;
+      return {
+        fontSize: Number.parseFloat(cs.fontSize),
+        lineHeight: Number.parseFloat(cs.lineHeight),
+        // 聚焦后页面不能被撑宽（放大时 scrollWidth 会超过 clientWidth）
+        overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        // 输入栏底边不应被推出视口
+        composerBottom: Math.round(composer.getBoundingClientRect().bottom),
+        viewportH: window.innerHeight,
+      };
+    });
+
+    /*
+     * 16 是硬线下限。iOS Safari 聚焦 font-size < 16px 的输入框时会把整页
+     * 放大一次且不自动缩回，看起来就像"点一下输入框，页面炸了"。
+     * 桌面允许 14px，所以这条只在移动视口下断言。
+     */
+    expect(spec.fontSize).toBeGreaterThanOrEqual(16);
+    expect(spec.lineHeight).toBeGreaterThanOrEqual(20);
+    expect(spec.overflowX).toBeLessThanOrEqual(0);
+    expect(spec.composerBottom).toBeLessThanOrEqual(spec.viewportH);
+  });
+
+  test('手机上没有键盘提示那一行', async ({ page }) => {
+    await gotoHydrated(page, '/chat');
+
+    // 整行隐藏：Enter/Shift+Enter 在触屏上不成立，留着只会让人以为还有快捷键要学
+    await expect(page.locator('.mb-chat-hint')).toBeHidden();
+
+    // 桌面端仍然保留
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(page.locator('.mb-chat-hint')).toBeVisible();
+    await expect(page.locator('.mb-chat-hint')).toContainText('Enter 发送');
   });
 });

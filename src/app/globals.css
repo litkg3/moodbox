@@ -73,6 +73,34 @@
    * 看着就像它往下掉了。层级改为只靠渐变背景表达。
    */
   --shadow-btn: 0 2px 6px -3px rgba(70, 55, 92, 0.22);
+
+  /*
+   * 「陪聊」主按钮的底。
+   *
+   * 不复用 `--accent-gradient`：那套是给聊天发送键、强调块用的，饱和度
+   * 按"内容区"的尺度配的；缩到 34px 的页头里、挨着两颗近乎无色的邻居，
+   * 同一个渐变会显得很吵。这里把三个色相的饱和度各压掉一半左右，
+   * 保留薰衣草 → 藕粉的走向，但退成一层雾。
+   */
+  --nav-primary-bg: linear-gradient(135deg, #d2c9e3 0%, #ded4ec 48%, #e8d3d3 100%);
+  --nav-primary-ink: var(--accent-ink);
+}
+
+/*
+ * 手机上的页头收一档。
+ *
+ * 40px 的按钮配 64px 的页头，比左边 36px 的站标明显高出一截，看起来
+ * "按钮比 logo 大一圈"。窄屏压到 34 / 56：按钮比站标略小一圈，页头也不再
+ * 那么厚。桌面维持 64 —— 鼠标不需要触控热区，留得住那点呼吸感。
+ */
+@media (max-width: 1023px) {
+  :root {
+    --header-h: 56px;
+    --nav-btn-h: 34px;
+    --nav-icon: 17px;
+    --nav-gap: 10px;
+    --nav-pad-x: 13px;
+  }
 }
 
 html[data-theme='night'] {
@@ -83,6 +111,16 @@ html[data-theme='night'] {
   --nav-btn-border-on: rgba(255, 255, 255, 0.3);
   --nav-btn-ink-on: #ffffff;
   --shadow-btn: 0 2px 8px -3px rgba(0, 0, 0, 0.6);
+  /* 夜里同样压掉一半饱和度：深底上太鲜的紫会发光，像贴了张便签 */
+  --nav-primary-bg: linear-gradient(135deg, #9683b6 0%, #ab99c0 48%, #b8969d 100%);
+  /*
+   * 夜里的字改成深色，不是为了好看。
+   *
+   * 这块底压过饱和度之后亮度上去了，白字压在上面只有 2.7:1 —— 12px 的字
+   * 远看不清。换深紫字是 5.6:1，而且和白天"浅底深字"的语法一致：
+   * 按钮是一块柔光，不是一块标语。
+   */
+  --nav-primary-ink: #2a2338;
 }
 
 /*
@@ -3124,9 +3162,9 @@ html[data-theme='night'] .mb-only-night {
 
 /* 陪聊：页头唯一被填色的按钮。层级只来自渐变，阴影与邻居同一套 */
 .mb-nav-btn--primary {
-  background-image: var(--accent-gradient);
+  background-image: var(--nav-primary-bg);
   border-color: rgba(255, 255, 255, 0.55);
-  color: var(--accent-ink);
+  color: var(--nav-primary-ink);
 }
 
 .mb-nav-btn--primary:hover {
@@ -3168,6 +3206,29 @@ html[data-theme='night'] .mb-nav-btn--primary {
 .mb-nav-btn:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--color-lavender-deep) 72%, transparent);
   outline-offset: 2px;
+}
+
+/*
+ * 手机上的按钮刻度：34 高、17 图标、12 号字。
+ *
+ * 必须写在上面几条之后 —— 同一特异性下后写的胜出，放到文件顶部会被
+ * `.mb-nav-btn` 的 40px / 14px 直接顶掉（高度靠变量走，字号不是）。
+ */
+@media (max-width: 1023px) {
+  .mb-nav-btn {
+    font-size: 12px;
+  }
+
+  /*
+   * 视觉 34，热区补回 44。
+   *
+   * 伪元素从 padding box 起算，1px 边框占掉一圈，所以 `-6px` 相对元素
+   * 外框只探出 5px（34 + 5 × 2 = 44）。横向同样各探 5px，与 10px 的
+   * gap 正好抵满 —— 边碰边、不重叠，相邻两颗不会互相抢点击。
+   */
+  .mb-nav-btn::before {
+    inset: -6px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -5226,6 +5287,38 @@ html[data-theme='night'] .mb-chat-field:focus-within {
   color: var(--color-ink-ghost);
 }
 
+/*
+ * 移动端输入框 16px —— 这是硬性下限，不是审美选择。
+ *
+ * iOS Safari 在聚焦 `font-size < 16px` 的 input/textarea 时会自动把整页
+ * 放大一次，并且**不会自己缩回去**：手指点一下输入框，页头、气泡、输入栏
+ * 全部被推到屏幕外，得双指再捏回来。桌面没有这个行为，14px 更精致，
+ * 所以只在窄屏提到 16。
+ *
+ * 不用 `maximum-scale=1` 去禁缩放：那会同时禁掉用户主动放大，属于
+ * 无障碍反模式，而且治的是症状 —— 字号够大，浏览器本来就不会动手。
+ */
+@media (max-width: 1023px) {
+  .mb-chat-input {
+    /* 行高同步放大，让 16px 的字在 34px 的发送键旁边保持中线 */
+    font-size: 16px;
+    line-height: 24px;
+  }
+}
+
+/*
+ * 再补一条不按宽度判断的：iPad 横屏已经过了 1023，但同样是 Safari。
+ * 文件前面那段全局兜底（`@media (max-width: 1023px)` 里的 `textarea`）
+ * 只写到元素选择器，被 `.mb-chat-input` 这个类顶掉了 —— 这正是
+ * 聊天框会放大、而树洞/信箱那些输入框不放大的原因。
+ */
+@supports (-webkit-touch-callout: none) {
+  .mb-chat-input {
+    font-size: 16px;
+    line-height: 24px;
+  }
+}
+
 html[data-theme='night'] .mb-chat-input {
   color: #f4f0fb;
 }
@@ -5274,6 +5367,25 @@ html[data-theme='night'] .mb-chat-send.is-stop {
   font-size: 10.5px;
   letter-spacing: 0.02em;
   color: var(--color-ink-faint);
+}
+
+/*
+ * 手机上没有这一行。
+ *
+ * 它写的是「Enter 发送 · Shift + Enter 换行 · 对话只存在这台设备上」——
+ * 前两条在触屏上不成立（没有 Shift 键，Enter 就是发送），留着只会让人
+ * 以为还有个键盘快捷键要学。隐私那句在页头有「不保存 / 已保存」按钮常驻，
+ * 信息没有丢。桌面把键位说明留着，那里真的用得上。
+ */
+@media (max-width: 1023px) {
+  .mb-chat-hint {
+    display: none;
+  }
+
+  /* 提示拿掉之后，输入栏离屏幕底再松一点，别贴着横条 */
+  .mb-chat-composer {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 html[data-theme='night'] .mb-chat-hint {

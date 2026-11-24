@@ -19,7 +19,8 @@ import { cn } from '@/lib/utils';
  *   其余入口全部收进「更多」面板。
  *
  * 375px 是最窄的目标宽度：品牌只留中文（英文副标在 <390px 隐藏），
- * 三颗按钮按 44 + 约 74 + 约 64 排开，加上左右 20px 留白刚好一行放得下。
+ * 三颗按钮按 34 + 约 76 + 约 76 排开（总宽约 204），加上左右 20px 留白
+ * 刚好一行放得下 —— 而且是和左边 36px 的站标同一个量级，不抢戏。
  */
 export function SiteHeader() {
   const pathname = usePathname();
@@ -59,12 +60,11 @@ export function SiteHeader() {
           <MoodBoxMark className="h-9 w-9 shrink-0 drop-shadow-[0_5px_12px_rgba(142,118,184,0.35)] transition-transform duration-700 group-hover:-translate-y-[1px] group-hover:scale-[1.06]" />
           <span className="mb-brand-text flex min-w-0 flex-col justify-center leading-none max-[359px]:hidden">
             {/*
-              375px 的宽度预算很紧：三颗按钮按规范占 236px，品牌只剩 99px，
-              图标 36 + 间距 10 之后，四个字只有 53px 可用。
-              原来 0.2em 的字距要 62px，字会撑出品牌盒、被圆形按钮压住 ——
-              所以窄屏把字距收到 0.08em，400px 以上再放开。
+              375px 的宽度预算：三颗按钮按规范占约 204px，品牌剩 131px，
+              图标 36 + 间距 10 之后，四个字有 85px 可用 ——
+              13px 配 0.1em 字距只要 57px，够。400px 以上把字距放开。
             */}
-            <span className="whitespace-nowrap font-display text-[12px] font-normal tracking-[0.08em] text-ink min-[400px]:text-[13px] min-[400px]:tracking-[0.14em] sm:text-[14px] sm:tracking-[0.24em]">
+            <span className="whitespace-nowrap font-display text-[13px] font-normal tracking-[0.1em] text-ink min-[400px]:tracking-[0.14em] sm:text-[14px] sm:tracking-[0.24em]">
               情绪盒子
             </span>
             {/* 375px 下这里没有位置，英文副标只在 ≥390px 出现 */}
