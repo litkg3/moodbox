@@ -588,6 +588,31 @@ test('人格详解：面板打开时背景锁死，关闭后回到原处并把�
   expect(after.focus).toContain('INTJ');
 });
 
+test('人格详解：桌面上详情面板的顶部留白，头像不贴到面板上沿', async ({ page }) => {
+  /*
+   * 手机上这个位置有 26px 的拖拽握把垫着；桌面没有握把，
+   * 而 `.mb-sheet-body` 的 padding-top 是 0 —— 实测头像上沿离面板顶边
+   * 只有 1px，等于贴着边框裁进去。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openHome(page);
+  await goToScreen(page, 'mbti');
+
+  await page.locator('.mb-mbti-grid-desktop .mb-mbti-card').first().click();
+  const sheet = page.getByRole('dialog', { name: 'INTJ 建筑师' });
+  await expect(sheet).toHaveAttribute('data-state', 'open');
+  await page.waitForTimeout(420);
+
+  const gap = await page.evaluate(() => {
+    const panel = document.querySelector('.mb-sheet')!.getBoundingClientRect();
+    const art = document.querySelector('.mb-sheet-art')!.getBoundingClientRect();
+    return art.top - panel.top;
+  });
+
+  // 面板左右内边距是 20px，顶部至少要和它一个量级，不能贴边
+  expect(gap, '头像离面板上沿太近').toBeGreaterThanOrEqual(18);
+});
+
 test('人格详解：矮屏下卡片内容也不贴边，头像不顶到卡片上沿', async ({ page }) => {
   /*
    * 四行网格把卡片高度压成"剩余高度 / 4"。屏高 560 时每张只剩 84px，

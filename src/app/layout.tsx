@@ -52,9 +52,21 @@ export const viewport: Viewport = {
   colorScheme: 'light dark',
 };
 
+/*
+ * 构建标记：Vercel 会把提交号塞进 VERCEL_GIT_COMMIT_SHA，本地跑是 undefined。
+ *
+ * 为什么要在 <html> 上留这一笔 —— 这一轮排查了很久"明明改了、页面上却没变"，
+ * 而线上的实际情况（部署成功没有、你看的是不是预览版、浏览器有没有拿到新
+ * 分包）在代码这边完全看不见。有了它，右键「检查」看一眼 <html data-build="…">
+ * 就知道页面到底是哪一版：对不上就是构建/缓存的事，对得上才去怀疑代码。
+ *
+ * 属性不可见，不影响任何视觉与布局。
+ */
+const BUILD_STAMP = (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 7) || 'dev';
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="zh-CN" data-theme="day" suppressHydrationWarning>
+    <html lang="zh-CN" data-theme="day" data-build={BUILD_STAMP} suppressHydrationWarning>
       <body className="antialiased">
         {/*
           首帧之前把主题写进 <html data-theme>。

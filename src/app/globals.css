@@ -4461,6 +4461,19 @@ html[data-theme='night'] {
   -webkit-overflow-scrolling: touch;
 }
 
+/*
+ * 桌面上给面板顶部留一口气。
+ *
+ * 手机上这个位置有 26px 的拖拽握把，头像自然离顶边 27px；桌面没有握把，
+ * body 的 padding-top 又是 0 —— 实测头像上沿离面板顶边只有 1px，等于
+ * 贴着边裁进去。加 22px 之后是 23px，和面板左右 20px 的内边距接近。
+ */
+@media (min-width: 769px) {
+  .mb-sheet-body {
+    padding-top: 22px;
+  }
+}
+
 .mb-sheet-head {
   display: flex;
   align-items: center;
