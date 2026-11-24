@@ -588,6 +588,52 @@ test('人格详解：面板打开时背景锁死，关闭后回到原处并把�
   expect(after.focus).toContain('INTJ');
 });
 
+test('人格详解：关闭面板后焦点回到卡片，卡片不会因为焦点+悬停而往下晃', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openHome(page);
+  await goToScreen(page, 'mbti');
+
+  /*
+   * 复现路径就是用户说的那条：点开卡片 → 关掉。
+   * 关的时候焦点被还给卡片，鼠标还停在原处 —— `:hover` 和 `:focus-visible`
+   * 会同时成立。`:hover` 想把卡片浮到 -2px、`:active` 刚把它按到 -1px 且
+   * 过渡时长更短，两条一起插值，看上去就是卡片"往下晃了一下"。
+   */
+  const card = page.locator('.mb-mbti-grid-mobile .mb-mbti-card').first();
+  await card.scrollIntoViewIfNeeded();
+  const box = await card.boundingBox();
+  if (!box) throw new Error('卡片没渲染出来');
+  // 把鼠标停在卡片正中，模拟"点完之后手还没移开"
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+  await card.click();
+  const sheet = page.getByRole('dialog', { name: 'INTJ 建筑师' });
+  await expect(sheet).toHaveAttribute('data-state', 'open');
+  await page.waitForTimeout(300);
+
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
+  // 等过 450ms 的过渡，确认最终位置真的稳住了，而不是正在浮回来
+  await page.waitForTimeout(560);
+
+  const after = await page.evaluate(() => {
+    const el = document.querySelector<HTMLElement>('.mb-mbti-grid-mobile .mb-mbti-card');
+    if (!el) throw new Error('卡片不见了');
+    const cs = getComputedStyle(el);
+    return {
+      transform: cs.transform,
+      hover: el.matches(':hover'),
+      focusVisible: el.matches(':focus-visible'),
+      outlineWidth: cs.outlineWidth,
+    };
+  });
+
+  // 焦点确实留在了卡片上（否则这条测试就没测到想测的场景）
+  expect(after.hover || after.focusVisible, '鼠标应仍停在卡片上').toBe(true);
+  // 关键：不许有任何位移，transform 必须是 none
+  expect(after.transform, '关闭面板后卡片不该有位移').toBe('none');
+});
+
 test('人格详解：点遮罩关面板，背景不会先闪回第一屏（解锁时按住吸附、瞬时复位）', async ({
   page,
 }) => {

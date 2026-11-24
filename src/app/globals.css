@@ -3939,6 +3939,24 @@ html[data-theme='night'] {
   .mb-mbti-card:hover .mb-mbti-avatar {
     transform: scale(1.05) rotate(-1.5deg);
   }
+
+  /*
+   * 点开卡片 → 关闭面板，焦点会回到这张卡上（浏览器把焦点还给触发器），
+   * 而鼠标还停在原处 —— 于是 `:hover` 和 `:focus-visible` **同时**成立。
+   *
+   * 两条规则的 transform 打架：`:hover` 要 -2px 浮起，`:active`（松手瞬间）
+   * 走完了插值，`transition-duration: 0.12s` 又比 hover 的 0.45s 短 ——
+   * 结果卡片先被按下去、再慢慢浮回来，视觉上就是"关掉面板，卡片往下晃一下"。
+   *
+   * 键盘用户真正需要的是那个 outline，不是位移。所以焦点在卡片上时不浮。
+   */
+  .mb-mbti-card:hover:focus-visible {
+    transform: none;
+  }
+
+  .mb-mbti-card:hover:focus-visible .mb-mbti-avatar {
+    transform: none;
+  }
 }
 
 /*
@@ -4741,6 +4759,30 @@ html[data-theme='night'] {
    用 100dvh 做不到这一点，dvh 不认键盘。
    ============================================================ */
 
+/*
+ * 聊天页分两层，是为了让"键盘弹出"这件事真的成立。
+ *
+ * `.mb-chat-page` 是固定层，高度跟着 `--chat-vv-h`（可视视口）收缩 ——
+ * 它自己没问题。问题在它下面：`body` 还挂着 `min-height: 100dvh`，
+ * 而 dvh 不认键盘，文档永远比屏幕高。iOS 键盘一弹就会把这个高度差
+ * 拿去滚页面，fixed 层跟着整屏上移 —— 于是上方只剩一片纯色底、
+ * 输入栏沉到屏幕外，正是用户看到的那个样子。
+ *
+ * 所以外面再包一层 `.mb-chat-reading`：它只做两件事 ——
+ * 把文档高度钉在可视视口上（顺手把底色挪过来，别让 fixed 层带着底色一起跑），
+ * 以及给 `:has()` 一个挂钩，让下面那几条 `body / html` 的规则只在聊天页生效。
+ */
+.mb-chat-reading {
+  min-height: calc(var(--app-vv-h, 100dvh) - var(--header-h) - var(--header-safe));
+  background:
+    radial-gradient(
+      120% 60% at 50% 0%,
+      color-mix(in srgb, var(--color-lavender) 16%, transparent) 0%,
+      transparent 62%
+    ),
+    color-mix(in srgb, var(--color-cream) 74%, transparent);
+}
+
 .mb-chat-page {
   position: fixed;
   /* 页头高度取同一个变量：页头改成 64px 之后，这里不再跟着写死 60 */
@@ -4749,14 +4791,34 @@ html[data-theme='night'] {
   display: flex;
   height: calc(var(--chat-vv-h, 100dvh) - var(--header-h) - var(--header-safe));
   flex-direction: column;
-  background:
-    radial-gradient(
-      120% 60% at 50% 0%,
-      color-mix(in srgb, var(--color-lavender) 16%, transparent) 0%,
-      transparent 62%
-    ),
-    color-mix(in srgb, var(--color-cream) 74%, transparent);
-  backdrop-filter: blur(2px);
+  /* 底色归外层，这一层透明 —— 它会被键盘推着走，不该带着颜色跑 */
+  background: transparent;
+}
+
+/*
+ * 把文档钉死：高度跟着可视视口，并且不许滚。
+ *
+ * 三条缺一不可：
+ * - `body` 的 min-height 必须听 `--app-vv-h`，否则 812 这个值会把文档撑回原形；
+ * - `#main-content` 加 `contain: size layout`，让它的高度只由自己的 min-height
+ *   决定，不再被里面那个 fixed 子元素或者长内容撑开；
+ * - `html / body` 的 `overflow: hidden` 兜底，iOS 上键盘滚动的目标常常是
+ *   body 而不是 window，光靠 JS 的 scrollTo 拦不住。
+ *
+ * 只对聊天页生效：其它页面本来就要能滚，`:has()` 在这里当结构开关用。
+ */
+body:has(.mb-chat-reading) {
+  min-height: calc(var(--app-vv-h, 100dvh) - var(--header-h) - var(--header-safe));
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+#main-content:has(> .mb-chat-reading) {
+  contain: size layout;
+}
+
+html:has(> body .mb-chat-reading) {
+  overscroll-behavior: none;
 }
 
 @media (min-width: 1024px) {
@@ -4764,8 +4826,12 @@ html[data-theme='night'] {
     /* 桌面上给页头下面多留 20px，对话区不贴着导航 */
     inset: calc(var(--header-h) + var(--header-safe) + 20px) 0 0 0;
     height: calc(var(--chat-vv-h, 100dvh) - var(--header-h) - var(--header-safe) - 20px);
-    background: transparent;
-    backdrop-filter: none;
+  }
+
+  /* 桌面上没有键盘这回事，外层不必占位，底色也交回给固定层 */
+  .mb-chat-reading {
+    min-height: 0;
+    background: none;
   }
 }
 

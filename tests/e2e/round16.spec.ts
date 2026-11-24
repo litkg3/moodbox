@@ -715,6 +715,16 @@ test.describe('AI 陪聊', () => {
     await gotoHydrated(page, '/chat');
     const input = page.getByLabel('输入消息');
 
+    /*
+     * 先等聊天外壳挂上再操作。
+     *
+     * 「删除全部记录」在侧栏里，而侧栏跟着 `.mb-chat-page` 一起出现；不等的话，
+     * 机器慢的时候 Playwright 会按"还没定位好"的坐标去点 —— 调试信息里表现
+     * 成背景层（极光）拦截了点击。hydration 标记只说明 JS 跑起来了，不说明
+     * 这个固定定位的外壳已经布好版。
+     */
+    await expect(page.locator('.mb-chat-page')).toBeVisible();
+
     await input.fill('这句话不该被存下来');
     await input.press('Enter');
     await expect(page.locator('.mb-chat-bubble-ai').last().locator('p')).not.toHaveText('', {
@@ -847,5 +857,76 @@ test.describe('移动端聊天输入框', () => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await expect(page.locator('.mb-chat-hint')).toBeVisible();
     await expect(page.locator('.mb-chat-hint')).toContainText('Enter 发送');
+  });
+});
+
+/* ---------------- 回归：键盘弹出后聊天页不能被顶走 ---------------- */
+
+test.describe('移动端键盘弹出时的整页行为', () => {
+  test.use({ viewport: MOBILE, hasTouch: true, isMobile: true });
+
+  test('键盘弹出时主文档没有滚动余量，对话区仍在可视范围内', async ({ page }) => {
+    await gotoHydrated(page, '/chat');
+    await expect(page.locator('.mb-chat-page')).toBeVisible();
+
+    // 造两条消息，确认"上方能看见对话"这件事是可验证的，而不是看空状态
+    const input = page.getByLabel('输入消息');
+    await input.fill('今天有点累，加班到十点。');
+    await input.press('Enter');
+    await expect(page.locator('.mb-chat-bubble-ai').last().locator('p')).not.toHaveText('', {
+      timeout: 20_000,
+    });
+
+    // 模拟键盘：iOS 上 innerHeight 不变，只变 visualViewport
+    await page.evaluate(() => {
+      const vv = window.visualViewport;
+      if (!vv) throw new Error('这个浏览器没有 visualViewport，测不了键盘');
+      Object.defineProperty(vv, 'height', { value: window.innerHeight - 336, configurable: true });
+      vv.dispatchEvent(new Event('resize'));
+    });
+    await page.waitForTimeout(300);
+
+    const state = await page.evaluate(() => {
+      const html = document.documentElement;
+      const box = (sel: string) => {
+        const el = document.querySelector(sel);
+        return el ? el.getBoundingClientRect().toJSON() : null;
+      };
+      const vvH = Math.round(window.visualViewport!.height);
+      // 试着把页面滚下去：不该成功
+      window.scrollTo(0, 400);
+      return {
+        vvH,
+        vvTop: Math.round(window.visualViewport!.offsetTop),
+        scrollY: Math.round(window.scrollY),
+        docScrollable: html.scrollHeight > html.clientHeight,
+        bodyH: Math.round(document.body.getBoundingClientRect().height),
+        pageTop: Math.round(box('.mb-chat-page')!.top),
+        pageBottom: Math.round(box('.mb-chat-page')!.bottom),
+        scrollTop: Math.round(box('.mb-chat-scroll')!.top),
+        composerBottom: Math.round(box('.mb-chat-composer')!.bottom),
+        headerBottom: Math.round(box('header.mb-header')!.bottom),
+        visibleBubble: (() => {
+          const bubble = document.querySelector('.mb-chat-bubble-ai')?.getBoundingClientRect();
+          if (!bubble) return false;
+          // 气泡至少要有一截落在"页头下方 ~ 输入栏上方"这段可见区里
+          return bubble.bottom > 56 && bubble.top < vvH - 1;
+        })(),
+      };
+    });
+
+    // 页面本身不该能滚 —— 一旦能滚，iOS 就会把 fixed 的聊天层滚出屏幕
+    expect(state.docScrollable, '主文档不该有滚动余量').toBe(false);
+    expect(state.scrollY).toBe(0);
+    expect(state.vvTop).toBe(0);
+
+    // 聊天层贴着页头、贴着可视底边，没有跑出视口
+    expect(state.pageTop).toBe(state.headerBottom);
+    expect(state.pageBottom).toBeLessThanOrEqual(state.vvH + 1);
+    expect(state.composerBottom).toBeLessThanOrEqual(state.vvH + 1);
+
+    // 上方看得见对话本身
+    expect(state.scrollTop).toBeLessThan(state.composerBottom);
+    expect(state.visibleBubble, '键盘弹起后气泡仍在可见区').toBe(true);
   });
 });

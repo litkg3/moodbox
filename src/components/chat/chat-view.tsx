@@ -116,6 +116,14 @@ export function ChatView() {
     const root = document.documentElement;
     const sync = () => {
       root.style.setProperty('--chat-vv-h', `${Math.round(vv.height)}px`);
+      /*
+       * 再单独写一份 `--app-vv-h`：`--chat-vv-h` 只管聊天页自己变矮，
+       * 但 `body` 还挂着 `min-height: 100dvh`（812），文档照样可滚。
+       * 键盘一弹，iOS 会把整个文档上滚，fixed 的聊天页跟着被推出屏幕 ——
+       * 上方只剩纯色底、输入栏沉到屏幕外。这份变量给布局层用，
+       * 让 body / html 的高度也认键盘。
+       */
+      root.style.setProperty('--app-vv-h', `${Math.round(vv.height)}px`);
       root.style.setProperty(
         '--chat-kb',
         `${Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop))}px`,
@@ -128,6 +136,7 @@ export function ChatView() {
       vv.removeEventListener('resize', sync);
       vv.removeEventListener('scroll', sync);
       root.style.removeProperty('--chat-vv-h');
+      root.style.removeProperty('--app-vv-h');
       root.style.removeProperty('--chat-kb');
     };
   }, []);
@@ -155,6 +164,29 @@ export function ChatView() {
   useEffect(() => {
     if (!ready) scrollToBottom(false);
   }, [ready, scrollToBottom]);
+
+  /*
+   * 键盘弹出 / 收起时补一次贴底。
+   *
+   * 可视视口变矮只会让容器跟着变矮，浏览器**不会**顺手把"贴底"重新算一遍 ——
+   * 原本停在最底下的对话，会忽然差一行没到底。只在用户本来就在底部时才补，
+   * 往上翻旧消息的时候不去抢滚动位置。
+   */
+  const [kbTick, setKbTick] = useState(0);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const bump = () => setKbTick((n) => n + 1);
+    vv.addEventListener('resize', bump);
+    return () => vv.removeEventListener('resize', bump);
+  }, []);
+
+  useEffect(() => {
+    if (!atBottomRef.current) return;
+    const id = requestAnimationFrame(() => scrollToBottom(false));
+    return () => cancelAnimationFrame(id);
+  }, [kbTick, scrollToBottom]);
 
   /* ---------------- 输入框高度 ---------------- */
 
@@ -420,7 +452,12 @@ export function ChatView() {
   const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
 
   return (
-    <div className="mb-chat-page">
+    /*
+     * 两层：外面这层只负责"占位 + 底色"，里面那层才是跟着可视视口收缩的
+     * 交互层。为什么必须分开，见 globals.css 里 `.mb-chat-reading` 的注释。
+     */
+    <div className="mb-chat-reading">
+      <div className="mb-chat-page">
       <div className="mb-chat-grid">
         {/* 桌面 ≥1200 才出现的侧栏 */}
         <aside className="mb-chat-side" aria-label="对话历史">
@@ -574,6 +611,7 @@ export function ChatView() {
             </p>
           </form>
         </div>
+      </div>
       </div>
     </div>
   );

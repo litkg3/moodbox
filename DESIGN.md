@@ -1462,3 +1462,161 @@ Authentication Fails, Your api key: ****uvwx is invalid
 | --- | --- |
 | 哪家要版本号 | `src/lib/chat/config.ts` 的 `KNOWN_HOSTS[].requiresVersion` 与 `versionRequired()` |
 | 错误体的脱敏规则 | `src/lib/chat/provider.ts` 的 `readUpstreamError()` 两轮 `replace` |
+
+---
+
+## 第二十轮：键盘把聊天页顶走、卡片关面板后自己往下晃
+
+两个都是"只在真机上出现、桌面看不出来"的问题，共同点是**缺少一个本该存在的层**。
+
+### 一、键盘弹起后上方只剩纯色底
+
+现象：手机上点进 AI 陪聊，一碰输入框键盘弹出来，上半屏变成一片米色，看不见任何对话；打完字输入栏又掉到屏幕底下，得手动往上拖回来。
+
+#### 为什么
+
+聊天层本身没问题。`.mb-chat-page` 是 `position: fixed`，高度写的是 `calc(var(--chat-vv-h, 100dvh) - …)`，而 `--chat-vv-h` 由 `visualViewport.height` 写入 —— 键盘一弹就变矮，输入栏自然被顶到键盘上方。这套逻辑在第十七轮就写好了，单独看是对的。
+
+问题在它**下面**。`body` 上挂着：
+
+```css
+body { min-height: 100dvh; }
+```
+
+`dvh` 是**布局视口**的单位，它不认键盘。键盘弹出来、可视视口从 844 掉到 508，`body` 的 min-height 还是 844。于是文档比屏幕高出 336px —— iOS 一发现"页面能滚"，就会把这段高度差拿去滚，`fixed` 的聊天层跟着整屏上移。结果是：
+
+- 上方空出来的是 `.mb-stage` 的底色（背景层也是 fixed，同样被推走，露出文档底色）；
+- 输入栏沉到可视区下方，正好是用户说的"跑到最底下溢出了"。
+
+一句话：**交互层认键盘了，承载它的文档不认。**
+
+#### 怎么修
+
+分四层，缺一层就会在某个设备上复发。
+
+**第一层，写一个给布局用的高度变量。** `--chat-vv-h` 只服务聊天层自己，另写一份 `--app-vv-h` 给 `body` / `html` 用：
+
+```ts
+root.style.setProperty('--app-vv-h', `${Math.round(vv.height)}px`);
+```
+
+**第二层，外层包一个 `.mb-chat-reading`，把底色挪过去。** 上一轮那个 fixed 层带着背景渐变，被顶走时颜色也跟着跑，所以现在：
+
+```css
+.mb-chat-reading {
+  min-height: calc(var(--app-vv-h, 100dvh) - var(--header-h) - var(--header-safe));
+  background: /* 原来的两层径向渐变 */;
+}
+.mb-chat-page { background: transparent; }
+```
+
+这一层还有个副作用是给 `:has()` 当挂钩 —— 下面几条只该对聊天页生效的规则，靠它来圈定范围，别的页面该能滚就还能滚。
+
+**第三层，把文档钉死。**
+
+```css
+body:has(.mb-chat-reading) {
+  min-height: calc(var(--app-vv-h, 100dvh) - var(--header-h) - var(--header-safe));
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+#main-content:has(> .mb-chat-reading) {
+  contain: size layout;
+}
+```
+
+`contain: size layout` 是关键的一条：它让 `#main-content` 的高度**只由自己的 min-height 决定**，不再被里面的长内容或者 fixed 子元素撑开。没有它，`body` 的 min-height 改了也没用 —— 内容照样把父级顶到 844。
+
+**第四层，键盘弹起时补一次贴底。** 容器变矮之后，浏览器不会把"已贴底"的滚动位置重新算一遍，本来停在最下面的对话会忽然差一行。所以在 `visualViewport` 的 resize 里打一个 tick，effect 里补滚一次 —— 但**只在用户原本就在底部时补**，正在翻旧消息的时候不去抢位置：
+
+```ts
+useEffect(() => {
+  if (!atBottomRef.current) return;
+  const id = requestAnimationFrame(() => scrollToBottom(false));
+  return () => cancelAnimationFrame(id);
+}, [kbTick, scrollToBottom]);
+```
+
+#### 一条走错又退回来的路
+
+第三层最初还写了 `html:has(…) { overflow: hidden }`，想双保险。结果 e2e 里"保存对话"那条超时，报错是：
+
+```
+<span class="mb-aurora mb-aurora--three"></span> from <div class="mb-stage"> subtree intercepts pointer events
+```
+
+原因是 `html` 一旦 `overflow: hidden` 就**成为滚动容器**，而滚动容器会建立层叠上下文。背景层 `.mb-stage` 是 `z-index: -1`，原本落在根层叠上下文的最底层、被 `#main-content` 盖住；`html` 变成层叠上下文之后，它反而被抬到内容**之上**，把「删除全部记录」按钮整个盖掉。
+
+用 `elementFromPoint` 实测确认：桌面尺寸下取到的是 `mb-aurora`，撤掉 `html` 的 `overflow` 之后立刻变回 `mb-chat-clear`。而撤掉之后 `document.documentElement.scrollHeight > clientHeight` 依然是 `false`、`scrollTo(0, 400)` 之后 `scrollY` 依然是 0 —— **`html` 那条规则本来就不起作用，纯粹是多余的**。真正锁住滚动的是 `body` 的 `overflow: hidden` 加 `contain`。
+
+结论：`html` 上只留 `overscroll-behavior: none`（挡住 iOS 的回弹），不碰 `overflow`。
+
+#### 实测
+
+| 场景 | 页面顶 | 页面底 | 输入栏底 | 文档可滚 | 「删除」按钮 |
+| --- | --- | --- | --- | --- | --- |
+| 桌面 1280×800 | 84（页头 64 + 20 留白） | 800 | 800 | 否 | 可点 |
+| 手机 390×844 | 56（= 页头底） | 844 | 844 | 否 | — |
+| 手机 + 键盘（可视视口 508） | 56 | 508 | 508 | 否 | — |
+
+`round16.spec.ts` 里加了「键盘弹出时主文档没有滚动余量，对话区仍在可视范围内」，直接把上面这几列钉成断言。
+
+### 二、点开 MBTI 卡片再关掉，卡片往下晃一下
+
+#### 为什么
+
+上一轮修过一次，当时归因到 `:active` 里的 `scale(0.98)` 和 `:hover` 的 `translateY(-2px)` 抢同一个 `transform`，改成了只有 `translateY` 的直线插值。但后半段还在 —— 这次采样，关闭面板 300ms 之后卡片是：
+
+```json
+{ "transform": "matrix(1, 0, 0, 1, 0, -2)", "matchesHover": true, "matchesFV": true }
+```
+
+`matchesHover` 和 `matchesFV` **同时**为真。原因很朴素：关面板时焦点被还给了卡片（无障碍要求），而鼠标还停在原处。于是两条规则一起命中：
+
+- `.mb-mbti-card:hover` → `translateY(-2px)`，过渡 450ms；
+- `.mb-mbti-card:active` → `translateY(-1px)`，过渡 120ms（按下要跟手）。
+
+松手瞬间 `:active` 先弹回，`:hover` 再用 450ms 把它推到 -2px —— 这一段就是"往下晃"：卡片先被按下去一点，再慢慢浮起来，方向看起来是反的。
+
+#### 怎么修
+
+键盘用户需要的是那颗 outline，不是位移。焦点在卡片上时就不浮：
+
+```css
+@media (hover: hover) and (pointer: fine) {
+  .mb-mbti-card:hover:focus-visible { transform: none; }
+  .mb-mbti-card:hover:focus-visible .mb-mbti-avatar { transform: none; }
+}
+```
+
+头像那条也要写 —— 它有自己的 `scale(1.05) rotate(-1.5deg)`，只压卡片的话头还会转一下。
+
+#### 这条断言是反着验过的
+
+新加的测试「关闭面板后焦点回到卡片，卡片不会因为焦点+悬停而往下晃」，先把鼠标停在卡片正中、点开、Esc 关掉、等 560ms（超过 450ms 过渡），再读 `getComputedStyle().transform`，要求是 `'none'`。
+
+把修复临时改成 `transform: translateY(-2px)` 再跑，报的正是：
+
+```
+Expected: "none"
+Received: "matrix(1, 0, 0, 1, 0, -2)"
+```
+
+说明这条测试抓得住这个 bug，不是写了个永远绿的断言。
+
+### 三、怎么验证的
+
+- `tsc --noEmit` 通过；
+- `vitest run` 254 条全绿；
+- `playwright test`：`round16` + `mbti` 合计 36 条全绿，其中新增两条 —— 键盘弹出后文档不可滚 + 气泡仍在可见区、关面板后卡片 `transform: none`；
+- 逐场景手测了桌面 1280×800 / 手机 390×844 / 手机 + 模拟键盘（可视视口 508）三种，记录了上表那五列。
+
+### 四、怎么调
+
+| 想改什么 | 改哪 |
+| --- | --- |
+| 聊天页外层留白 / 底色 | `globals.css` 的 `.mb-chat-reading` |
+| 键盘多高才算"弹起" | `chat-view.tsx` 里 `--chat-kb` 的算式（`innerHeight - vv.height - vv.offsetTop`） |
+| 卡片按下时的位移手感 | `.mb-mbti-card:active` 的 `translateY` 与 `transition-duration` |
+| 焦点态要不要浮起 | `.mb-mbti-card:hover:focus-visible` |
