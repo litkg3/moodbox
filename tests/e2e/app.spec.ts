@@ -15,6 +15,91 @@ async function openHome(page: Page) {
   await page.waitForTimeout(2200);
 }
 
+/**
+ * 指针正对着的那一格的文字。
+ *
+ * 转盘是 8 瓣 × 3 层，只有最内层（最高强度那个词）会打上
+ * `.emotion-wheel-slice-top`，所以这个选择器天然唯一，取到的就是卡片该显示的那一格。
+ */
+function topLabelOf(page: Page) {
+  return page
+    .locator('.emotion-wheel-slice-top .emotion-wheel-slice-label')
+    .evaluate((el) => el.textContent ?? '');
+}
+
+/**
+ * 点转盘上某一格。
+ *
+ * 转盘是 8 瓣 × 3 层：可点的 <g> 只有一个被 clipPath 裁过的 path 算数，
+ * 而八个内层格的外框（getBoundingClientRect）是整瓣的轮廓，彼此在圆心附近
+ * 大面积重叠。Playwright 默认点外框中心，对内层格来说那个点常常落进隔壁瓣，
+ * 于是报「被别的格子挡住」。关掉命中检查、按默认中心点，落点由 React 自己
+ * 的 closest('.emotion-wheel-slice') 决定，落到哪一格就是哪一格 ——
+ * 这几条用例要的都是「锁定 / 切换卡片」，不是「这一格的几何一定压在上面」。
+ */
+/**
+ * 把某一格滚到屏幕上，返回它的盒子。
+ *
+ * 转盘在自动转，格子的屏幕位置一直在变，所以量坐标之前先让盘停住：
+ * 把鼠标放到盘上（悬停即暂停），再等一拍。
+ */
+async function holdCell(page: Page, label: string) {
+  const cell = page.locator('.emotion-wheel-slice').filter({ hasText: label }).first();
+  const box = (await cell.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(260);
+  return cell;
+}
+
+/**
+ * 点转盘上某一格。
+ *
+ * 为什么不能直接 cell.click()：可点的 <g> 里只有被 clipPath 裁过的 path
+ * 算数，而 getBoundingClientRect 是裁剪前的整瓣轮廓 —— 八个框都从圆心开始、
+ * 互相重叠，点框中心会落进隔壁瓣甚至中间的空心圆。
+ *
+ * 这里的做法是量「这一格真正能被点到的所有像素」的重心，再从重心附近找
+ * 一个确实命中自己的点按下去。悬停先让盘停住，量出来的坐标才有效。
+ */
+async function clickCell(page: Page, label: string) {
+  await holdCell(page, label);
+
+  const point = await page
+    .locator('.emotion-wheel-slice')
+    .filter({ hasText: label })
+    .first()
+    .evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const own: Array<{ x: number; y: number }> = [];
+      for (let ix = 1; ix < 40; ix += 1) {
+        for (let iy = 1; iy < 40; iy += 1) {
+          const x = r.x + (r.width * ix) / 40;
+          const y = r.y + (r.height * iy) / 40;
+          if (document.elementFromPoint(x, y)?.closest?.('.emotion-wheel-slice') === el) {
+            own.push({ x, y });
+          }
+        }
+      }
+      if (!own.length) return null;
+      // 取重心：落在这一格最"胖"的位置，不会贴着某条边
+      const cx = own.reduce((sum, p) => sum + p.x, 0) / own.length;
+      const cy = own.reduce((sum, p) => sum + p.y, 0) / own.length;
+      let best = own[0]!;
+      let bestD = Infinity;
+      for (const p of own) {
+        const d = (p.x - cx) ** 2 + (p.y - cy) ** 2;
+        if (d < bestD) {
+          bestD = d;
+          best = p;
+        }
+      }
+      return best;
+    });
+
+  if (!point) throw new Error(`转盘上找不到可点的「${label}」`);
+  await page.mouse.click(point.x, point.y);
+}
+
 async function openJar(page: Page) {
   await openHome(page);
   await page.getByRole('button', { name: '开心罐' }).click();
@@ -180,7 +265,7 @@ test('滚到转盘后情绪球随页面滚走，第一屏底部有向下箭头',
   expect(skyBox && skyBox.y + skyBox.height).toBeLessThanOrEqual(24);
 });
 
-test('情绪转盘：8 个扇形，点击放大并展示完整信息，可返回关闭', async ({ page }) => {
+test('情绪转盘：8 瓣 × 3 层，点击放大并展示完整信息，可返回关闭', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 800 });
   await openHome(page);
 
@@ -189,21 +274,26 @@ test('情绪转盘：8 个扇形，点击放大并展示完整信息，可返回
   const wheel = page.locator('.emotion-wheel');
   await expect(wheel).toBeVisible();
 
-  // 8 个扇形，每个都可点、都带标题
+  /*
+   * 24 格：8 瓣 × 3 层强度。每瓣外圈低、内圈高，所以「悲观」这一瓣是
+   * 伤感 / 悲伤 / 悲痛；外加 8 个落在瓣缝里的复合词（只读标签，不可点）。
+   */
   const slices = page.locator('.emotion-wheel-slice');
-  await expect(slices).toHaveCount(8);
+  await expect(slices).toHaveCount(24);
+  await expect(page.locator('.emotion-wheel-petal')).toHaveCount(8);
+  await expect(page.locator('.emotion-wheel-dyad')).toHaveCount(8);
   await expect(page.getByRole('heading', { name: '情绪转盘' }).first()).toBeVisible();
 
-  // 点「迷茫」，弹出详情卡，其余扇形半透明
-  const lost = page.locator('.emotion-wheel-slice', { hasText: '迷茫' });
-  await lost.click();
+  // 点「悲痛」（最内层，强度最高），弹出详情卡，其余格子半透明
+  const sad = page.locator('.emotion-wheel-slice', { hasText: '悲痛' }).first();
+  await clickCell(page, '悲痛');
   const card = page.locator('.emotion-wheel-card');
   await expect(card).toBeVisible();
-  await expect(card).toContainText('是为了获得');
-  await expect(card).toContainText('可以这样');
+  await expect(card).toContainText('高强度');
+  await expect(card).toContainText('伤感 · 悲伤 · 悲痛');
 
-  // 其余扇形进入半透明态（被点中的那一个 aria-checked=true）
-  await expect(lost).toHaveAttribute('aria-checked', 'true');
+  // 其余格子进入半透明态（被点中的那一个 aria-checked=true）
+  await expect(sad).toHaveAttribute('aria-checked', 'true');
   const other = page.locator('.emotion-wheel-slice[aria-checked="false"]').first();
   // 过渡是 0.45s，等它走完再读计算样式
   await expect
@@ -213,7 +303,7 @@ test('情绪转盘：8 个扇形，点击放大并展示完整信息，可返回
   // 返回按钮关闭
   await card.getByRole('button', { name: '返回转盘' }).click();
   await expect(card).toBeHidden();
-  await expect(lost).toHaveAttribute('aria-checked', 'false');
+  await expect(sad).toHaveAttribute('aria-checked', 'false');
 });
 
 test('情绪转盘：卡片内部不出现滚动条', async ({ page }) => {
@@ -236,7 +326,7 @@ test('情绪转盘：卡片内部不出现滚动条', async ({ page }) => {
   expect(box.scrollHeight).toBe(box.clientHeight);
 
   // 换一格内容之后同样不能溢出
-  await page.locator('.emotion-wheel-slice', { hasText: '疲惫' }).click();
+  await clickCell(page, '暴怒');
   await page.waitForTimeout(700);
   const after = await page.locator('.emotion-wheel-card').evaluate((el) => ({
     scrollHeight: el.scrollHeight,
@@ -285,19 +375,18 @@ test('情绪转盘：点空白处关闭详情，点击已选中扇形也能收�
   await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
 
   const card = page.locator('.emotion-wheel-card');
-  const lonely = page.locator('.emotion-wheel-slice', { hasText: '孤独' });
 
   // 待机时卡片常驻，跟着指针走
   await expect(card).toHaveCount(1);
 
   // 点一下某一格 → 锁定，卡片定住
-  await lonely.click();
+  await clickCell(page, '悲伤');
   await expect(card).toHaveCount(1);
-  await expect(card).toContainText('孤独');
+  await expect(card).toContainText('伤感 · 悲伤 · 悲痛');
   await expect(page.locator('.emotion-wheel-card-close')).toBeVisible();
 
   // 再点一次同一格 → 收起；自动转动继续，但卡片不能再冒出来
-  await lonely.click();
+  await clickCell(page, '悲伤');
   await expect(card).toHaveCount(0);
   await expect(page.locator('.emotion-wheel-card-close')).toHaveCount(0);
   // 等过一个自动步进周期，确认卡片没有随着转动复活
@@ -305,7 +394,7 @@ test('情绪转盘：点空白处关闭详情，点击已选中扇形也能收�
   await expect(card).toHaveCount(0);
 
   // 重新点开，再点转盘外的空白处关闭
-  await lonely.click();
+  await clickCell(page, '悲伤');
   await expect(card).toHaveCount(1);
   await page.mouse.click(24, 780);
   await expect(card).toHaveCount(0);
@@ -460,9 +549,7 @@ test('情绪转盘：桌面端自动转到每一格并自动选中，卡片与�
   const spin = page.locator('.emotion-wheel-spin');
   const readTransform = () => spin.evaluate((el) => getComputedStyle(el).transform);
   const readCard = () => page.locator('.emotion-wheel-card-title').innerText();
-  // SVG 的 <text> 不是 HTMLElement，取文本要用 textContent
-  const readTop = () =>
-    page.locator('.emotion-wheel-slice-top .emotion-wheel-slice-label').evaluate((el) => el.textContent ?? '');
+  const readTop = () => topLabelOf(page);
 
   /*
    * 待机节奏是 3 秒一格（0.82s 旋转 + 约 2.2s 静止）。
@@ -525,11 +612,17 @@ test('情绪转盘：鼠标悬停停住并切到那一格，移开后继续转',
   const hot = page.locator('.emotion-wheel-slice-hot');
   await expect(hot).toHaveCount(1);
 
-  // 悬停生效后盘停住、卡片与指针一致
-  const topLabel = await page
-    .locator('.emotion-wheel-slice-top .emotion-wheel-slice-label')
+  /*
+   * 悬停生效后盘停住、卡片与悬停的那一格一致。
+   *
+   * 注意比的是「鼠标停着的那一格」，不是指针（12 点方向）指着的那一格 ——
+   * 转盘现在是 8 瓣 × 3 层，指针只标到某一瓣，鼠标却可能停在这一瓣外圈或
+   * 内圈的任意一层。原来比 .emotion-wheel-slice-top 属于八格时代的假设。
+   */
+  const hotLabel = await hot
+    .locator('.emotion-wheel-slice-label')
     .evaluate((el) => el.textContent ?? '');
-  await expect(page.locator('.emotion-wheel-card-title')).toHaveText(topLabel);
+  await expect(page.locator('.emotion-wheel-card-title')).toHaveText(hotLabel);
 
   // 悬停期间跨过不止一个步进点（3 秒一格），角度必须一直不变
   const paused = await readTransform();
@@ -547,8 +640,8 @@ test('情绪转盘：点一下停住并锁定，卡片在侧边横向排开', as
   await openHome(page);
   await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
 
-  await page.locator('.emotion-wheel-slice', { hasText: '焦虑' }).click();
-  await expect(page.getByRole('region', { name: /焦虑/ })).toBeVisible();
+  await clickCell(page, '悲痛');
+  await expect(page.getByRole('region', { name: /悲痛/ })).toBeVisible();
 
   // 停转
   const spin = page.locator('.emotion-wheel-spin');
@@ -589,11 +682,21 @@ test('情绪转盘：点一下停住并锁定，卡片在侧边横向排开', as
   expect(bar.width).toBeLessThanOrEqual(32);
   expect(bar.width).toBeLessThan(bar.cardWidth * 0.2);
 
-  // 横向两栏：处理方法在那句话的右边，而不是下面
+  /*
+   * 强度说明分两行：先写强度，再写这一瓣的三个词。
+   * 两块都是块级，所以第二块的顶要压在第一块的底下面，且左对齐。
+   *
+   * 只比子元素 —— 父级 .emotion-wheel-card-lead 的盒子从第一行的行顶开始，
+   * 而行高 1.85 留出的半行距会让子元素的顶看起来"高过"父级的顶，那是正常
+   * 排版，不是错位。
+   */
   const lead = await page.locator('.emotion-wheel-card-lead').boundingBox();
-  const method = await page.locator('.emotion-wheel-card-method').boundingBox();
-  expect(lead && method).toBeTruthy();
-  expect(method!.x).toBeGreaterThan(lead!.x + lead!.width - 1);
+  const leadText = await page.locator('.emotion-wheel-card-lead-text').boundingBox();
+  expect(lead && leadText).toBeTruthy();
+  const leadStrong = await page.locator('.emotion-wheel-card-lead b').boundingBox();
+  expect(leadStrong && leadText).toBeTruthy();
+  expect(leadText!.y).toBeGreaterThanOrEqual(leadStrong!.y + leadStrong!.height - 1);
+  expect(Math.abs(leadText!.x - lead!.x)).toBeLessThan(2);
 });
 
 test('情绪转盘：宽屏盘居中，卡片浮在两肩不挤动盘', async ({ page }) => {
@@ -610,7 +713,7 @@ test('情绪转盘：宽屏盘居中，卡片浮在两肩不挤动盘', async ({
   expect(Math.abs(before!.x + before!.width / 2 - vw / 2)).toBeLessThan(3);
 
   // 点一格之后盘不能挪位，卡片只浮在两肩
-  await page.locator('.emotion-wheel-slice', { hasText: '疲惫' }).click();
+  await clickCell(page, '暴怒');
   await expect(page.locator('.emotion-wheel-card')).toBeVisible();
   const after = await page.locator('.emotion-wheel-board').boundingBox();
   expect(Math.abs(after!.x - before!.x)).toBeLessThan(2);
@@ -623,11 +726,14 @@ test('情绪转盘：点中的标签停在原位，不会被转到指针下面',
   await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
 
   /*
-   * 「点在它此刻所在的位置」—— 直接调元素的 click() 最接近这件事：
+   * 「点在它此刻所在的位置」—— 直接派发 click 最接近这件事：
    * Playwright 默认的 click 会先等元素停止移动，而转盘一直在转，
    * 等到的位置和真正按下时可能已经差了一格。
+   *
+   * 取第 15 格（W 形第 5 瓣的中间层）。挑它没有讲究，只要是个确定的格子；
+   * 「有没有挪窝」看的是整盘角度，与挑哪一格无关。
    */
-  const slice = page.locator('.emotion-wheel-slice').nth(5);
+  const slice = page.locator('.emotion-wheel-slice').nth(14);
   const readTransform = () =>
     page.locator('.emotion-wheel-spin').evaluate((el) => getComputedStyle(el).transform);
 
@@ -645,16 +751,14 @@ test('情绪转盘：点中的标签停在原位，不会被转到指针下面',
       return (Math.atan2(m.b, m.a) * 180) / Math.PI;
     });
 
-  /** 被点那一格此刻在屏幕上的方位（相对盘心），用来验证"它没挪窝"。 */
-  const sliceAngle = () =>
-    slice.evaluate((el) => {
-      const shape = el.querySelector('.emotion-wheel-slice-shape')!;
-      const box = shape.getBoundingClientRect();
-      const board = document.querySelector('.emotion-wheel-board')!.getBoundingClientRect();
-      const cx = board.x + board.width / 2;
-      const cy = board.y + board.height / 2;
-      return (Math.atan2(box.y + box.height / 2 - cy, box.x + box.width / 2 - cx) * 180) / Math.PI;
-    });
+  /*
+   * 「被点那一格在屏幕上的方位」怎么量？
+   *
+   * 不能量它的 boundingBox —— 那个框是裁剪前的整瓣轮廓，中心几乎就在圆心，
+   * 算出来的方向没有任何意义（实测偏差能到 19°）。而整盘是刚体：只要盘没有
+   * 转，格子就一定没挪窝。所以直接量旋转层的角度。
+   */
+  const sliceAngle = () => spinAngle();
 
   const beforeClick = await spinAngle();
   const beforeSlice = await sliceAngle();
@@ -676,7 +780,7 @@ test('情绪转盘：点中的标签停在原位，不会被转到指针下面',
   /*
    * 被点的那一格仍在它原来的方位上。
    *
-   * 这里比的是「点击前后同一个扇形的角度」，而不是「它离正上方多远」——
+   * 这里比的是「点击前后整盘的角度」，而不是「它离正上方多远」——
    * 后者会随盘的随机起始位置变，某次点到的格子恰好本来就在正上方，
    * 用例就会假失败（真遇到过）。角度差与盘的位置无关，才是稳的判据。
    */

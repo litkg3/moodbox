@@ -2,104 +2,258 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useReducedMotion } from 'motion/react';
-import { EMOTION_SLICES, type EmotionSlice } from '@/data/emotion-wheel';
+import {
+  EMOTION_CELLS,
+  EMOTION_DYADS,
+  EMOTION_PETALS,
+  INTENSITY_LABEL,
+  type EmotionCell,
+} from '@/data/emotion-wheel';
 import { cn } from '@/lib/utils';
 
 /*
  * ------------------------------------------------------------------
- * 情绪转盘
+ * 情绪转盘（普拉奇克情绪轮）
  *
- * - 桌面端待机时整盘匀速步进：每秒转过 45°，让下一个扇形的文字转到
- *   正上方的指针下。每次加载从一个随机扇形开始，不是永远从「迷茫」起。
- *   转到 45° 的整数倍才停，所以停下来时永远是「一个扇形正对指针」。
- * - 指针下那一格就是「自动选中」的那一格：盘停稳后，它旁边会滑出一张
- *   横向卡片，内容随之切换 —— 不用动手也能看到有人在讲这些情绪。
- * - 扇形里的文字跟着盘走，但自身反向旋转同样的角度，于是无论盘转到
- *   哪一格，文字始终是水平的、可读的（见 .emotion-wheel-counter）。
- * - 鼠标悬停任意扇形 → 盘立即停住，卡片切到这一格，指针跟着挪过去；
- *   移开后从这一格继续自动转。
- * - 手动点任意一个扇形 → 停住并锁定，被点的扇形放大并投下阴影，其余
- *   缩小半透明，卡片固定在这一格。
- * - 再点一次已选中的扇形、点返回、点转盘外的空白、按 Esc，都能收起，
- *   收起后重新开始自动转动。
+ * 形状是一朵八瓣的花：八个花瓣各是一种基础情绪，每瓣从外到内分三层，
+ * 越靠圆心越强烈。相邻两瓣交界处的空白里，各标着一个复合情绪。
+ *
+ * 交互沿用之前那一版，只是「一格」从扇形变成了「某个花瓣的某一层」：
+ * - 桌面端待机时整盘每秒转过 45°，指针下的那一瓣自动被选中；
+ * - 悬停任意位置 → 盘停住；点一下 → 锁定，卡片固定在这一瓣；
+ * - 再点同一处、点返回、点盘外、按 Esc 都能收起。
+ * - 指针在待机时指向「这一瓣的最高强度」，因为自动选中的就是那一层。
  * ------------------------------------------------------------------
  */
 
-/** 每个扇形占的角度（8 等分）。 */
-const SLICE_DEG = 360 / EMOTION_SLICES.length; // 45°
+/** 每个花瓣占的角度（8 等分）。 */
+const PETAL_DEG = 360 / EMOTION_PETALS.length; // 45°
 
-/** 第一个扇形的左边界从正上方（12 点）开始，顺时针排开。 */
+/** 第一个花瓣的左边界从正上方（12 点）开始，顺时针排开。 */
 const START_DEG = -90;
 
-/**
- * 自动转动：每步停留多久（毫秒）。
- *
- * 每一步的旋转过渡是 0.82s，写在 globals.css 的 .emotion-wheel-spin 上，
- * 比这里短一点，留出一段停顿让人看清指针下的文字。
- *
- * 原先 1000 毫秒是"转完就立刻转下一格"，八格八秒一圈，眼睛根本来不及读 ——
- * 尤其转盘旁边那张说明卡也跟着换字，读半句就被切走。现在改成 3000：
- * 0.82s 旋转 + 约 2.2s 静止，够看完一个情绪和它的一句话。
- */
+/** 自动转动：每步停留多久（毫秒）。0.82s 转 + 约 2.2s 停，够读一个词。 */
 const STEP_MS = 3000;
 
-/**
- * 盘的旋转过渡时长（毫秒），必须和 globals.css 里 .emotion-wheel-spin
- * 的 transition-duration（0.82s）对上。用来判断「盘站定了没有」。
- */
+/** 盘的旋转过渡时长（毫秒），必须和 globals.css 里 .emotion-wheel-spin 对上。 */
 const SPIN_MS = 820;
 
 /** 转盘 viewBox 尺寸（正方形），所有几何都基于它，再用 CSS 缩放适配。 */
 const SIZE = 400;
 const CX = SIZE / 2;
 const CY = SIZE / 2;
-/*
- * 外圈几乎贴着 viewBox 边缘（180 / 200）。放大与阴影会越过 viewBox，
- * 靠 .emotion-wheel-svg 的 overflow: visible 露出来。
- */
-const R_OUTER = 190;
-const R_INNER = 86;
 
-/**
- * 把「角度 + 半径」换算成 SVG 坐标。
- * 圆心在 (cx, cy)，0° 指向正右，本组件统一用「度」传入，内部转弧度。
+/*
+ * 花瓣的几条半径。
+ *
+ * 形状不是正圆：每瓣从圆心伸出去，尖端在 R_TIP，两瓣之间收进 R_VALLEY，
+ * 所以是八个凸起的叶瓣，而不是一个均匀的饼。
  */
-function polar(cx: number, cy: number, radius: number, angleDeg: number) {
+const R_TIP = 162;
+/**
+ * 两瓣交界处离圆心多远。
+ *
+ * 这个值决定花瓣「胖瘦」。取 96（比尖端小一半）时每瓣像一根细长的柳叶，
+ * 三个词塞不下、字全挤在中线上；取 138 后又太瘦，外层放字的位置只剩
+ * 二十几个单位宽。145 是实测下来「瓣形好看」和「放得下字」的交点。
+ */
+const R_VALLEY = 145;
+/**
+ * 层与层的分界（从外往里数）。
+ *
+ * 分界线要落在两层文字中间，不能压字。三层锚点是 88 / 110 / 135，
+ * 所以两条线取在 99 和 123 —— 各自离上下的字都有十来个单位。
+ */
+const R_TIER1 = 123;
+const R_TIER2 = 99;
+/**
+ * 内层一直收到这里。
+ *
+ * 这个值决定内层词离圆心多远，是这一版调得最久的一个数。
+ *
+ * 八个花瓣在圆心交汇，内层词的锚点只要落到 r≈70 以内，相邻两瓣的
+ * 笔画就会顶在一起（实测 r=71 时「憎恶」和「惊悚」的下缘已经叠上）。
+ * 收到 62 之后锚点落到 r≈90，八个词才围成一圈、彼此让开。
+ * 圆心因此空出一块 —— 参考图里那块空是白圆，这里留空也一样成立。
+ */
+const R_CORE = 62;
+/**
+ * 复合情绪标签所在的半径。
+ *
+ * 必须落在花瓣尖（R_TIP=162）之外。190 是「再往外就顶到 viewBox 边缘」
+ * 的位置：200 是半宽，字旋转后还要占十来个单位，取 190 刚好贴边不溢出。
+ */
+const R_DYAD = 190;
+
+/** 极坐标 → 直角坐标。0° 指向正右，传入用「度」。 */
+function polar(radius: number, angleDeg: number) {
   const rad = (angleDeg * Math.PI) / 180;
-  return {
-    x: cx + radius * Math.cos(rad),
-    y: cy + radius * Math.sin(rad),
-  };
+  return { x: CX + radius * Math.cos(rad), y: CY + radius * Math.sin(rad) };
 }
 
 /**
- * 生成一个扇环的 `d` 路径。
- * 内外两条弧之间是一条有厚度的扇形，相邻两块之间靠 stroke 分开。
+ * 把「瓣心角」换算成文字该转的角度，保证字正着读。
+ *
+ * 瓣心角 midDeg 是从 12 点顺时针量的，单独照着它转，下半圈那几瓣的字
+ * 会整个倒过来（读的人得把屏幕转 180° 才看得懂）。
+ *
+ * 文字是横切半径的，所以先按 midDeg - 90 把基线摆成切向（中轴线在 12 点
+ * 时即水平），再归一到 (-180, 180]，超出 ±90 就翻 180° —— 翻过来之后
+ * 它仍是切向，只是朝里朝外互换，读起来一样。
  */
-function slicePath(cx: number, cy: number, rOuter: number, rInner: number, startDeg: number, endDeg: number) {
-  const start = polar(cx, cy, rOuter, startDeg);
-  const end = polar(cx, cy, rOuter, endDeg);
-  const innerStart = polar(cx, cy, rInner, startDeg);
-  const innerEnd = polar(cx, cy, rInner, endDeg);
+function uprightDeg(_midDeg: number): number {
+  /*
+   * 文字一律横排。
+   *
+   * 试过竖排和斜排，都不行：竖排会在左半圈倒着读，斜排（45°）的中文笔画
+   * 全是斜的，八瓣里还有四瓣歪向不同方向。横排是唯一既好读、又能在每个
+   * 圆环里放下两个字的排法 —— 层与层之间靠半径和切向同时错开来分。
+   *
+   * 横排就不需要转任何角度了：字本来就是正的。这里恒返回 0，留着这个
+   * 函数是因为 counter 那一层还要按它算偏移 —— 将来若要重新考虑斜排，
+   * 改动点也只在这一处。
+   */
+  return 0;
+}
 
-  const largeArc = endDeg - startDeg > 180 ? 1 : 0;
+/**
+ * 一个花瓣的轮廓。
+ *
+ * 用四段三次贝塞尔描一个「叶瓣」：圆心 → 尖端 → 回到圆心。
+ * 关键在于控制点要贴着自己那一侧走 —— 一开始我把控制点放在半径 R_TIP×0.62
+ * 的弧上，那等于把花瓣从中间掐住，画出来是八根尖刺，不是八片叶。
+ */
+function petalOutline(startDeg: number, endDeg: number): string {
+  const mid = (startDeg + endDeg) / 2;
+  const tip = polar(R_TIP, mid);
+  // 两侧谷底：就落在相邻两瓣的分界方向上
+  const valleyL = polar(R_VALLEY, startDeg);
+  const valleyR = polar(R_VALLEY, endDeg);
+  const f = (n: number) => n.toFixed(2);
+
+  /*
+   * 四段控制点，围出来的是一只饱满的叶瓣。
+   *
+   * 圆心 → 尖端：控制点要**贴着本瓣的边界**斜着拉出去，花瓣才会从腰部
+   * 鼓起来；如果把控制点放在中线上，画出来是一根细针。
+   * 尖端 → 谷底：反过来，控制点要往谷的方向收，尖端才不会变成一根刺。
+   */
+  const c1 = polar(R_TIP * 0.34, startDeg + PETAL_DEG * 0.06);
+  const c2 = polar(R_TIP * 0.88, mid - PETAL_DEG * 0.3);
+  const c3 = polar(R_TIP * 0.88, mid + PETAL_DEG * 0.3);
+  const c4 = polar(R_VALLEY, endDeg - PETAL_DEG * 0.1);
 
   return [
-    `M ${innerStart.x.toFixed(3)} ${innerStart.y.toFixed(3)}`,
-    `L ${start.x.toFixed(3)} ${start.y.toFixed(3)}`,
-    `A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${end.x.toFixed(3)} ${end.y.toFixed(3)}`,
-    `L ${innerEnd.x.toFixed(3)} ${innerEnd.y.toFixed(3)}`,
-    `A ${rInner} ${rInner} 0 ${largeArc} 0 ${innerStart.x.toFixed(3)} ${innerStart.y.toFixed(3)}`,
+    `M ${CX} ${CY}`,
+    `C ${f(c1.x)} ${f(c1.y)} ${f(c2.x)} ${f(c2.y)} ${f(tip.x)} ${f(tip.y)}`,
+    `C ${f(c3.x)} ${f(c3.y)} ${f(c4.x)} ${f(c4.y)} ${f(valleyR.x)} ${f(valleyR.y)}`,
+    // 沿两瓣之间的山谷回到圆心，走一条略微内凹的弧，让腰部收得干净
+    `Q ${CX} ${CY} ${f(valleyL.x)} ${f(valleyL.y)}`,
     'Z',
   ].join(' ');
 }
 
-/** 扇形内文字的锚点：取扇形中间角度、半径约 60% 处。 */
-function labelAnchor(cx: number, cy: number, rOuter: number, rInner: number, startDeg: number, endDeg: number) {
-  const midDeg = (startDeg + endDeg) / 2;
-  const r = rInner + (rOuter - rInner) * 0.6;
-  return polar(cx, cy, r, midDeg);
+/**
+ * 某一层花瓣的填充。
+ *
+ * 做法：取「这一瓣的轮廓」与「半径区间 [rInner, rOuter] 的圆环」的交集。
+ *
+ * 直接用花瓣曲线按比例缩半径是不行的 —— 半径一小，花瓣就窄成一条，字放不下。
+ * 交集则天然保留了每一层的真实形状：外层是贴着瓣边的宽叶，往里逐层变瘦，
+ * 但每一层在该半径处的宽度就是花瓣本身的宽度，跟参考图那种「同心分层」一致。
+ *
+ * 交集没法直接写成一条 path，所以用 circle 的 clip 思路反过来做：
+ * 这里只负责给出「花瓣形状 ∩ 圆环」，靠 SVG 的 clipPath 在渲染时完成裁切。
+ */
+/**
+ * 某一格的完整形状：外沿弧与内沿弧之间、被两条瓣侧夹住的那一块。
+ *
+ * 只用来接收指针 —— fill 设成透明，靠 pointer-events="all" 生效。
+ * 为什么不能直接复用色块那条 path：命中测试看的是 path 自己的几何，
+ * clipPath 不参与判定，所以三层的色块（d 都是整瓣轮廓）会互相盖死。
+ *
+ * 填法用 evenodd（不是 nonzero）：外沿顺时针、内沿逆时针不必刻意配平，
+ * 两条环之间自然留空，就不必再挂一层 clipPath 去掉圆心那一块。
+ */
+function tierBandPath(startDeg: number, endDeg: number, rOuter: number, rInner: number): string {
+  const f = (n: number) => n.toFixed(2);
+  const mid = (startDeg + endDeg) / 2;
+  /*
+   * 两层弧用同一套控制点比例（控制点落在本半径的 0.88 处、沿弧偏 0.3 个
+   * 瓣宽），和 petalOutline 里 valley 段那条贝塞尔是同一种走法 —— 这样
+   * 可点区域的边和画出来的瓣边严丝合缝，不会差出一圈缝。
+   */
+  const arc = (r: number) => {
+    const l = polar(r, startDeg);
+    const rp = polar(r, endDeg);
+    const c1 = polar(r * 0.88, mid - PETAL_DEG * 0.3);
+    const c2 = polar(r * 0.88, mid + PETAL_DEG * 0.3);
+    return { l, rp, c1, c2 };
+  };
+  const out = arc(rOuter);
+  const inn = arc(rInner);
+  return [
+    // 外沿：瓣左 → 瓣右
+    `M ${f(out.l.x)} ${f(out.l.y)}`,
+    `C ${f(out.c1.x)} ${f(out.c1.y)} ${f(out.c2.x)} ${f(out.c2.y)} ${f(out.rp.x)} ${f(out.rp.y)}`,
+    // 径向收到内沿，再由内沿弧走回来
+    `L ${f(inn.rp.x)} ${f(inn.rp.y)}`,
+    `C ${f(inn.c2.x)} ${f(inn.c2.y)} ${f(inn.c1.x)} ${f(inn.c1.y)} ${f(inn.l.x)} ${f(inn.l.y)}`,
+    'Z',
+  ].join(' ');
 }
+
+function ringPath(rOuter: number, rInner: number): string {
+  const f = (n: number) => n.toFixed(2);
+  // 外圆顺时针、内圆逆时针，中间的环形就是填充区（nonzero 规则）
+  return [
+    `M ${CX} ${CY - rOuter}`,
+    `A ${f(rOuter)} ${f(rOuter)} 0 1 1 ${CX} ${CY + rOuter}`,
+    `A ${f(rOuter)} ${f(rOuter)} 0 1 1 ${CX} ${CY - rOuter}`,
+    `M ${CX} ${CY - rInner}`,
+    `A ${f(rInner)} ${f(rInner)} 0 1 0 ${CX} ${CY + rInner}`,
+    `A ${f(rInner)} ${f(rInner)} 0 1 0 ${CX} ${CY - rInner}`,
+    'Z',
+  ].join(' ');
+}
+
+/**
+ * 三层的半径区间：从外到内。
+ *
+ * 用 Record 而不是数组：数组下标在 noUncheckedIndexedAccess 下永远是
+ * `T | undefined`，`as const` 也不行 —— 元素里混了 null 之后，取出来
+ * 再访问属性一样会被推成可选。按数字键查表就没有这个问题。
+ */
+const TIER_BANDS: Record<number, { outer: number; inner: number }> = {
+  0: { outer: R_TIP, inner: R_TIER1 },
+  1: { outer: R_TIER1, inner: R_TIER2 },
+  2: { outer: R_TIER2, inner: R_CORE },
+};
+
+/**
+ * 三层文字的落点（实测值）：半径 + 沿切向的偏移。
+ *
+ * 三个词不是沿一个方向排开的，而是"往里收 + 切向错开"一起用 —— 这样
+ * 每个词都落在自己那个圆环的正中，前后、左右都不撞。
+ */
+const TIER_TEXT_GEO: Record<number, { r: number; shift: number }> = {
+  0: { r: 134, shift: 11 },
+  1: { r: 112, shift: 0 },
+  2: { r: 90, shift: -11 },
+};
+/** 三层各自的字号（viewBox 单位）。径向排布不受花瓣宽度限制，可以给足。 */
+const TIER_FONT: Record<number, number> = { 0: 12, 1: 12.5, 2: 12 };
+
+/** 取表里的值，永远给一个明确的兜底 —— 免得每个调用点都要处理 undefined。 */
+function tierValue(table: Record<number, number>, tierIndex: number, fallback: number): number {
+  return table[tierIndex] ?? fallback;
+}
+
+/** 指针停在哪一格用「第几瓣」。自动步进也是按瓣走。 */
+const PETAL_COUNT = EMOTION_PETALS.length;
+
+/** 自动选中时落在哪一层：最高强度那一层，正对圆心方向。 */
+const DEFAULT_TIER = 2;
 
 interface EmotionWheelProps {
   className?: string;
@@ -107,69 +261,39 @@ interface EmotionWheelProps {
 
 export function EmotionWheel({ className }: EmotionWheelProps) {
   const reduceMotion = useReducedMotion();
-  /** 鼠标点中、锁定的那一格；为空表示「跟着指针自动走」。 */
+  /** 点中并锁定的那一格（cell.id）；为空表示「跟着指针自动走」。 */
   const [lockedId, setLockedId] = useState<string | null>(null);
   /**
    * 自动转动走到第几步（每步 45°）。
-   * 起始步数是随机的：每次进页面，指针第一次指着的扇形都不一样，
-   * 不然永远是同一个情绪打头，看着像写死的。
    *
-   * 这里**允许是小数**：收起卡片时要把盘从"当前实际角度"接回自动步进，
-   * 只有小数步长才能让两者严丝合缝对上（见 close 里的注释）。整数部位
-   * 表示"第几格"，小数部分表示"偏了这一格多少"。读格子时一律先
-   * Math.round，别让 3.7 去索引数组。
+   * 允许是小数：收起卡片时要把盘从"当前实际角度"接回自动步进，
+   * 只有小数步长才能让两者严丝合缝对上。读瓣号时一律先 Math.round。
    */
   const [step, setStep] = useState(0);
-  /** 鼠标悬停暂停时停在哪一格；为空表示没有悬停。 */
+  /** 鼠标悬停暂停时停在哪一格（cell 下标）；为空表示没有悬停。 */
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  /**
-   * 点中某一格时，把当时盘面的角度原样冻在这里。
-   *
-   * 锁定之后盘就保持这个角度不动 —— 被点的标签停在它原来的方位，
-   * 不会被"对齐"到指针下面。为空表示没有锁定。
-   */
+  /** 点中时把盘面角度原样冻住，锁定之后一步不动。 */
   const [frozenSpin, setFrozenSpin] = useState<number | null>(null);
   /** 手动点过之后就不再自动转，直到收起。 */
   const [autoOn, setAutoOn] = useState(true);
-  /**
-   * 卡片显隐只有一个开关，避免「自动态想显示」和「用户想收起」两套状态打架。
-   *
-   * - follow：跟着指针自动切换（桌面端待机时的默认样子）
-   * - locked：点住了某一格，卡片定住（点开时会自动进这个态，锁的是 lockedId）
-   * - off   ：用户主动收起了卡片（点空白 / Esc / 再点一次 / 返回），
-   *           在桌面自动态下也要一直收着，不能又跟着指针冒出来。
-   *           这个态会一直保留，直到用户下一次点扇形重新打开。
-   */
+  /** 卡片显隐：follow 跟随指针 / locked 锁定 / off 用户主动收起。 */
   const [cardMode, setCardMode] = useState<'follow' | 'locked' | 'off'>('follow');
-  /** 当前用键盘聚焦的扇形（null = 没有键盘焦点，或已经交给鼠标）。 */
+  /** 当前用键盘聚焦的那一格（cell 下标）。 */
   const [keyboardFocus, setKeyboardFocus] = useState<number | null>(null);
   /** 只有桌面端才自动转（手机上自动转会分散注意力）。 */
   const [isDesktop, setIsDesktop] = useState(false);
   const titleId = useId();
   const stageRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  /*
-   * 盘面那层 <g> 的 DOM 引用。
-   *
-   * 点击时要读它的**实际**角度（见 readLiveSpin），不能只看 React 里的
-   * 目标值 —— 两者在过渡期间差着一整格，差的就是那 45° 的"点完还自己转"。
-   */
+  /** 盘面那层 <g>：点击时要读它的**实际**角度。 */
   const spinRef = useRef<SVGGElement>(null);
   /** 盘（正方形那块）的引用，用来判断"点到盘外了没有"。 */
   const boardRef = useRef<HTMLDivElement>(null);
-  /**
-   * 盘面目标角度的最新值。
-   *
-   * selectSlice / close 都是 useCallback，依赖数组里没有 spinGroup ——
-   * 它们闭包里拿到的是**创建时**那一刻的 spinGroup。用旧值去归一化
-   * 实际角度，圈数会算错一整圈，盘就会朝着反方向甩 360°。
-   * 用 ref 存最新值，回调里读它，永远是对的。
-   */
+  /** 盘面目标角度的最新值，供闭包里的回调读取。 */
   const spinTargetRef = useRef(0);
   /** 锁定的那一格也用 ref 存一份，供 window 级事件读取最新值。 */
   const lockedRef = useRef<string | null>(null);
   lockedRef.current = lockedId;
-
 
   // 桌面判定：跟 CSS 的 lg 断点一致
   useEffect(() => {
@@ -184,12 +308,7 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
   /** 正在悬停：盘先停住，等移开再继续。 */
   const hovering = autoActive && hoverIndex !== null;
 
-  /*
-   * 停止自动转动的「硬开关」。
-   *
-   * setState 是异步的，点击那一瞬如果定时器正好排到点上，还会再走一格；
-   * 用一个 ref 在事件里同步关掉，已经排队的那一拍进来会直接 return。
-   */
+  /** 停止自动转动的「硬开关」：setState 是异步的，这一拍要同步关掉。 */
   const autoRef = useRef(false);
   autoRef.current = autoActive && !hovering;
 
@@ -197,22 +316,16 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
    * 指针停在哪一格，用 ref 记着。
    *
    * 盘在转，鼠标不动时指针底下那一格每转一格就换一个元素，Enter/Leave
-   * 会一轮轮地重放。如果按「鼠标进了哪一格」来记，指针就会跟着转、盘
-   * 也跟着转（盘一转指针又变），越转越乱。
-   * 所以只认「鼠标真的动过」：松手移动时记下鼠标位置和那一刻指针指着的
-   * 格子；之后盘怎么转都不改，鼠标一动就重新记。
+   * 会一轮轮地重放。所以只认「鼠标真的动过」：松手移动时记下鼠标位置
+   * 和那一刻指针指着的格子；之后盘怎么转都不改，鼠标一动就重新记。
    */
   const hoveredRef = useRef<number | null>(null);
   hoveredRef.current = hoverIndex;
   const pointerPos = useRef<{ x: number; y: number } | null>(null);
 
   /*
-   * 转盘被滚出视口就不再自动转。
-   *
-   * 这一条正是「桌面端卡片不自动打开」的根因：首页两屏都有 100dvh 高，
-   * 转盘在第二屏，进页面时它整个在视口之外。原来不管在不在看都照转，
-   * 定时器空跑，第一屏的人什么也看不到 —— 看起来就像「没有自动」。
-   * 现在用 IntersectionObserver 盯着转盘，至少露出三成才算「在看」。
+   * 转盘被滚出视口就不再自动转 —— 首页两屏都是 100dvh，转盘在第二屏，
+   * 进页面时它整个在视口之外，照转只是空跑定时器。
    */
   const [inView, setInView] = useState(false);
   useEffect(() => {
@@ -226,20 +339,12 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
     return () => observer.disconnect();
   }, []);
 
-  /*
-   * 自动转动：悬停、锁定、收起都会让这个 effect 重跑，定时器随之停掉。
-   *
-   * 悬停的判定放在定时器里做，不在事件里做 —— 少了这个 effect 反复
-   * 重启，盘也就不会一卡一卡。
-   */
+  /* 自动转动：悬停、锁定、收起都会让这个 effect 重跑，定时器随之停掉。 */
   useEffect(() => {
     if (!autoActive || !inView) return;
     const timer = window.setInterval(() => {
       if (!autoRef.current) return;
-      /*
-       * floor + 1：step 可能是小数（收起卡片时按实际角度对齐过），
-       * 直接 +1 会让盘长期停在两格之间，指针指着扇形边界。先归到下一整格。
-       */
+      // floor + 1：step 可能是小数，先归到下一整瓣，别停在两瓣之间
       setStep((current) => Math.floor(current) + 1);
     }, STEP_MS);
     return () => window.clearInterval(timer);
@@ -248,11 +353,8 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
   /**
    * 鼠标压在哪一格。
    *
-   * 这个函数只做一件事：记下「指针现在落在谁身上」，绝不参与旋转角度的
-   * 计算。之前它同时决定 hoverIndex，而 hoverIndex 又会驱动整盘转到
-   * 「让那一格正对指针」的位置 —— 结果是鼠标每挪 1px，盘就跟着补一段
-   * 角度，扇形从指针底下跑掉、指针又落到新的扇形上，越挪越乱。
-   * 现在悬停只负责：暂停自动转动 + 把那一格点亮。
+   * 只记「指针现在落在谁身上」，绝不参与旋转角度的计算 —— 否则鼠标每挪
+   * 1px 盘就跟着补一段角度，格子从指针底下跑掉、指针又落到新格上，越挪越乱。
    */
   const syncPointer = useCallback(
     (event: PointerEvent) => {
@@ -264,7 +366,7 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
       if (!moved) return;
       pointerPos.current = { x: event.clientX, y: event.clientY };
       const target = (event.target as Element | null)?.closest?.('.emotion-wheel-slice');
-      const index = target ? Number(target.getAttribute('data-slice-index')) : NaN;
+      const index = target ? Number(target.getAttribute('data-cell-index')) : NaN;
       const next = Number.isFinite(index) ? index : null;
       if (next === hoveredRef.current) return;
       setHoverIndex(next);
@@ -288,48 +390,30 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
     };
   }, [autoActive, syncPointer, clearPointer]);
 
-  /*
-   * 起始那一格在挂载后才摇：直接写在 useState 初值里会让服务端渲染出
-   * 一个数、客户端又摇出另一个，水合对不上（每次刷新还会报警告）。
-   */
+  /* 起始那一瓣在挂载后才摇：写在 useState 初值里会让服务端与客户端对不上。 */
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    setStep(Math.floor(Math.random() * EMOTION_SLICES.length));
+    setStep(Math.floor(Math.random() * PETAL_COUNT));
     setReady(true);
   }, []);
 
-  /** 起始格还没摇出来之前，盘先停在 0°（正对「迷茫」，也就是数组第一个）。 */
-  const initialSpin = -SLICE_DEG / 2;
+  /** 起始瓣还没摇出来之前，盘先停在 0°。 */
+  const initialSpin = -PETAL_DEG / 2;
 
-  const count = EMOTION_SLICES.length;
-  const mod = (value: number) => ((value % count) + count) % count;
+  const mod = (value: number) => ((value % PETAL_COUNT) + PETAL_COUNT) % PETAL_COUNT;
 
   /*
-   * 整盘旋转角度 —— 盘自己转，指针不动。
-   *
-   * 除了自动步进，这里还叠了两项「手动补转」：
-   *
-   *   - 悬停：hoverSpin，让指针下那一格转到正上方；
-   *   - 锁定：lockSpin，让被点的那一格转到正上方。
-   *
-   * 目标角度要求「那一格的扇心 = -90°」。把需求反过来解，就是
-   * 「整盘要转到多少度」。外面再补若干个整圈（baseSpin 那一项），
-   * 保证一直是同一个方向往前转，不会为了归位突然倒着甩回去 ——
-   * 这也是「点一下标签，标签不要跳到指向上方」的关键：转的是盘
-   * 这一个整体，被点的扇形只是恰好停在了指针下面。
+   * 整盘旋转角度。目标要求「那一瓣的瓣心 = -90°」，反解出整盘要转多少度，
+   * 再补整圈保证永远朝一个方向转 —— 不会为了归位突然倒着甩回去。
    */
-  const baseSpin = -SLICE_DEG / 2 - step * SLICE_DEG;
+  const baseSpin = -PETAL_DEG / 2 - step * PETAL_DEG;
 
   /**
    * 盘此刻**实际**停在多少度。
    *
-   * 为什么需要这个：CSS 过渡要 0.82s，而 React 里的 baseSpin 早就跳到
-   * 终点了。过渡途中读 baseSpin，读到的是"它要去哪"，不是"它现在在哪"。
-   * 点击时若把"要去哪"冻起来，盘会自己把剩下那半格走完 —— 实测点中的
-   * 那一格在点击后还会转 45°，看起来就是"点完它自己跑到指针下面去了"。
-   *
-   * 所以从计算样式里把当前矩阵解出来，再归一到离 spinGroup 最近的等价角
-   * （矩阵只能给出 -180~180，直接拿去用会让盘绕着反方向转一整圈）。
+   * CSS 过渡要 0.82s，React 里的 baseSpin 早就跳到终点了。过渡途中读它，
+   * 读到的是"它要去哪"，不是"它现在在哪"。点击时若冻错值，盘会自己把
+   * 剩下那半格走完 —— 看起来就是"点完它自己跑到指针下面去了"。
    */
   const readLiveSpin = () => {
     const el = spinRef.current;
@@ -341,29 +425,23 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
     return raw + turns * 360;
   };
 
-  /** 锁定的那一格（下标）；没锁定就是 null。 */
-  const lockIndex = lockedId ? Math.max(0, EMOTION_SLICES.findIndex((slice) => slice.id === lockedId)) : null;
+  /** 锁定的那一格下标；没锁定就是 null。 */
+  const lockIndex = lockedId
+    ? Math.max(0, EMOTION_CELLS.findIndex((cell) => cell.id === lockedId))
+    : null;
 
   /*
    * 盘面的角度只有两个来源，都不看鼠标：
-   *
-   *   1. 锁定中 → 用点下去那一刻冻结的角度，一步不动；
-   *   2. 待机   → 用自动步进算出来的角度，一步 45°。
-   *
-   * 悬停只是把定时器停掉（盘就停在当前这一格），不参与角度计算。
-   * 这样「鼠标在盘上挪」和「盘怎么转」彻底解耦，点标签之后也不会乱动。
+   *   1. 锁定中 → 用点下去那一刻冻结的角度；
+   *   2. 待机   → 用自动步进算出来的角度。
    */
   const spinGroup = frozenSpin !== null ? frozenSpin : ready ? baseSpin : initialSpin;
-  // 同步给 ref，供事件回调（闭包）读最新目标角度
   spinTargetRef.current = spinGroup;
 
   /*
-   * 盘还「在路上」。
-   *
-   * 高亮/卡片跟着鼠标切换时，盘刚被停住但 CSS 过渡（0.65s）还没走完，
-   * 鼠标底下那一格随时会换人。这段时间里统一用「指针下那一格」当展示格，
-   * 等盘真正站定了再交给悬停记下的那一格 —— 否则会出现"卡片说疲惫、
-   * 指针指着无聊"的错位，看上去就是点一下 / 悬一下之后内容自己乱跳。
+   * 盘还「在路上」。高亮/卡片跟着鼠标切换时，盘刚被停住但过渡还没走完，
+   * 鼠标底下那一格随时会换人。这段时间统一用「指针下那一格」当展示格，
+   * 等盘站定了再交给悬停记下的那一格。
    */
   const [settled, setSettled] = useState(true);
   useEffect(() => {
@@ -376,64 +454,49 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
     return () => window.clearTimeout(timer);
   }, [hoverIndex, frozenSpin]);
 
+  /** 待机时「指针下那一格」= 指针下那一瓣的最高强度层。 */
+  const defaultCellIndex = (petalIndex: number) => petalIndex * 3 + DEFAULT_TIER;
+
   /*
    * 当前"被展示"的那一格。
-   *
-   *   锁定 → 被点中的那一格（盘已经冻住，它就是用户正在看的那一格）
-   *   悬停 → 鼠标压着的那一格；盘还没站定时先跟指针
-   *   待机 → 自动步进走到的那一格
-   *
-   * 注意锁定分支一定要取 lockIndex，不能落到 mod(step) 上：锁定之后
-   * 定时器停了、step 不再前进，但两者曾经对齐过吗？没有 —— 点下去那一刻
-   * 盘是从上一步刚转过来的，两者可能差一格。取 mod(step) 会让高亮和
-   * 卡片侧判断都偏掉一格，看起来就是"点完之后指针自己跳到别的格上去了"。
+   *   锁定 → 被点中的那格；悬停 → 鼠标压着的那格；待机 → 步进走到的那瓣的顶层。
+   * 锁定分支必须取 lockIndex：锁定后 step 不再前进，两者可能差一格。
    */
-  const hoverFocus = hovering ? (settled ? hoverIndex : mod(Math.round(step))) : null;
-  const focusIndex = lockIndex ?? hoverFocus ?? mod(Math.round(step));
-  /** 正对指针的那一格（用来打 .emotion-wheel-slice-top）。 */
-  const pointerIndex = focusIndex;
-  // 显式收窄类型：EMOTION_SLICES 是 readonly 数组，索引访问会被推成可能为空
-  const focused =
-    EMOTION_SLICES[focusIndex] ?? (EMOTION_SLICES[0] as EmotionSlice);
+  const hoverFocus = hovering
+    ? settled
+      ? hoverIndex
+      : defaultCellIndex(mod(Math.round(step)))
+    : null;
+  const focusIndex = lockIndex ?? hoverFocus ?? defaultCellIndex(mod(Math.round(step)));
+
+  const focused: EmotionCell = EMOTION_CELLS[focusIndex] ?? (EMOTION_CELLS[0] as EmotionCell);
   const isLocked = lockedId !== null;
+
+  /** 正对指针的那一瓣，用来给那一瓣的最高层打 .emotion-wheel-slice-top。 */
+  const pointerPetal = focused.petalIndex;
+
   /*
-   * 卡片出在哪一侧：看「被展示的那一格现在在屏幕的左半圈还是右半圈」。
-   *
-   * 扇形 i 的扇心角（盘没转时）是 -90 + 45i + 22.5；把整盘转过的角度
-   * 加回去，就是它此刻在屏幕上的角度。cos > 0 在右半圈，cos < 0 在左半圈。
-   * 卡片永远挨着自己那半圈，不会横跨整个盘跑到对面去。
-   *
-   * 待机时"被展示的那一格"就是指针下那一格；锁定/悬停时盘不再动，
-   * 展示的那一格待在原位，卡片也就跟着它待在原来那一侧。
+   * 卡片出在哪一侧：看被展示的那一瓣此刻在屏幕的左半圈还是右半圈。
+   * 瓣心角（盘没转时）是 -90 + 45i；加上整盘转过的角度就是它在屏幕上的角度。
    */
-  const pointerAngle = START_DEG + SLICE_DEG / 2 + focusIndex * SLICE_DEG + spinGroup;
+  const pointerAngle = START_DEG + focused.petalIndex * PETAL_DEG + spinGroup;
   const cardSide: 'left' | 'right' = Math.cos((pointerAngle * Math.PI) / 180) >= 0 ? 'right' : 'left';
-
-
 
   /**
    * 把盘从"当前实际角度"接回自动步进，一次不出戏。
-   *
-   * step 允许小数正是为了这一步：解出使 baseSpin 恰好等于 live 的 step，
-   * 于是 frozenSpin 清掉的那一帧，spinGroup 前后两个值完全相等 ——
-   * 盘不会为了"归位"突然甩一下。之后的自动步进在它基础上继续每步 45°。
+   * step 允许小数正是为了这一步：反解出使 baseSpin 恰好等于 live 的 step。
    */
   const handBackToAuto = (live: number) => {
-    // baseSpin = -SLICE_DEG / 2 - step * SLICE_DEG，反解出与 live 对齐的 step
-    setStep((-SLICE_DEG / 2 - live) / SLICE_DEG);
+    setStep((-PETAL_DEG / 2 - live) / PETAL_DEG);
     setFrozenSpin(null);
     setAutoOn(true);
   };
 
-  const selectSlice = useCallback(
-    (slice: EmotionSlice, index: number | null) => {
-      if (lockedId === slice.id) {
-        /*
-         * 再点一次同一个：收起，继续自动转。
-         *
-         * 注意这里是 cardMode='off' 而不是 'follow' —— 自动态下卡片是常驻的，
-         * 回到 follow 等于「刚收起又冒出来」，用户会以为没点中。
-         */
+  const selectCell = useCallback(
+    (cell: EmotionCell) => {
+      if (lockedId === cell.id) {
+        // 再点一次同一格：收起，继续自动转。用 off 而不是 follow，
+        // 否则自动态下卡片等于"刚收起又冒出来"。
         handBackToAuto(readLiveSpin());
         setLockedId(null);
         setHoverIndex(null);
@@ -441,21 +504,13 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
         return;
       }
       /*
-       * 点下去那一刻盘停在哪，就冻在哪 —— 注意取的是**实际角度**。
-       *
-       * 取 spinGroup（React 里的目标值）会出这个岔子：盘正在从 A 转向 B
-       * 的途中被点，frozenSpin 记的是 B，于是盘点完还得自己把剩下那半格
-       * 走完。用户视角就是"我点中这一格，它却自己转到了指针下面"，
-       * 幅度正好是 45° × 进度。
-       *
-       * 读实际角度则相反：冻结值 = 此刻所见，盘当场停住，一格都不多走。
-       * 再加上 .is-locked 把过渡时长收到 0.22s，观感是"被指尖按停"，
-       * 而不是硬生生卡断。
+       * 点下去那一刻盘停在哪就冻在哪，取的是**实际角度**。
+       * 再加上 .is-locked 把过渡收到 0.22s，观感是"被指尖按停"。
        */
       setFrozenSpin(readLiveSpin());
       setHoverIndex(null);
       autoRef.current = false;
-      setLockedId(slice.id);
+      setLockedId(cell.id);
       setAutoOn(false);
       setCardMode('locked');
     },
@@ -466,31 +521,18 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
     handBackToAuto(readLiveSpin());
     setLockedId(null);
     setHoverIndex(null);
-    // 收起之后不再让卡片跟着指针冒出来，用户是主动想关掉它
     setCardMode('off');
   }, []);
 
   /*
-   * 点击「转盘以外」的任何地方关闭。
-   *
-   * 两个例外必须放行，否则会出现"一点就没了"的错觉：
-   *   1. 转盘舞台内部 —— 包括圆环中间的洞，用户在那里点一下不该算退出；
-   *   2. 详情卡片内部 —— 卡片是 stage 的**兄弟节点**，不在 stage 里，
-   *      只判断 stage 会让"点卡片里的文字、点返回按钮"变成先关卡片。
-   *      真凶是 pointerdown 比 click 早：手指按下去卡就收了，
-   *      返回按钮的 click 自然落空。
+   * 点击「转盘以外」关闭。两个例外必须放行：
+   *   1. 盘的舞台内部；2. 详情卡片内部（卡片是 stage 的兄弟节点）。
+   * 真凶是 pointerdown 比 click 早：手指按下去卡就收了，返回按钮的 click 落空。
    */
   useEffect(() => {
     if (!lockedId) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
-      /*
-       * 判据是「盘」而不是「舞台」。
-       *
-       * .emotion-wheel-stage 是 flex 居中容器，宽屏下它铺满整行（1375px），
-       * 盘才 558px —— 用 stage 判断等于把左右两大片空白也当成了转盘，
-       * 用户点那里明明在"别的区域"，卡片却赖着不走。
-       */
       if (boardRef.current && boardRef.current.contains(target)) return;
       if (cardRef.current && cardRef.current.contains(target)) return;
       close();
@@ -526,211 +568,324 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
           <svg
             viewBox={`0 0 ${SIZE} ${SIZE}`}
             role="radiogroup"
-            aria-label="情绪转盘，点一个扇形看它的需求与处理方法"
+            aria-label="情绪转盘：八种基础情绪，每瓣从外到内越来越强烈，点一格看它的说明"
             className="emotion-wheel-svg"
           >
-            {/* 整盘旋转层：扇形与文字都在里面 */}
             <g ref={spinRef} className="emotion-wheel-spin" style={{ transform: `rotate(${spinGroup}deg)` }}>
-              {EMOTION_SLICES.map((slice, index) => {
-                const startDeg = START_DEG + index * SLICE_DEG;
-                const endDeg = startDeg + SLICE_DEG;
-                const d = slicePath(CX, CY, R_OUTER, R_INNER, startDeg, endDeg);
-                const anchor = labelAnchor(CX, CY, R_OUTER, R_INNER, startDeg, endDeg);
-                const isActive = lockedId === slice.id;
-                const isDimmed = lockedId !== null && !isActive;
-                const isTop = index === pointerIndex;
-                /*
-                 * 高亮只认鼠标压着的那一格。
-                 *
-                 * 悬停已经把自动转动停住了，盘不会再从鼠标底下溜走，所以
-                 * 「鼠标压着的那一格」和「指针指的那一格」在这里是同一格。
-                 * 之前额外加了 isTop 做保险，结果盘还在收尾过渡（0.65s）
-                 * 或刚进视口时，指针落在一格上、top 还是上一格，高亮就
-                 * 整个不亮 —— 用户看到的是"鼠标放上去没反应"。
-                 *
-                 * 视觉上两者本来就不冲突：hot 是局部提亮放大（在这一格
-                 * 自己身上），top 只是亮度略提（见 .emotion-wheel-slice-top），
-                 * 没有第二套"指针标记"会被误读成盘在乱动。
-                 */
-                const isHovered = hoverIndex === index && keyboardFocus === null;
+              {EMOTION_PETALS.map((petal, petalIndex) => {
+                const startDeg = START_DEG + petalIndex * PETAL_DEG;
+                const endDeg = startDeg + PETAL_DEG;
+                const midDeg = startDeg + PETAL_DEG / 2;
 
                 return (
-                  <g
-                    key={slice.id}
-                    role="radio"
-                    tabIndex={0}
-                    aria-checked={isActive}
-                    aria-label={`${slice.label}：是为了获得${slice.need}`}
-                    data-slice-index={index}
-                    onClick={() => selectSlice(slice, index)}
-                    onFocus={() => setKeyboardFocus(index)}
-                    onBlur={() => setKeyboardFocus((current) => (current === index ? null : current))}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        selectSlice(slice, index);
-                        return;
-                      }
-                      /*
-                       * 方向键在 8 个扇形之间转圈。
-                       * 扇形是按顺时针排的，所以「右/下」往后、「左/上」往前。
-                       */
-                      const delta =
-                        event.key === 'ArrowRight' || event.key === 'ArrowDown'
-                          ? 1
-                          : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
-                            ? -1
-                            : 0;
-                      if (!delta) return;
-                      event.preventDefault();
-                      const next = (index + delta + count) % count;
-                      const nextSlice = EMOTION_SLICES[next];
-                      if (!nextSlice) return;
-                      setKeyboardFocus(next);
-                      // 焦点跟着挪，读屏才会播报新的那一格
-                      const el = stageRef.current?.querySelector<SVGGElement>(`[data-slice-index="${next}"]`);
-                      el?.focus();
-                    }}
-                    className={cn(
-                      'emotion-wheel-slice focus:outline-none',
-                      isDimmed && 'emotion-wheel-slice-dim',
-                      isTop && 'emotion-wheel-slice-top',
-                      isHovered && 'emotion-wheel-slice-hot',
-                      keyboardFocus === index && 'emotion-wheel-slice-focus',
-                    )}
-                    style={
-                      {
-                        '--slice-color': slice.color,
-                        '--slice-edge': slice.edge,
-                        '--slice-ink': slice.ink,
-                        transformOrigin: `${CX}px ${CY}px`,
-                      } as React.CSSProperties
-                    }
-                  >
+                  <g key={petal.id} className="emotion-wheel-petal" data-petal={petal.family}>
+                    {/*
+                      描边单独画在最底层，填充不画。
+
+                      原来这道描边挂在「花瓣底色」那个 path 上，于是它同时是
+                      三层的共同底 —— 高亮某一层时，整片几何一起变色，看着像
+                      三格连成了一体。现在描边只管轮廓，填充交给每个可点的
+                      层自己画（.emotion-wheel-slice-shape），这样 hover、
+                      选中、聚焦才能只作用在被指着的那一格上。
+                    */}
                     <path
-                      d={d}
-                      fill={slice.color}
-                      stroke={slice.edge}
-                      strokeWidth={1.4}
+                      d={petalOutline(startDeg, endDeg)}
+                      fill="none"
+                      stroke={petal.edge}
+                      strokeWidth={1.6}
                       strokeLinejoin="round"
-                      className="emotion-wheel-slice-shape"
+                      className="emotion-wheel-petal-outline"
+                      pointerEvents="none"
                     />
 
-                    {/*
-                      扇形文字：两层组。
-                      外层用 transform 属性移到扇形锚点；
-                      内层用 CSS 反向旋转，抵消整盘的转动，让文字始终水平。
-                      两层分开是必须的 —— CSS transform 会覆盖 SVG 的
-                      transform 属性，写在一起translate 就丢了。
-                    */}
-                    <g transform={`translate(${anchor.x.toFixed(2)} ${anchor.y.toFixed(2)})`}>
-                      <g
-                        className="emotion-wheel-counter"
-                        style={{ transform: `rotate(${-spinGroup}deg)` }}
-                      >
-                        {/*
-                          换字过渡：文字按情绪 id 换节点，各自就地淡入 + 轻微
-                          放大落位。只动 opacity / scale（SVG 里走 CSS
-                          transform 不会影响盘面几何），所以换字时不会有任何
-                          位移感 —— 这正是"点完标签不要乱动"要的效果。
-                        */}
-                        <g key={`label-${slice.id}`} className="emotion-wheel-slice-caption">
-                          <text
-                            textAnchor="middle"
-                            className="emotion-wheel-slice-label"
-                            fill={slice.ink}
-                            fontSize="19"
-                            fontWeight="600"
-                            letterSpacing="0.08em"
-                            y="-3"
-                          >
-                            {slice.label}
-                          </text>
-                          <text
-                            textAnchor="middle"
-                            className="emotion-wheel-slice-sub"
-                            fill={slice.ink}
-                            fontSize="10"
-                            opacity="0.8"
-                            letterSpacing="0.02em"
-                            y="16"
-                          >
-                            是为了获得{slice.need}
-                          </text>
+                    {petal.tiers.map((tier, tierIndex) => {
+                      const cellIndex = petalIndex * 3 + tierIndex;
+                      const cell = EMOTION_CELLS[cellIndex] as EmotionCell;
+                      const band = TIER_BANDS[tierIndex] ?? { outer: R_TIER2, inner: R_CORE };
+                      const clipId = `${titleId}-t${petalIndex}-${tierIndex}`;
+                      /*
+                       * 三层落在哪：先沿瓣中线取到锚点，再沿「层叠方向」
+                       * 偏移 —— 外圈朝外、内圈朝内、中层居中。
+                       *
+                       * 偏移是垂直或平行于瓣轴线的方向（见 layerShiftAngle），
+                       * 所以外层往外推 SPACING、内层往里收 SPACING，三层在
+                       * 画面上就是整齐的一列（或一行），间距恒定。
+                       */
+                      /*
+                       * 三层的落点，全是写死的：外 / 中 / 内 = 半径 134 / 112 / 90，
+                       * 各自沿瓣中线（切向）让开 11 / 0 / -11。
+                       *
+                       * 这些数是量出来的，不是推出来的 —— 字盒实测 25×16（两个字），
+                       * 而这一瓣在 r=112 处切向只有 33 单位、径向有 44 单位，所以
+                       * 三个词能排开，靠的是"切向错开 ±11、径向同时收 22"，两个方向
+                       * 一起用。只错一个方向，半径小的地方就一定会顶到隔壁层。
+                       */
+                      const tierGeo = TIER_TEXT_GEO[tierIndex] ?? { r: 90, shift: -11 };
+                      const anchor = polar(tierGeo.r, midDeg + tierGeo.shift);
+                      const isActive = lockedId === cell.id;
+                      const isDimmed = lockedId !== null && !isActive;
+                      const isTop = petalIndex === pointerPetal && tierIndex === DEFAULT_TIER;
+                      const isHovered = hoverIndex === cellIndex && keyboardFocus === null;
+                      const fontSize = tierValue(TIER_FONT, tierIndex, 12);
+
+                      return (
+                        <g
+                          key={cell.id}
+                          role="radio"
+                          tabIndex={0}
+                          aria-checked={isActive}
+                          aria-label={`${cell.label}，${INTENSITY_LABEL[cell.intensity]}`}
+                          data-cell-index={cellIndex}
+                          data-slice-index={cellIndex}
+                          data-petal-index={petalIndex}
+                          data-tier={tierIndex}
+                          onClick={() => selectCell(cell)}
+                          onFocus={() => setKeyboardFocus(cellIndex)}
+                          onBlur={() =>
+                            setKeyboardFocus((current) => (current === cellIndex ? null : current))
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              selectCell(cell);
+                              return;
+                            }
+                            /*
+                             * 方向键：上/下在同一瓣的三层之间走（外 → 内 = 强度升高），
+                             * 左/右跨到相邻花瓣的同一层。
+                             */
+                            let next = cellIndex;
+                            if (event.key === 'ArrowDown') next = Math.min(petalIndex * 3 + 2, cellIndex + 1);
+                            else if (event.key === 'ArrowUp') next = Math.max(petalIndex * 3, cellIndex - 1);
+                            else if (event.key === 'ArrowRight')
+                              next = ((petalIndex + 1) % PETAL_COUNT) * 3 + tierIndex;
+                            else if (event.key === 'ArrowLeft')
+                              next = ((petalIndex - 1 + PETAL_COUNT) % PETAL_COUNT) * 3 + tierIndex;
+                            else return;
+                            event.preventDefault();
+                            setKeyboardFocus(next);
+                            const el = stageRef.current?.querySelector<SVGGElement>(
+                              `[data-cell-index="${next}"]`,
+                            );
+                            el?.focus();
+                          }}
+                          className={cn(
+                            'emotion-wheel-slice focus:outline-none',
+                            isDimmed && 'emotion-wheel-slice-dim',
+                            isTop && 'emotion-wheel-slice-top',
+                            isHovered && 'emotion-wheel-slice-hot',
+                            keyboardFocus === cellIndex && 'emotion-wheel-slice-focus',
+                          )}
+                          style={
+                            {
+                              '--slice-color': petal.color,
+                              '--slice-edge': petal.edge,
+                              '--slice-ink': petal.ink,
+                            } as React.CSSProperties
+                          }
+                        >
+                          {/*
+                            这一层的填充：花瓣轮廓 ∩ 半径区间。
+
+                            不用「把花瓣曲线按比例缩半径」那一套 —— 半径一小
+                            花瓣就窄成一条，内层会缩成一根尖刺，字放不下。
+                            这里让 clipPath 取圆环，形状用整瓣的轮廓，交集
+                            自然就是「贴着瓣边、按半径切开」的那一块，
+                            和参考图那种同心分层是同一种结构。
+                          */}
+                          <clipPath id={clipId}>
+                            <path d={ringPath(band.outer, band.inner)} />
+                          </clipPath>
+                          <clipPath id={`${clipId}-petal`}>
+                            <path d={petalOutline(startDeg, endDeg)} />
+                          </clipPath>
+
+                          {/*
+                            可点区域 —— 必须单独再画一遍，不能指望上面那个被裁过的色块。
+
+                            命中测试看的是 path 自己的几何，clipPath 只影响绘制：
+                            那个 <path> 的 d 是整瓣轮廓，于是三层的可点区域都是
+                            同一整瓣，谁在上面谁吃掉全部点击（实测内层把外两层
+                            全盖住了）。这里按「外沿弧 + 两条瓣侧」画出这一层真正的
+                            范围，再用 clipPath 把圆环以内切掉，正好剩下这一格。
+
+                            填充是透明的，但 pointer-events="all" 让它照样接收指针 ——
+                            视觉上什么也没多，可点区域和看得见的那块终于对上了。
+                          */}
+                          <path
+                            d={tierBandPath(startDeg, endDeg, band.outer, band.inner)}
+                            fill="transparent"
+                            stroke="none"
+                            fillRule="evenodd"
+                            pointerEvents="all"
+                          />
+
+                          <g clipPath={`url(#${clipId})`}>
+                            <path
+                              d={petalOutline(startDeg, endDeg)}
+                              fill={petal.color}
+                              stroke="none"
+                              className="emotion-wheel-slice-shape"
+                            />
+                          </g>
+                          {/*
+                            分界线：这一层的内沿。
+
+                            三个裁剪条件缺一不可 —— 圆环（不然整圈都在）、
+                            花瓣（不然横穿旁边的空白）、以及排除圆心那一块。
+                            放在被裁的组外面画，是因为它正好压在裁剪边界上，
+                            放进去会被自己那刀裁掉一半。
+                          */}
+                          <g clipPath={`url(#${clipId}-petal)`} pointerEvents="none">
+                            <circle
+                              r={band.inner}
+                              cx={CX}
+                              cy={CY}
+                              fill="none"
+                              stroke={petal.edge}
+                              strokeWidth={1.2}
+                              strokeOpacity={0.62}
+                              className="emotion-wheel-divider"
+                            />
+                          </g>
+
+                          {/*
+                            词的方向：横切半径，但要保证「正着读」。
+
+                            最早试过三种，只有最后这种排得开：
+
+                            1. 水平横排 —— 斜向花瓣在同一半径上只剩一条斜缝，
+                               两个字放不下，出界。
+                            2. 沿半径竖着排 —— 字能放下，但两个字要占 20 多个
+                               单位长，而层与层的间距只有 22~25 单位，同一瓣
+                               三层的词首尾相接，糊成一条（"伤感悲伤悲痛"）。
+                            3. 横切半径（现在这种）—— 文字基线垂直于这一瓣的
+                               中轴线，正好压在圆环的切线方向上。每个词只占
+                               一个字的宽度（约 12 单位）在径向上，三层之间
+                               因此稳稳隔开；切向那边由花瓣的宽度兜底，
+                               外宽内窄，正好对上字号由大到小。
+
+                            再加一步翻正：切向角度如果让字上下颠倒，就翻 180°，
+                            让它落在「右半边朝外、左半边朝内」这个可读区间。
+                            原图里八瓣的字也都是正立或轻微倾斜，没有倒着的。
+                          */}
+                          <g transform={`translate(${anchor.x.toFixed(2)} ${anchor.y.toFixed(2)})`} pointerEvents="none">
+                            <g
+                              className="emotion-wheel-counter"
+                              style={{ transform: `rotate(${-spinGroup + uprightDeg(midDeg)}deg)` }}
+                            >
+                              <g key={`label-${cell.id}`} className="emotion-wheel-slice-caption">
+                                <text
+                                  textAnchor="middle"
+                                  dominantBaseline="middle"
+                                  className="emotion-wheel-slice-label"
+                                  fill={petal.ink}
+                                  fontSize={fontSize}
+                                  fontWeight="600"
+                                  letterSpacing="0.04em"
+                                >
+                                  {cell.label}
+                                </text>
+                              </g>
+                            </g>
+                          </g>
                         </g>
-                      </g>
-                    </g>
+                      );
+                    })}
+
+                    {/* 花瓣尖端到复合词之间那个「+」：说明这两瓣混出了旁边那个词 */}
+                    <text
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      className="emotion-wheel-plus"
+                      fill={petal.ink}
+                      fontSize="9"
+                      opacity="0.55"
+                      transform={`translate(${polar(R_TIP - 8, startDeg).x.toFixed(2)} ${polar(R_TIP - 8, startDeg).y.toFixed(2)})`}
+                      aria-hidden="true"
+                    >
+                      +
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/*
+                复合情绪：八个只读标签，落在相邻两瓣的夹角上。
+                它们不参与点击 —— 点开能看的仍然是那二十四层的词。
+              */}
+              {EMOTION_DYADS.map((dyad, index) => {
+                const angle = START_DEG + index * PETAL_DEG + PETAL_DEG / 2;
+                const pos = polar(R_DYAD, angle);
+                return (
+                  <g
+                    key={dyad}
+                    className="emotion-wheel-dyad"
+                    transform={`translate(${pos.x.toFixed(2)} ${pos.y.toFixed(2)})`}
+                    aria-hidden="true"
+                  >
+                    <text
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      className="emotion-wheel-dyad-text"
+                      transform={`rotate(${angle + 90})`}
+                    >
+                      {dyad}
+                    </text>
                   </g>
                 );
               })}
             </g>
 
-            {/* 正上方的固定指针：自动转动时指向当前那一格 */}
+            {/* 正上方的固定指针：自动转动时指着当前那一瓣 */}
             <g
               aria-hidden="true"
               className={cn('emotion-wheel-pointer', autoActive && 'is-on', isLocked && 'is-locked')}
             >
-              <path d="M 200 27 L 189 7 L 211 7 Z" fill="var(--color-ink-ghost, #9a90a8)" opacity="0.75" />
+              <path d="M 200 26 L 189 6 L 211 6 Z" fill="var(--color-ink-ghost, #9a90a8)" opacity="0.75" />
             </g>
           </svg>
         </div>
 
         {showCard && (
-          <div className="emotion-wheel-card-slot" data-visible="true" data-locked={isLocked ? 'true' : 'false'} data-side={cardSide}>
+          <div
+            className="emotion-wheel-card-slot"
+            data-visible="true"
+            data-locked={isLocked ? 'true' : 'false'}
+            data-side={cardSide}
+          >
             {/*
-              卡片本体不再按情绪 key 重挂。
-              原来 key={focused.id}，盘每转一格就重挂一张卡，于是每秒都重放
-              一遍入场动画，看起来在闪。现在外壳一直在，只有内部几块按 key
-              换成新内容、各自做一次很轻的上浮 —— 换内容有过渡，但不像重开。
+              卡片本体不按情绪 key 重挂：盘每转一格就重挂一张卡会每秒重放
+              一遍入场动画，看起来在闪。外壳一直在，只有内部几块按 key 换。
             */}
             <div
               ref={cardRef}
               /*
-               * 用 region + aria-live 而不是 dialog。
-               *
-               * 它不是模态框，桌面端还一直在跟着盘更新；叫 dialog 会和
-               * 情绪球那个真正的弹层（role="dialog"）撞 name，屏幕阅读器
-               * 与测试里的 getByRole('dialog', { name:/焦虑/ }) 都会同时命中。
+               * 用 region + aria-live 而不是 dialog：它不是模态框，桌面端
+               * 还一直在跟着盘更新；叫 dialog 会和情绪球那个真正的弹层撞 name。
                */
               role="region"
               aria-live="polite"
-              aria-label={`${focused.label}：是为了获得${focused.need}`}
+              aria-label={`${focused.label}，${INTENSITY_LABEL[focused.intensity]}`}
               className="emotion-wheel-card"
               style={
                 {
-                  '--slice-color': focused.color,
-                  '--slice-edge': focused.edge,
-                  '--slice-ink': focused.ink,
+                  '--slice-color': focused.petal.color,
+                  '--slice-edge': focused.petal.edge,
+                  '--slice-ink': focused.petal.ink,
                 } as React.CSSProperties
               }
             >
-              {/* 顶部那条跟着情绪走的细色条，只做一点点提示 */}
               <span className="emotion-wheel-card-bar" aria-hidden="true" />
 
-              {/*
-                换内容时的柔光。
-
-                这里刻意**没有**独立的发光盒子：一个绝对定位、还要 scale 到
-                1.1 的元素，会把自己放大后的矩形算进卡片的 scrollHeight
-                （实测 149 → 160），卡片就凭空多出一截能滚的高度。contain:
-                paint / overflow: hidden 都拦不住 —— 它们只管绘制，不管
-                滚动溢出矩形。
-
-                所以柔光直接画在卡片自己的 background 上，靠一次 key 重挂
-                触发 `emotion-wheel-card-flash` 把 opacity 从 0 提到峰值再落回
-                0。没有盒子，就没有可滚范围。
-              */}
+              {/* 换内容时的柔光画在卡片自己的 background 上，不另起盒子 ——
+                  绝对定位的放大元素会把自己算进 scrollHeight，卡片凭空多出可滚高度。 */}
               <span
                 key={`glow-${focused.id}`}
                 aria-hidden="true"
                 className={cn('emotion-wheel-card-flash', isLocked && 'emotion-wheel-card-flash-strong')}
               />
 
-              {/*
-                点下去那一刻，从卡片外沿荡开一圈同色光。
-                key 用 lockedId，所以只有真正「点中某一格」时才重新播一次；
-                自动转动换内容不会有这一下。
-              */}
               {isLocked ? (
                 <span
                   key={`burst-${lockedId}`}
@@ -740,30 +895,36 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
                 />
               ) : null}
 
-              {/*
-                一张卡只留一个标题。
-                --
-                原来是「情绪的背后」（眉标）+「焦虑」（标题）+「是为了获得」
-                +「确定」（又一个更大的字）—— 四行字里三行都在抢同一件事：
-                这是什么情绪、它要什么。视觉上就成了「多层标题、主次不分」。
-
-                现在：左边一个情绪词打头，右边接着一句话把它说清楚。
-                不再有眉标、不再有第二个大字。
-              */}
               <h3 key={`t-${focused.id}`} className="emotion-wheel-card-title emotion-wheel-card-swap">
-                <span className="emotion-wheel-card-dot" aria-hidden="true" />
-                {focused.label}
+                <span className="emotion-wheel-card-dot" aria-hidden="true" />                {focused.label}
               </h3>
 
+              {/*
+                这一格属于哪一瓣、强度走到哪一层。原来这里是「是为了获得X」
+                加一句解释 —— 换成情绪轮之后，每一格要回答的是「它有多强、
+                和谁同源」，不再是「它想跟你要什么」。
+              */}
               <p key={`l-${focused.id}`} className="emotion-wheel-card-lead emotion-wheel-card-swap">
-                是为了获得<b>{focused.need}</b>
-                <span className="emotion-wheel-card-lead-text">{focused.needs}</span>
+                <b>{INTENSITY_LABEL[focused.intensity]}</b>
+                <span className="emotion-wheel-card-lead-text">
+                  {focused.petal.tiers[0].label} · {focused.petal.tiers[1].label} ·{' '}
+                  {focused.petal.tiers[2].label}这一瓣
+                </span>
               </p>
 
-              <div key={`m-${focused.id}`} className="emotion-wheel-card-method emotion-wheel-card-swap emotion-wheel-card-swap-late">
-                <span className="emotion-wheel-card-key">可以这样</span>
-                <p className="emotion-wheel-card-text">{focused.method}</p>
-              </div>
+              {/*
+                这一格的具体说明。文案还没写，所以这一块先不渲染 ——
+                留白比塞一句凑数的话强。
+              */}
+              {focused.note ? (
+                <div
+                  key={`m-${focused.id}`}
+                  className="emotion-wheel-card-method emotion-wheel-card-swap emotion-wheel-card-swap-late"
+                >
+                  <span className="emotion-wheel-card-key">可以这样</span>
+                  <p className="emotion-wheel-card-text">{focused.note}</p>
+                </div>
+              ) : null}
 
               {isLocked ? (
                 <button type="button" onClick={close} className="emotion-wheel-card-close">

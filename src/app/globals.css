@@ -1785,13 +1785,33 @@ html[data-theme='night'] .orb-surface {
   width: min(86vw, 440px, 58vh);
 }
 
+/*
+ * 手机端单独放大。
+ *
+ * 400 单位的 viewBox 要装 24 个词，缩到 335px 时每个字号只有 10px ——
+ * 三层叠在一起根本分不开。宽屏走 46vw，手机没有那么多宽度可用，
+ * 只能吃掉两边的边距：94vw 在 390 的屏上是 367px，比原来多 30px，
+ * 字号能到 11px 左右，读起来才勉强。
+ *
+ * 用媒体查询而不是改上面那条，是因为上面那条还要兼顾矮屏（58vh）。
+ */
+@media (max-width: 767px) {
+  .emotion-wheel-board {
+    width: min(94vw, 92vh);
+  }
+}
+
 @media (min-width: 1024px) {
   /*
    * 桌面端把盘做大一点：上限从 440 提到 620，主要吃宽屏那部分留白。
    * 高度也留了上限（62vh），矮屏时宁可小一号，也不让第二屏撑破一屏。
+   *
+   * 62vh 这个上限现在由两件事共同约束：花瓣外面的复合情绪词要放得下，
+   * 卡片还得挤在盘的一侧（见 .emotion-wheel-card-slot）。所以宽度靠
+   * 44vw 吃，高度那一条保持不动。
    */
   .emotion-wheel-board {
-    width: min(620px, 44vw, 62vh);
+    width: min(620px, 46vw, 64vh);
   }
 }
 
@@ -2036,6 +2056,98 @@ html[data-theme='night'] .emotion-wheel-slice-top .emotion-wheel-slice-shape {
   filter: saturate(0.8) brightness(0.95);
 }
 
+/* ---------------------------------------------------------------
+ * 普拉奇克轮：花瓣、层分界、复合情绪
+ *
+ * 颜色一律来自组件写在每个格子上的 --slice-*，不在这里写死，
+ * 所以换一瓣就换一套色，两套主题共用同一份几何。
+ * --------------------------------------------------------------- */
+
+/* 花瓣轮廓：比层分界线重一点，让八瓣的边界先立住 */
+.emotion-wheel-petal-outline {
+  transition: opacity 0.45s ease;
+}
+
+/* 层分界线：图上那种「越往里越深」的分格，保持很轻，不抢字 */
+.emotion-wheel-divider {
+  transition: opacity 0.45s ease;
+}
+
+/* 选中某一格时，同族的其他格子淡下去；分界线也一起淡，免得留在上面 */
+.emotion-wheel.has-active .emotion-wheel-divider {
+  opacity: 0.5;
+}
+
+/*
+ * 手机端：只显示最外层那一圈字，里面两圈只留色块。
+ *
+ * 400 单位里要塞 24 个词，缩到手机宽度后每层字号只有 10px 上下，
+ * 三行叠在一起就糊成一片 —— 放大盘也只够多挤出 1px，解决不了。
+ *
+ * 取舍是「看得清」优先于「一次看全」：外圈的字保留，里两圈的字藏起来，
+ * 点一下那一格，卡片里会把这个词、它属于哪一瓣、强度第几层一起说清楚。
+ * 盘面这时候仍然有三层的色块深浅，结构一眼看得见。
+ */
+@media (max-width: 767px) {
+  .emotion-wheel-slice[data-tier='1'] .emotion-wheel-slice-caption,
+  .emotion-wheel-slice[data-tier='2'] .emotion-wheel-slice-caption {
+    /*
+     * 必须是 display: none，不能用 opacity: 0。
+     *
+     * .emotion-wheel-slice-caption 上挂着一个入场动画（keyframes 里写的就是
+     * opacity 0→1），动画运行期间它的优先级盖过普通声明 —— 实测写
+     * opacity: 0 之后计算值仍然是 1，字照样显示。
+     */
+    display: none;
+  }
+}
+
+/*
+ * 复合情绪：落在两瓣之间的夹角上。
+ *
+ * 文字跟着角度转（组件里用 rotate），因为八个位置绕一圈，横排的话
+ * 左侧那几个会变成倒着的字。
+ *
+ * 颜色必须比普通说明文字重一档。它夹在两片彩色花瓣之间，花瓣本身也有
+ * 亮度，用 ink-faint 会被吃掉；夜里更糟，深色底上几乎看不见。
+ */
+.emotion-wheel-dyad-text {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  fill: var(--color-ink-soft);
+  transition: fill 0.45s ease;
+}
+
+html[data-theme='night'] .emotion-wheel-dyad-text {
+  /* 夜里不用 ink-faint：那是给"说明性小字"的，压在花瓣边和星点上会糊 */
+  fill: var(--color-ink-soft);
+  paint-order: stroke;
+  stroke: color-mix(in srgb, var(--color-cream) 55%, transparent);
+  stroke-width: 2.4px;
+  stroke-linejoin: round;
+}
+
+/* 花瓣尖旁边的那个「+」，说明这两瓣混出了中间那个词 */
+.emotion-wheel-plus {
+  font-weight: 700;
+  transition: opacity 0.45s ease;
+}
+
+/*
+ * 夜里被点中那一格。
+ *
+ * 上面那几条夜间规则已经处理了基底、悬停和指针，只剩「选中」没管 ——
+ * 选中的 filter 写在白天那条里（drop-shadow + stroke），会整条盖掉夜间的
+ * 压暗。这里把它按夜间的底重重写一遍，跟悬停同一种处理方式。
+ */
+html[data-theme='night'] .emotion-wheel-slice[aria-checked='true'] .emotion-wheel-slice-shape {
+  filter:
+    saturate(0.82)
+    brightness(0.98)
+    drop-shadow(0 14px 22px color-mix(in srgb, var(--slice-edge) 30%, transparent));
+}
+
 /*
  * 广场的帖子卡片：颜色只从 `--card-*` 来。
  *
@@ -2276,11 +2388,22 @@ html[data-theme='night'] .emotion-wheel-card {
  */
 .emotion-wheel-card-burst {
   position: absolute;
+  /*
+   * 尺寸与居中，都得让它在缩放后仍然装得进卡片。
+   *
+   * 光圈是个圆，关键帧里会放大到 1.25 倍 —— 而 transform 的溢出**照样
+   * 计入 scrollHeight**。原来 150px 的圆在 170px 高的卡片里一放大，上下
+   * 各多出近 10px，卡片就凭空长出 6~8px 的「假可滚区域」：用户看不见
+   * （overflow:hidden），但任何判断"这张卡能不能滚"的代码都会被骗到。
+   *
+   * 两处一起收：直径压到 min(120px, 62%)，放大后也不过卡片高度的八成；
+   * 居中改用 top:50% + translate，不再用 margin-top 硬撑盒子。
+   */
+  --burst-size: min(120px, 62%);
+  width: var(--burst-size);
+  height: var(--burst-size);
   top: 50%;
   left: 0;
-  width: 150px;
-  height: 150px;
-  margin-top: -75px;
   border-radius: 999px;
   border: 1.5px solid color-mix(in srgb, var(--slice-color) 70%, transparent);
   pointer-events: none;
@@ -2307,11 +2430,11 @@ html[data-theme='night'] .emotion-wheel-card {
 }
 
 .emotion-wheel-card-burst[data-side='right'] {
-  translate: -48px 0;
+  translate: -48px -50%;
 }
 
 .emotion-wheel-card-burst[data-side='left'] {
-  translate: 48px 0;
+  translate: 48px -50%;
 }
 
 /* 第二块稍晚一点，读起来是"跟着出来"而不是两块一起闪 */
@@ -2584,20 +2707,35 @@ html[data-theme='night'] .emotion-wheel-card-method .emotion-wheel-card-key {
     position: absolute;
     top: 50%;
     bottom: auto;
-    width: clamp(340px, 25vw, 420px);
+    /*
+     * 卡片宽度。
+     *
+     * 这个数不是随便定的：宽屏下它是贴着盘放在一侧的，所以必须满足
+     * 「视口 − 盘宽 ≥ 2 × (卡片宽 + 间隙)」，否则卡片会压在盘上。
+     * 实测 1280 的屏上盘占 550px、两侧各剩 365px，卡片贴边 52px 起算，
+     * 所以卡片最宽只能到 365 − 52 = 313px —— 300 是留了 13px 余量的值。
+    */
+    width: clamp(280px, 23vw, 360px);
     max-width: none;
     z-index: 2;
     transform: translateY(-50%);
   }
 
-  /* 卡片在哪边就跟哪边对齐；另一边留空，不会横跨整个盘 */
+  /*
+   * 卡片在哪边就跟哪边对齐；另一边留空，不会横跨整个盘。
+   *
+   * 下限从 8px 提到 12px：1280 的屏上盘两侧各剩 365px，卡片 320px，
+   * 贴边 8px 时右缘到 328，离盘还有 37px —— 但 1024~1100 这一段屏宽
+   * 两侧只剩 240 上下，8px 就不够用了，卡片会压到盘边上。取 12px
+   * 给这一段留出余量。
+   */
   .emotion-wheel-card-slot[data-side='right'] {
-    right: clamp(8px, 1.6vw, 28px);
+    right: clamp(12px, 1.6vw, 28px);
     left: auto;
   }
 
   .emotion-wheel-card-slot[data-side='left'] {
-    left: clamp(8px, 1.6vw, 28px);
+    left: clamp(12px, 1.6vw, 28px);
     right: auto;
   }
 
@@ -2618,7 +2756,12 @@ html[data-theme='night'] .emotion-wheel-card-method .emotion-wheel-card-key {
    */
   .emotion-wheel-card {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 0.82fr);
+    /*
+     * 左栏放「情绪词 + 强度说明」，右栏放「可以这样」。
+     * 正文目前还没写，右栏暂时是空的，所以给它 0.9 就够；
+     * 等那一块补上，再按最长的一条重新量。
+     */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
     row-gap: 12px;
     column-gap: 16px;
     align-items: start;

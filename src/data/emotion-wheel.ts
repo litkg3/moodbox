@@ -1,109 +1,211 @@
 /**
- * 情绪转盘：8 种情绪。
+ * 情绪转盘：普拉奇克情绪轮（Plutchik's Wheel of Emotions）。
  *
- * 这 8 个扇形与主页那 12 颗情绪球是两套东西：
+ * 结构是一个八瓣的花：八个花瓣各是一种基础情绪，每个花瓣从外到内分三层，
+ * 强度依次升高 —— 外缘是轻微的那一档（平静 / 接纳 / 厌倦……），越靠近圆心
+ * 越强烈（狂喜 / 钦佩 / 憎恶……）。夹在两个花瓣之间的那八段空白，是这两种
+ * 情绪混在一起时得到的复合情绪（乐观 = 喜悦 + 期待，悔恨 = 悲伤 + 厌恶……）。
+ *
+ * 顺序就是花在盘上的顺序，从正上方开始顺时针排：
+ * 喜悦 → 钦佩 → 惊悚 → 惊吓 → 悲痛 → 憎恶 → 暴怒 → 警惕。
+ *
+ * 转盘与主页那十二颗情绪球是两套东西：
  * - 情绪球（data/emotions.ts）是「你此刻是什么心情」，点开给你一段陪伴；
- * - 转盘（本文件）是「这些情绪背后想要什么」，点开教你看见它、安放它。
- *
- * 顺序即转盘上的排列顺序，颜色与情绪球的氛围色一一对应。
+ * - 转盘是「情绪由什么组成、强度走到哪一层」，点开看它属于哪一类。
  */
-export interface EmotionSlice {
-  id: string;
-  /** 扇形标题 */
+
+export type Intensity = 'mild' | 'medium' | 'intense';
+
+export interface EmotionTier {
+  /** 这一层的词：平静 / 喜悦 / 狂喜 */
   label: string;
-  /** 扇形主色（填充），全部低饱和、柔和，与全站「雾面」色盘一致 */
-  color: string;
-  /** 扇形描边/强调色（比主色深一档，用于分隔线与被点中的扇形） */
-  edge: string;
-  /** 该扇形内的文字颜色（保证在色块上清晰） */
-  ink: string;
-  /** 「是为了获得」后面的那一个词：方向 / 确定 / 释放…… */
-  need: string;
-  /** 对这个需求的解释，一句话说清它在替你要什么 */
-  needs: string;
-  /** 「处理方法」—— 一句不说道理、只给动作的陪伴 */
-  method: string;
+  /**
+   * 强度档。它决定这一层在花瓣里占的位置，也决定卡片上那句「低强度 /
+   * 中等强度 / 高强度」。
+   */
+  intensity: Intensity;
+  /**
+   * 这一层的一句话解释。
+   *
+   * 现在是空的 —— 这一轮只做轮子本身。缺省时卡片不渲染这一块，
+   * 留白比塞一句凑数的话强。补的时候按 `mild` / `medium` / `intense`
+   * 的高低写：同一层里的六个词，强度感要一致。
+   */
+  note?: string;
 }
 
-export const EMOTION_SLICES: readonly EmotionSlice[] = [
+export interface EmotionPetal {
+  /** 花瓣 id，用最外层那个词命名，三点叠起来看不会撞 */
+  id: string;
+  /** 这一瓣的颜色名（只用于调试与 aria） */
+  family: string;
+  /** 花瓣填充色 */
+  color: string;
+  /** 描边色，比填充深一档 */
+  edge: string;
+  /** 花瓣里的文字颜色，保证在色块上读得清 */
+  ink: string;
+  /** 从外到内三层 */
+  tiers: readonly [EmotionTier, EmotionTier, EmotionTier];
+}
+
+/**
+ * 八瓣。角度从正上方（12 点）开始顺时针：
+ * 第 i 瓣占 [i × 45° − 22.5°, i × 45° + 22.5°]，瓣心在 i × 45°。
+ */
+export const EMOTION_PETALS: readonly EmotionPetal[] = [
   {
-    id: 'lost',
-    label: '迷茫',
-    color: '#C7E3DF',
-    edge: '#8FC0BA',
-    ink: '#3F7572',
-    need: '方向',
-    needs: '站在岔路口，想看清自己真正想去哪。',
-    method: '先别急着找答案。把「不知道」写下来，往前走一小步，路会慢慢清晰。',
+    id: 'joy',
+    family: '黄',
+    color: '#F5D547',
+    edge: '#D4B01F',
+    ink: '#6B5300',
+    tiers: [
+      { label: '平静', intensity: 'mild' },
+      { label: '喜悦', intensity: 'medium' },
+      { label: '狂喜', intensity: 'intense' },
+    ],
   },
   {
-    id: 'anxiety',
-    label: '焦虑',
-    color: '#DCC8F2',
-    edge: '#B08FD8',
-    ink: '#6A509A',
-    need: '确定',
-    needs: '太想把还没发生的事，牢牢抓在手里。',
-    method: '只做眼前能控制的那一小步，剩下的交给时间。先喘口气。',
+    id: 'trust',
+    family: '黄绿',
+    color: '#C3D93F',
+    edge: '#9CB322',
+    ink: '#4E5A00',
+    tiers: [
+      { label: '接纳', intensity: 'mild' },
+      { label: '信任', intensity: 'medium' },
+      { label: '钦佩', intensity: 'intense' },
+    ],
   },
   {
-    id: 'pain',
-    label: '痛苦',
-    color: '#E8B8C2',
-    edge: '#C98898',
-    ink: '#8B3E4E',
-    need: '释放',
-    needs: '心里有块地方，真的撑不住了。',
-    method: '先照顾好身体：睡一觉、吃口热的，或找人说说。你不需要一个人扛。',
+    id: 'fear',
+    family: '绿',
+    color: '#4E9E4A',
+    edge: '#357A32',
+    ink: '#F3FBEF',
+    tiers: [
+      { label: '忧虑', intensity: 'mild' },
+      { label: '恐惧', intensity: 'medium' },
+      { label: '惊悚', intensity: 'intense' },
+    ],
   },
   {
-    id: 'wronged',
-    label: '委屈',
-    color: '#EED6B8',
-    edge: '#CEAC82',
-    ink: '#96703F',
-    need: '公平',
-    needs: '想被看见，想被说一句「你没错」。',
-    method: '把委屈说出来，而不是咽下去。哪怕先讲给自己听，也算被听见了。',
+    id: 'surprise',
+    family: '深绿',
+    color: '#2E7D46',
+    edge: '#1B5C30',
+    ink: '#EFF8F0',
+    tiers: [
+      { label: '不解', intensity: 'mild' },
+      { label: '惊讶', intensity: 'medium' },
+      { label: '惊吓', intensity: 'intense' },
+    ],
   },
   {
-    id: 'irritation',
-    label: '烦躁',
-    color: '#F2C4B8',
-    edge: '#D99382',
-    ink: '#A94F3C',
-    need: '安静',
-    needs: '脑子里有太多声音，想让它停一停。',
-    method: '离开让你烦的地方一会儿，喝口水、走走，或做一次呼吸放松。',
+    id: 'sadness',
+    family: '蓝',
+    color: '#3E9BD6',
+    edge: '#2A78AC',
+    ink: '#F2FAFF',
+    tiers: [
+      { label: '伤感', intensity: 'mild' },
+      { label: '悲伤', intensity: 'medium' },
+      { label: '悲痛', intensity: 'intense' },
+    ],
   },
   {
-    id: 'loneliness',
-    label: '孤独',
-    color: '#B9C4E6',
-    edge: '#8B99C8',
-    ink: '#3B4A7C',
-    need: '联结',
-    needs: '渴望被理解、被陪伴。',
-    method: '给自己约一件小事：给老朋友发条消息，或去广场里说一句今天。',
+    id: 'disgust',
+    family: '紫',
+    color: '#5A3A82',
+    edge: '#432764',
+    ink: '#F6F0FF',
+    tiers: [
+      { label: '厌倦', intensity: 'mild' },
+      { label: '厌恶', intensity: 'medium' },
+      { label: '憎恶', intensity: 'intense' },
+    ],
   },
   {
-    id: 'exhaustion',
-    label: '疲惫',
-    color: '#CFDCC2',
-    edge: '#A0B48A',
-    ink: '#6A7C58',
-    need: '休息',
-    needs: '身体在说「我需要停下来」。',
-    method: '今天就少做一件事。躺一会儿、发会儿呆，都不算浪费时间。',
+    id: 'anger',
+    family: '红',
+    color: '#B3202C',
+    edge: '#8A121D',
+    ink: '#FFF1F1',
+    tiers: [
+      { label: '懊恼', intensity: 'mild' },
+      { label: '生气', intensity: 'medium' },
+      { label: '暴怒', intensity: 'intense' },
+    ],
   },
   {
-    id: 'numbness',
-    label: '麻木',
-    color: '#D2D4D8',
-    edge: '#A5A9B0',
-    ink: '#6E7279',
-    need: '感受',
-    needs: '想重新确认「我还活着、我还在意」。',
-    method: '做一件能带来微小感受的事：喝杯烫的、摸一摸凉的，一点点找回知觉。',
+    id: 'anticipation',
+    family: '橙',
+    color: '#EC8B2E',
+    edge: '#C46A12',
+    ink: '#FFF8EE',
+    tiers: [
+      { label: '好奇', intensity: 'mild' },
+      { label: '期待', intensity: 'medium' },
+      { label: '警惕', intensity: 'intense' },
+    ],
   },
 ] as const;
+
+/**
+ * 复合情绪：相邻两瓣交界处那一段空白里的词。
+ *
+ * 位置约定为「第 i 瓣与第 i+1 瓣之间」，所以第 i 个复合词落在
+ * i × 45° + 22.5° 的方向上（正上方顺时针）。八个词正好绕满一圈。
+ *
+ * 它们只是标注，不参与点击 —— 点开能看的仍然是那二十四层的词。
+ */
+export const EMOTION_DYADS: readonly string[] = [
+  '乐观', // 喜悦 + 期待
+  '喜爱', // 喜悦 + 钦佩
+  '屈从', // 钦佩 + 惊悚
+  '敬畏', // 惊悚 + 惊吓
+  '悲观', // 惊吓 + 悲痛
+  '悔恨', // 悲痛 + 憎恶
+  '鄙视', // 憎恶 + 暴怒
+  '好斗', // 暴怒 + 警惕
+] as const;
+
+/** 强度档对应的中文说法，卡片上用。 */
+export const INTENSITY_LABEL: Record<Intensity, string> = {
+  mild: '低强度',
+  medium: '中等强度',
+  intense: '高强度',
+};
+
+/** 一层在花瓣里的序号：0 最外、2 最内。也用来说明「离圆心越近越强」。 */
+export const TIER_ORDER: Record<Intensity, number> = {
+  mild: 0,
+  medium: 1,
+  intense: 2,
+};
+
+/** 展平成 24 个可点的格，按下标取用。顺序即花瓣顺序 × 层顺序。 */
+export interface EmotionCell {
+  /** 全局唯一：`花瓣id-层` */
+  id: string;
+  /** 这个词本身 */
+  label: string;
+  intensity: Intensity;
+  note?: string;
+  tier: number;
+  petalIndex: number;
+  petal: EmotionPetal;
+}
+
+export const EMOTION_CELLS: readonly EmotionCell[] = EMOTION_PETALS.flatMap((petal, petalIndex) =>
+  petal.tiers.map((tier, tierIndex) => ({
+    id: `${petal.id}-${tier.intensity}`,
+    label: tier.label,
+    intensity: tier.intensity,
+    note: tier.note,
+    tier: tierIndex,
+    petalIndex,
+    petal,
+  })),
+);
