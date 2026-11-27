@@ -3,7 +3,6 @@
 import { useMemo } from 'react';
 import { subDays } from 'date-fns';
 import { Sparkles } from 'lucide-react';
-import { useToolOverlay } from '@/components/layout/tool-overlay-provider';
 import { EMOTIONS } from '@/data/emotions';
 import { EMOTION_MAP, normalizeEmotionId } from '@/lib/emotions';
 import { useMoodBox } from '@/hooks/use-moodbox';
@@ -33,7 +32,6 @@ function weekdayLabel(key: string): string {
  */
 export function WeeklySummary() {
   const { emotionLogs, memories, status } = useMoodBox();
-  const { openTool } = useToolOverlay();
 
   const model = useMemo(() => {
     const range = buildRange();
@@ -73,7 +71,10 @@ export function WeeklySummary() {
 
   return (
     <section aria-labelledby="weekly-summary-title" className="mt-8">
-      <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
+      {/* 原先右侧挂着一颗「收藏今天的一件小事」，点了会打开开心罐。收藏罐在
+          顶部工具栏和「更多」菜单里都有入口，这里不必再摆一次 —— 一段小结的
+          开头，不该先放一个要动手的按钮。 */}
+      <header className="mb-4">
         <div>
           <p className="text-[10.5px] uppercase tracking-[0.4em] text-ink-ghost">Last 7 days</p>
           <h2
@@ -87,13 +88,6 @@ export function WeeklySummary() {
             这里不做任何心情推断，也不会给你打分。
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => openTool('jar')}
-          className="mb-glass-soft inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[12.5px] text-ink-soft transition-colors hover:text-ink"
-        >
-          收藏今天的一件小事
-        </button>
       </header>
 
       {loading ? (

@@ -153,17 +153,23 @@ export function HomeExperience() {
         */}
         <div className="pointer-events-none relative z-10 flex h-full flex-col items-center justify-center px-5 pb-24 pt-[96px] lg:pb-28 lg:pt-[108px]">
           <div className="home-copy relative flex w-full max-w-[440px] flex-col items-center text-center">
+            {/*
+              四行字的深浅按层级排：品牌最深，邀请次之，寄语再用 ink-soft。
+              原来是 85% / 70% / faint 90%，压在漂动的彩球和天空渐变上会飘 ——
+              彩球从字底下过的时候，字的边缘就跟没了似的。这里统一提到不透明
+              或更高一档，保证任何一颗球飘过来都读得清。
+            */}
             <h1 className="mb-reveal flex flex-col items-center">
-              <span className="home-title-brand font-display text-[26px] font-light leading-none tracking-[0.2em] text-ink/85 sm:text-[32px]">
+              <span className="home-title-brand font-display text-[26px] font-light leading-none tracking-[0.2em] text-ink sm:text-[32px]">
                 MoodBox
               </span>
-              <span className="home-title-invite mt-4 font-display text-[15px] font-light leading-[1.9] tracking-[0.16em] text-ink/70 sm:mt-5 sm:text-[17.5px] lg:mt-3.5">
+              <span className="home-title-invite mt-4 font-display text-[15px] font-light leading-[1.9] tracking-[0.16em] text-ink/90 sm:mt-5 sm:text-[17.5px] lg:mt-3.5">
                 点开一颗情绪球！
               </span>
             </h1>
 
             <p
-              className="mb-reveal mt-5 text-[10.5px] leading-[2.1] tracking-[0.05em] text-ink-faint/90 sm:text-[11px] lg:mt-4"
+              className="mb-reveal mt-5 text-[10.5px] leading-[2.1] tracking-[0.05em] text-ink-soft sm:text-[11px] lg:mt-4"
               data-delay="1"
             >
               {HOME_BLESSING_LINES.map((line) => (
