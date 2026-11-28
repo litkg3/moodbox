@@ -56,5 +56,11 @@ export function typesOfGroup(group: MbtiGroup): MbtiType[] {
   return MBTI_TYPES.filter((type) => type.group === group);
 }
 
-/** 灯箱里的整图（4×4） */
-export const MBTI_SHEET = { src: '/mbti/mbti-all.webp', width: 1600, height: 2000 } as const;
+/**
+ * 灯箱里的整图（4×4）。
+ *
+ * 尺寸必须和 public/mbti/mbti-all.webp 的真实像素一致 —— 灯箱拿它算缩放
+ * 边界，写小了会拖不到图片的右半边。换图之后跑
+ * `node scripts/mbti-import.mjs <目录>`，这里的数字要跟着改。
+ */
+export const MBTI_SHEET = { src: '/mbti/mbti-all.webp', width: 1768, height: 1984 } as const;

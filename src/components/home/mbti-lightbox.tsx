@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Download, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useOverlayBehavior } from '@/hooks/use-overlay-behavior';
+import { MBTI_SHEET } from '@/data/mbti';
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
@@ -180,9 +181,9 @@ export function MbtiLightbox({ open, onClose }: { open: boolean; onClose: () => 
       >
         <img
           ref={imageRef}
-          src="/mbti/mbti-all.webp"
-          width={1600}
-          height={2000}
+          src={MBTI_SHEET.src}
+          width={MBTI_SHEET.width}
+          height={MBTI_SHEET.height}
           alt="MBTI 十六种人格类型全图，四行四列排列"
           draggable={false}
           style={{

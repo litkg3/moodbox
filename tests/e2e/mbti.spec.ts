@@ -248,6 +248,27 @@ test('人格详解（桌面）：整图灯箱可缩放、可保存、Esc 关闭�
   await expect(lightbox.locator('img')).toHaveAttribute('src', '/mbti/mbti-all.webp');
   await expect(lightbox.locator('.mb-lightbox-note')).toContainText('不具备心理评估或诊断功能');
 
+  /*
+   * 整图的 width/height 必须等于文件真实像素。
+   *
+   * 灯箱拿这两个数算拖动的边界；写小了，放大之后拖不到图片右半边。
+   * 换图时最容易漏掉的就是这里 —— 所以直接加载一次图片来比对。
+   */
+  const sheetSize = await lightbox.locator('img').evaluate(
+    (node) =>
+      new Promise<{ declared: [number, number]; real: [number, number] }>((resolve) => {
+        const img = node as HTMLImageElement;
+        const read = () =>
+          resolve({
+            declared: [Number(img.getAttribute('width')), Number(img.getAttribute('height'))],
+            real: [img.naturalWidth, img.naturalHeight],
+          });
+        if (img.complete && img.naturalWidth > 0) read();
+        else img.addEventListener('load', read, { once: true });
+      }),
+  );
+  expect(sheetSize.declared).toEqual(sheetSize.real);
+
   // 打开时页面锁滚，背景不会跟着乱跑
   expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe('hidden');
 
