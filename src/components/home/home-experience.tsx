@@ -26,7 +26,7 @@ const RETURN_DELAY_MS = 2000;
 /**
  * 首页 = 三整屏。
  *
- * 情绪天空 → 情绪转盘 → 人格详解。
+ * 情绪天空 → 普拉奇克情绪轮 → 人格详解。
  *
  * 翻页按宽度分两条路（见 use-screen-pager）：
  * - 桌面端（≥769px）关掉 CSS 吸附，由 JS 用 1s 的 easeInOutCubic 驱动 scrollTop。
@@ -38,7 +38,7 @@ const RETURN_DELAY_MS = 2000;
  */
 const SCREENS = [
   { id: 'sky', label: '情绪天空' },
-  { id: 'wheel', label: '情绪转盘' },
+  { id: 'wheel', label: '普拉奇克情绪轮' },
   { id: 'mbti', label: '人格详解' },
 ] as const;
 
@@ -208,20 +208,20 @@ export function HomeExperience() {
         </div>
       </ScrollScreen>
 
-      <ScrollScreen id="wheel" label="情绪转盘" className="emotion-screen">
+      <ScrollScreen id="wheel" label="普拉奇克情绪轮" className="emotion-screen">
         <div className="emotion-screen-inner">
           {/*
             这两行标题允许上移淡入；转盘本身只能用透明度 ——
             transform 会让内部的 fixed 卡片以它为准定位（手机端卡片会跳到屏幕外）。
           */}
           <p className="mb-reveal text-center text-[10.5px] tracking-[0.28em] text-ink-faint/80 sm:text-[11.5px]">
-            情绪的背后是需求
+            学会与自己对话
           </p>
           <h2
             className="mb-reveal mb-4 text-center font-display text-[22px] font-light tracking-[0.12em] text-ink/85 sm:mb-6 sm:text-[26px]"
             data-delay="1"
           >
-            情绪转盘
+            普拉奇克情绪轮
           </h2>
           <div className="mb-reveal-fade w-full">
             <EmotionWheel />

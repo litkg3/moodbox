@@ -14,13 +14,17 @@ describe('情绪内容库', () => {
     expect(validateEmotionLibrary()).toEqual({ ok: true, problems: [] });
   });
 
-  it('焦虑球的面板短句：原来 8 条 + 允许焦虑的 2 条 + 新追加 2 条，挪走 1 条后共 11 条', () => {
+  it('焦虑球的面板短句：原来 8 条 + 允许焦虑的 2 条 + 新追加 3 条，挪走 1 条后共 12 条', () => {
     const anxiety = EMOTIONS.find((emotion) => emotion.id === 'anxiety');
-    expect(anxiety?.messages).toHaveLength(11);
+    expect(anxiety?.messages).toHaveLength(12);
     expect(anxiety?.messages[0]).toBe('当你真心渴望某样东西时，整个宇宙都会联合起来助你实现愿望。');
     // 两条追加：一条讲「允许焦虑」，一条讲「给悬而未决留点耐心」
     expect(anxiety?.messages.some((message) => message.includes('允许焦虑的出现'))).toBe(true);
     expect(anxiety?.messages.some((message) => message.includes('悬而未决'))).toBe(true);
+    // 第三轮追加：给一点时间，一步一步来
+    expect(anxiety?.messages).toContain(
+      '给自己一点时间，不要焦虑。一步一步来，一日一日过，请相信生命的韧性是惊人的。',
+    );
     // 最后补上的一条：多年以后回头看，这些都只是轻轻一笔
     expect(anxiety?.messages.at(-1)).toBe(
       '多年以后回头看，现在的迷茫、彷徨、焦虑、麻木都只是人生里的轻轻一笔。愿你不再止步不前，而是重新开始。',
@@ -359,9 +363,13 @@ describe('情绪内容库', () => {
     const numbness = EMOTIONS.find((emotion) => emotion.id === 'numbness');
     const irritation = EMOTIONS.find((emotion) => emotion.id === 'irritation');
     expect(wronged?.messages).toEqual(['去树洞广场诉说你的委屈吧，会有人安慰你的！']);
-    // 麻木：「宁要痛苦，不要麻木」仍是第一句，后补五条排在后面
-    expect(numbness?.messages).toHaveLength(6);
+    // 麻木：「宁要痛苦，不要麻木」仍是第一句，后补六条排在后面
+    expect(numbness?.messages).toHaveLength(7);
     expect(numbness?.messages[0]).toBe('宁要痛苦，不要麻木。');
+    // 后来追加的一句：独自走走，悲伤也成享受
+    expect(numbness?.messages).toContain(
+      '人有时需要独自走走，听听街头人群喧嚣，看看巷尾草木生长，悲伤也成享受。',
+    );
     expect(numbness?.messages).toContain('有声有色的学习，有滋有味的生活，有情有义的交往，有模有样的成长。');
     expect(numbness?.messages.at(-1)).toContain('有声有色的学习');
     expect(numbness?.messages.join('')).not.toContain('什么都不想做');

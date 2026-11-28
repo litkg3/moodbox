@@ -250,21 +250,27 @@ function tierValue(table: Record<number, number>, tierIndex: number, fallback: n
 }
 
 /**
- * 盘下面那四条说明。
+ * 盘下面的说明。
  *
- * 「名词：一句话」的对照式，一条一行 —— 四条各说一件不同的事（外低、内高、
- * 渐变方向、没有颜色的那圈缝隙），排成一行长句读起来要断句才能找到自己
- * 关心的那一条；竖着列开，扫一眼就能对上盘上的位置。
+ * 四个「名词 · 一句话」两两成对排开（2×2）：外边缘/中心圆是一对（两端各是什么），
+ * 向中心/无色区是一对（中间怎么变）。四条各占一行时读者得竖着扫四遍才能
+ * 找到自己关心的那一条；两两并排，正好对应盘上「外 ↔ 内」「有颜色 ↔ 没颜色」
+ * 两组对照。第五句是整句话，单独占满一行。
  *
  * 写法上和盘里保持同一个方向感：先「外边缘」再「中心圆」，最后才说
  * 「向中心」怎么变 —— 读者顺着盘的半径由外向内看，文字也是这个顺序。
  */
-const WHEEL_NOTES: ReadonlyArray<{ term: string; text: string }> = [
+const WHEEL_NOTES: ReadonlyArray<{ term?: string; text: string; wide?: boolean }> = [
   { term: '外边缘', text: '低强度情绪' },
   { term: '中心圆', text: '高强度情绪' },
   { term: '向中心', text: '情绪渐强' },
   { term: '无色区', text: '混合情绪' },
-  { term: '对角', text: '混合情绪互为相反' },
+  /*
+   * 原来这条是「对角 · 混合情绪互为相反」，现在整条换成一句完整的话：
+   * 说清是 180°、是两种混合情绪，也把「在情绪转盘中」这个前提带上。
+   * 它不再是「名词 → 解释」的对照，所以没有 term，渲染时也不带那个中点。
+   */
+  { text: '在情绪转盘中，对角180°方向两种混合情绪互为相反情绪', wide: true },
 ];
 
 /** 指针停在哪一格用「第几瓣」。自动步进也是按瓣走。 */
@@ -859,9 +865,18 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
         */}
         <dl className="emotion-wheel-note">
           {WHEEL_NOTES.map((item) => (
-            <div key={item.term} className="emotion-wheel-note-row">
-              <dt>{item.term}</dt>
-              <dd>{item.text}</dd>
+            <div
+              key={item.text}
+              className={cn('emotion-wheel-note-row', item.wide && 'is-wide')}
+            >
+              {item.wide ? (
+                <dd>{item.text}</dd>
+              ) : (
+                <>
+                  <dt>{item.term}</dt>
+                  <dd>{item.text}</dd>
+                </>
+              )}
             </div>
           ))}
         </dl>

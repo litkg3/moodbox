@@ -323,7 +323,9 @@ test('情绪转盘：8 瓣 × 3 层，点击放大并展示完整信息，可返
   await expect(slices).toHaveCount(24);
   await expect(page.locator('.emotion-wheel-petal')).toHaveCount(8);
   await expect(page.locator('.emotion-wheel-dyad')).toHaveCount(8);
-  await expect(page.getByRole('heading', { name: '情绪转盘' }).first()).toBeVisible();
+  // 第二屏的标题：眉题 + 正题（原来叫「情绪的背后是需求 / 情绪转盘」）
+  await expect(page.getByText('学会与自己对话').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: '普拉奇克情绪轮' }).first()).toBeVisible();
 
   // 点「悲痛」（最内层，强度最高），弹出详情卡，其余格子半透明
   const sad = page.locator('.emotion-wheel-slice', { hasText: '悲痛' }).first();
@@ -352,12 +354,12 @@ test('情绪转盘：八个复合词落在瓣缝里，盘下是分条说明', as
   await openHome(page);
   await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
 
-  // 说明就在盘下面：五条「名词 · 一句话」，一条一行
+  // 说明就在盘下面：前四条两两并排成 2×2，最后一句是没有名词前缀的整句
   const note = page.locator('.emotion-wheel-note');
   await expect(note).toBeVisible();
   await expect(note.locator('.emotion-wheel-note-row')).toHaveCount(5);
   const pairs = await note.evaluate((el) =>
-    [...el.querySelectorAll('.emotion-wheel-note-row')].map((row) => [
+    [...el.querySelectorAll('.emotion-wheel-note-row:not(.is-wide)')].map((row) => [
       row.querySelector('dt')?.textContent?.trim(),
       row.querySelector('dd')?.textContent?.trim(),
     ]),
@@ -367,8 +369,34 @@ test('情绪转盘：八个复合词落在瓣缝里，盘下是分条说明', as
     ['中心圆', '高强度情绪'],
     ['向中心', '情绪渐强'],
     ['无色区', '混合情绪'],
-    ['对角', '混合情绪互为相反'],
   ]);
+  // 第五句整条换掉：不能再带「对角 ·」，也不该在 180° 两侧塞空格
+  const wide = note.locator('.emotion-wheel-note-row.is-wide');
+  await expect(wide).toHaveText('在情绪转盘中，对角180°方向两种混合情绪互为相反情绪');
+  await expect(wide.locator('dt')).toHaveCount(0);
+
+  /*
+   * 排法：前四条两两并排（同一行两格），最后一句横跨两列。
+   *
+   * 量的是「top 有没有重合」而不是列号 —— 列号随内容变，能不能算「一行」
+   * 只取决于两条的顶边是不是齐的。
+   */
+  const tops = await note.evaluate((el) =>
+    [...el.querySelectorAll('.emotion-wheel-note-row')].map((row) => {
+      const r = row.getBoundingClientRect();
+      return { top: Math.round(r.top), left: Math.round(r.left), w: Math.round(r.width) };
+    }),
+  );
+  expect(tops[0]!.top, '外边缘与中心圆应当并排').toBe(tops[1]!.top);
+  expect(tops[2]!.top, '向中心与无色区应当并排').toBe(tops[3]!.top);
+  expect(tops[0]!.left, '并排的两条不该落在同一列').not.toBe(tops[1]!.left);
+  expect(tops[4]!.top, '整句那一行应当独占一行').toBeGreaterThan(tops[3]!.top);
+  const noteBox = (await note.boundingBox())!;
+  expect(tops[4]!.left).toBeGreaterThanOrEqual(Math.round(noteBox.x) - 1);
+  expect(
+    tops[4]!.left + tops[4]!.w,
+    '整句不应溢出说明区',
+  ).toBeLessThanOrEqual(Math.round(noteBox.x + noteBox.width) + 1);
 
   /*
    * 复合词的位置。它们必须落在「两瓣之间的缝」上 —— 也就是离最近的两瓣
@@ -432,21 +460,29 @@ test('情绪转盘：八个复合词落在瓣缝里，盘下是分条说明', as
 });
 
 /**
- * 等转盘真正停住（连续两次采样角度一致）。
+ * 等转盘真正停住（连续多次采样角度一致）。
  *
- * 悬停会取消定时器，但「已经在转的那一下」不会立刻停 —— 820ms 的过渡还在跑。
- * 这时候量出来的复合词坐标是旧位置，鼠标一落下去就落到隔壁瓣上了，
- * `is-lit` 为空、用例红，看上去像「悬停坏了」，其实只是量早了。
+ * 悬停只是把 autoRef 关掉、让定时器空转，「已经在转的那一下」还会跑完
+ * 820ms 的过渡。这时候量出来的复合词坐标是旧位置，鼠标一落下去就落到
+ * 隔壁瓣上了，`is-lit` 为空、用例红，看上去像「悬停坏了」，其实只是量早了。
+ *
+ * 也不能只等「两次采样相同」就返回：盘本来就有 4 秒多的静止期，那一瞬间
+ * 角度当然不变，可定时器还活着，量坐标的这几百毫秒里随时可能往前推一格。
+ * 所以要求连续 5 次（约 400ms）不变 —— 过渡期间每帧都在变，稳定计时器
+ * 会一直重置，只有真的停下来了才可能攒够。
  */
 async function waitSpinSettled(page: Page) {
   const spin = page.locator('.emotion-wheel-spin');
   let last = '';
-  for (let i = 0; i < 40; i += 1) {
+  let stable = 0;
+  for (let i = 0; i < 120; i += 1) {
     const now = await spin.evaluate((el) => getComputedStyle(el).transform);
-    if (now === last) return;
+    stable = now === last ? stable + 1 : 0;
+    if (stable >= 5) return;
     last = now;
     await page.waitForTimeout(80);
   }
+  throw new Error('等了很久转盘仍在动');
 }
 
 test('情绪转盘：悬停一个复合词，它和对角那个一起亮', async ({ page }) => {
@@ -454,14 +490,36 @@ test('情绪转盘：悬停一个复合词，它和对角那个一起亮', async
   await openHome(page);
   await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
 
-  // 先把鼠标放到盘上让自动转动停住，量出来的坐标才有效
-  const board = (await page.locator('.emotion-wheel-svg').boundingBox())!;
-  await page.mouse.move(board.x + board.width / 2, board.y + board.height * 0.2);
+  /*
+   * 先把鼠标真正落在一个扇形上：只有 hoverIndex 非空，autoRef 才会关掉。
+   * 之前是往 SVG 的某个坐标一丢了事 —— 那个点未必压在 slice 上，
+   * 定时器照样活着，量坐标的几百毫秒里盘一转，鼠标就落空了。
+   */
+  await page.locator('.emotion-wheel-slice').first().hover();
   await waitSpinSettled(page);
 
-  const dyad = page.locator('.emotion-wheel-dyad[data-dyad="乐观"]');
-  const box = (await dyad.boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  /*
+   * 不能用 locator.hover()：这个 <g> 的 bbox 中心常被外层的 <svg> 接走，
+   * Playwright 会一直报「intercepts pointer events」直到超时。
+   * 在 bbox 内撒点，找一个 elementFromPoint 真的命中自己的坐标再移过去。
+   */
+  const point = await page.evaluate(() => {
+    const el = document.querySelector('.emotion-wheel-dyad[data-dyad="乐观"]');
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    for (let gy = 0.2; gy <= 0.8; gy += 0.15) {
+      for (let gx = 0.15; gx <= 0.85; gx += 0.1) {
+        const x = r.left + r.width * gx;
+        const y = r.top + r.height * gy;
+        if (document.elementFromPoint(x, y)?.closest('.emotion-wheel-dyad') === el) {
+          return { x, y };
+        }
+      }
+    }
+    return null;
+  });
+  expect(point, '复合词上要能找到一个命中自己的点').not.toBeNull();
+  await page.mouse.move(point!.x, point!.y);
   await page.waitForTimeout(400);
 
   /*
