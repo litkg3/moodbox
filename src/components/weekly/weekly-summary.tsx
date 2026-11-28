@@ -143,37 +143,6 @@ export function WeeklySummary() {
             </div>
           </section>
 
-          {/* 情绪构成 */}
-          {model.ranked.length > 0 ? (
-            <section className="mb-surface rounded-[24px] p-6 sm:p-7">
-              <h3 className="text-[13px] tracking-[0.1em] text-ink">这些天出现过的情绪</h3>
-              <ul className="mt-5 space-y-3">
-                {model.ranked.map(([emotionId, count]) => {
-                  const emotion = EMOTION_MAP[emotionId];
-                  if (!emotion) return null;
-                  const ratio = count / model.logs.length;
-                  return (
-                    <li key={emotionId} className="flex items-center gap-3">
-                      <span className="w-10 shrink-0 text-[12px] text-ink-soft">{emotion.label}</span>
-                      <span className="relative h-[7px] flex-1 overflow-hidden rounded-full bg-[rgba(141,133,152,0.14)]">
-                        <span
-                          className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-700"
-                          style={{
-                            width: `${Math.max(4, ratio * 100)}%`,
-                            background: `linear-gradient(90deg, ${emotion.palette.mid}, ${emotion.palette.deep})`,
-                          }}
-                        />
-                      </span>
-                      <span className="w-8 shrink-0 text-right text-[11px] tabular-nums text-ink-faint">
-                        {count}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ) : null}
-
           {/* 一段人话 */}
           <section className="mb-surface rounded-[24px] p-6 sm:p-8">
             <div className="flex items-center gap-2 text-[10.5px] uppercase tracking-[0.36em] text-ink-ghost">

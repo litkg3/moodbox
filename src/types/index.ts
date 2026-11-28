@@ -149,6 +149,11 @@ export interface Memory {
   id: string;
   /** 记忆发生的日期，格式 yyyy-MM-dd */
   date: string;
+  /**
+   * 标题。界面上已经不用了 —— 纸条只写正文，标题是早期版本自动从正文
+   * 首句截出来的。字段留着是因为旧数据、导出文件、示例数据里都还有它，
+   * 新增时写空串即可；读的地方统一用 `lib/memory-title.ts` 兜底。
+   */
   title: string;
   content: string;
   mood: MemoryMoodId;

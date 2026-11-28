@@ -110,11 +110,13 @@ export function DayDetail({
                         className="mt-[3px] shrink-0 text-[#c9a86a]"
                         aria-hidden="true"
                       />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[12.5px] text-ink">{memory.title}</span>
-                        <span className="mt-1 line-clamp-2 block text-[11px] leading-[1.75] text-ink-faint">
-                          {memory.content}
-                        </span>
+                      {/*
+                        只给正文：原来上面还有一行 memory.title，那是程序从
+                        首句截的，和下面正文开头重复一遍。纸条不长，两行放得下。
+                      */}
+                      {/* `min-w-0 flex-1` 不能省：少了它，长正文会把「示例」标签挤出卡片 */}
+                      <span className="line-clamp-2 min-w-0 flex-1 text-[12px] leading-[1.8] text-ink">
+                        {memory.content}
                       </span>
                       {memory.isDemo ? (
                         <span className="mt-[2px] shrink-0 rounded-full border border-[rgba(141,133,152,0.3)] px-1.5 py-[1px] text-[8.5px] tracking-[0.1em] text-ink-ghost">

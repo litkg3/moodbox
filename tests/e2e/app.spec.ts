@@ -193,7 +193,7 @@ test('开心罐里可以创建、刷新后保留、编辑并删除一份快乐',
   const reopened = page.getByRole('dialog', { name: '开心罐' });
   await expect(reopened.getByText(content)).toBeVisible();
 
-  // 编辑：标题由正文自动生成，所以按按钮的无障碍名匹配
+  // 编辑：纸条上没有标题了，按钮的无障碍名由正文兜底
   await reopened.getByRole('button', { name: /^编辑：/ }).first().click();
   const form = page.getByRole('dialog', { name: '编辑这份快乐' });
   await form.getByPlaceholder('今天有什么值得偷偷开心的小事吗？').fill('改过之后的一句话。');
@@ -207,6 +207,40 @@ test('开心罐里可以创建、刷新后保留、编辑并删除一份快乐',
   await expect(reopened.getByText('改过之后的一句话。')).toHaveCount(0);
 });
 
+test('开心罐：纸条整行可点，点开是详情；纸条上只有正文，没有标题', async ({ page }) => {
+  const jar = await openJar(page);
+  const content = '下楼取快递，遇到邻居家那只很胖的橘猫，它让我摸了两下。';
+  await createMemory(page, jar, content);
+
+  const row = jar.locator('ul > li').first();
+  await expect(row).toBeVisible();
+
+  /*
+   * 第一行文字必须就是正文。
+   *
+   * 原来这上面还有一行自动截出来的 title —— 和正文开头几乎一模一样。
+   * 这里直接比对整行的可见文字：正文 + 日期行，中间不该再夹一句。
+   */
+  const rowText = await row.innerText();
+  expect(rowText.split('\n')[0]).toBe(content);
+  expect(rowText.split(content).length).toBe(2);
+
+  // 点正文（不是铅笔、不是垃圾桶）→ 打开详情，而不是编辑表单
+  await row.locator('span.line-clamp-2').first().click({ position: { x: 20, y: 6 } });
+  const detail = page.getByRole('dialog').last();
+  await expect(detail.getByText(content)).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '编辑这份快乐' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '保存修改' })).toHaveCount(0);
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: '保存修改' })).toHaveCount(0);
+
+  // 铅笔仍然是铅笔：点它进编辑表单，不会先冒出详情
+  await jar.getByRole('button', { name: /^编辑：/ }).first().click();
+  await expect(page.getByRole('dialog', { name: '编辑这份快乐' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '保存修改' })).toBeVisible();
+});
+
 test('情绪足迹里能看到当天收藏的快乐', async ({ page }) => {
   const jar = await openJar(page);
   await createMemory(page, jar, '今天在便利店遇到了很久没见的朋友。');
@@ -216,6 +250,10 @@ test('情绪足迹里能看到当天收藏的快乐', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '情绪足迹' })).toBeVisible();
   await expect(page.getByText('今天在便利店遇到了很久没见的朋友。').first()).toBeVisible();
   await expect(page.getByRole('button', { name: /1 份快乐记忆/ }).first()).toBeVisible();
+
+  // 「这些天出现过的情绪」那块横条排行已经删掉 —— 它只是「最常出现的情绪」那张数字卡的展开
+  await expect(page.getByText('这些天出现过的情绪')).toHaveCount(0);
+  await expect(page.getByText('最常出现的情绪').first()).toBeVisible();
 });
 
 test('可以导出全部数据为一份备份文件', async ({ page }) => {

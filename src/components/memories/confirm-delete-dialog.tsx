@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
+import { memoryTitle } from '@/lib/memory-title';
 import { moodBoxStore } from '@/lib/moodbox-store';
 import type { Memory } from '@/types';
 
@@ -58,7 +59,7 @@ export function ConfirmDeleteMemoryDialog({
       }
     >
       <p className="text-[12.5px] leading-[1.95] text-ink-soft">
-        《{memory?.title ?? ''}》
+        《{memory ? memoryTitle(memory) : ''}》
         <br />
         <span className="text-ink-ghost">{memory?.date}</span>
       </p>

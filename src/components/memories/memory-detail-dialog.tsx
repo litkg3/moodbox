@@ -6,6 +6,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { useBlobUrl } from '@/hooks/use-blob-url';
 import { MEMORY_MOOD_MAP } from '@/data/moods';
 import { formatClock, formatFullDate } from '@/lib/date';
+import { memoryTitle } from '@/lib/memory-title';
 import type { Memory } from '@/types';
 
 interface MemoryDetailDialogProps {
@@ -18,12 +19,14 @@ interface MemoryDetailDialogProps {
 export function MemoryDetailDialog({ memory, onClose, onEdit, onDelete }: MemoryDetailDialogProps) {
   const mood = memory ? MEMORY_MOOD_MAP[memory.mood] : null;
   const imageUrl = useBlobUrl(memory?.image?.blob);
+  /** 纸条上没有标题了，弹窗顶上那行就用正文的开头。 */
+  const name = memory ? memoryTitle(memory) : '';
 
   return (
     <Dialog
       open={memory !== null}
       onClose={onClose}
-      title={memory?.title ?? ''}
+      title={name}
       description={memory ? `${formatFullDate(memory.date)} · ${mood?.label ?? ''}` : undefined}
       width="md"
       footer={
@@ -67,7 +70,7 @@ export function MemoryDetailDialog({ memory, onClose, onEdit, onDelete }: Memory
           {imageUrl ? (
             <div className="mb-5 overflow-hidden rounded-2xl">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={imageUrl} alt={`${memory.title} 的照片`} className="w-full object-cover" />
+              <img src={imageUrl} alt={`${name} 的照片`} className="w-full object-cover" />
             </div>
           ) : null}
 

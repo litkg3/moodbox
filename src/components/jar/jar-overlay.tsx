@@ -5,11 +5,13 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { ConfirmDeleteMemoryDialog } from '@/components/memories/confirm-delete-dialog';
 import { DataSettings } from '@/components/memories/data-settings';
+import { MemoryDetailDialog } from '@/components/memories/memory-detail-dialog';
 import { MemoryFormDialog } from '@/components/memories/memory-form-dialog';
 import { GlassSheet } from '@/components/ui/glass-sheet';
 import { MEMORY_MOOD_MAP } from '@/data/moods';
 import { useMoodBox } from '@/hooks/use-moodbox';
 import { formatFullDate } from '@/lib/date';
+import { memoryTitle } from '@/lib/memory-title';
 import type { Memory } from '@/types';
 
 /** 罐子里最多摆出来的纸条数，再多就换成「还有 N 份」的提示，避免罐子被塞满。 */
@@ -35,6 +37,8 @@ export function JarOverlay({ open, onClose }: JarOverlayProps) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Memory | null>(null);
   const [deleting, setDeleting] = useState<Memory | null>(null);
+  /** 正在读的那张纸条（点开看全文）。 */
+  const [reading, setReading] = useState<Memory | null>(null);
 
   const visible = memories.slice(0, MAX_NOTES);
   const overflow = memories.length - visible.length;
@@ -92,50 +96,102 @@ export function JarOverlay({ open, onClose }: JarOverlayProps) {
               </div>
             </div>
 
+            {/*
+              纸条清单：不再有「Notes」这个小标题。
+
+              这一块本来就只有一件事 —— 用户自己写的纸条。标题不提供任何
+              信息，只是把第一张纸条往下推了一行。
+            */}
             {memories.length > 0 ? (
               <section className="mt-7">
-                <h3 className="mb-2.5 text-[11px] uppercase tracking-[0.32em] text-ink-ghost">
-                  Notes
-                </h3>
                 <ul className="divide-y divide-[rgba(141,133,152,0.16)]">
                   {memories.map((memory) => {
                     const mood = MEMORY_MOOD_MAP[memory.mood];
+                    const name = memoryTitle(memory);
                     return (
-                      <li key={memory.id} className="group flex items-start gap-3 py-3">
-                        <span
-                          aria-hidden="true"
-                          className="mt-[6px] h-2 w-2 shrink-0 rounded-full"
-                          style={{ backgroundColor: mood?.tint ?? '#d9d3e4' }}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[13px] leading-relaxed text-ink">{memory.title}</p>
-                          <p className="mt-0.5 line-clamp-2 text-[12px] leading-[1.8] text-ink-faint">
-                            {memory.content}
-                          </p>
-                          <p className="mt-1 text-[10.5px] tracking-[0.06em] text-ink-ghost">
-                            {formatFullDate(memory.date)}
-                            {mood ? ` · ${mood.label}` : ''}
-                            {memory.isDemo ? ' · 示例' : ''}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-0.5 opacity-70 transition-opacity group-hover:opacity-100">
-                          <button
-                            type="button"
-                            onClick={() => openEdit(memory)}
-                            aria-label={`编辑：${memory.title}`}
-                            className="grid h-8 w-8 place-items-center rounded-full text-ink-ghost transition-colors hover:bg-white/70 hover:text-ink"
-                          >
-                            <Pencil size={13} strokeWidth={1.7} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleting(memory)}
-                            aria-label={`删除：${memory.title}`}
-                            className="grid h-8 w-8 place-items-center rounded-full text-ink-ghost transition-colors hover:bg-[rgba(247,222,217,0.6)] hover:text-[#8a4a45]"
-                          >
-                            <Trash2 size={13} strokeWidth={1.7} />
-                          </button>
-                        </div>
+                      <li key={memory.id} className="group relative flex items-start gap-3">
+                        {/*
+                          纸条本身是一个按钮：整行可点，点开看全文。
+                          原来这一行是死文字，想看全文得先点铅笔进编辑
+                          表单 —— 那是对纸条动手，而不是读它。
+
+                          写法是把内容整个包在按钮里，而不是「另铺一层绝对定位
+                          的透明按钮」：铺在最底层（z-0）的话，正文和日期都压在
+                          它上面，点下去命中的是 <p> 而不是按钮，一次都不灵。
+                          包起来之后点击自然会冒泡到按钮，「能点的地方」和
+                          「看起来是一行」也完全重合。
+
+                          唯一的代价是编辑/删除按钮嵌在它里面 —— 那是非法的
+                          按钮套按钮，所以下面用 <span role="button"> 承担，
+                          再配 stopPropagation，避免点铅笔时顺手打开了详情。
+                        */}
+                        <button
+                          type="button"
+                          onClick={() => setReading(memory)}
+                          className="flex min-w-0 flex-1 items-start gap-3 rounded-[10px] px-2 text-left transition-colors hover:bg-white/45 focus-visible:bg-white/55 focus-visible:outline-none"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="mt-[19px] h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: mood?.tint ?? '#d9d3e4' }}
+                          />
+                          {/*
+                            一段正文，就是整张纸条。
+
+                            这里原来上面还有一行 title —— 那是程序从首句截出来
+                            的，用户没写过，读起来又和下面正文开头重复一遍。
+                            现在只留正文，最多两行，点开看全文。
+                          */}
+                          <span className="min-w-0 flex-1 py-3">
+                            <span className="line-clamp-2 block text-[13px] leading-relaxed text-ink">
+                              {memory.content}
+                            </span>
+                            <span className="mt-1 block text-[10.5px] tracking-[0.06em] text-ink-ghost">
+                              {formatFullDate(memory.date)}
+                              {mood ? ` · ${mood.label}` : ''}
+                              {memory.isDemo ? ' · 示例' : ''}
+                            </span>
+                          </span>
+
+                          <span className="flex shrink-0 items-center gap-0.5 py-3 opacity-70 transition-opacity group-hover:opacity-100">
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`编辑：${name}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openEdit(memory);
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key !== 'Enter' && event.key !== ' ') return;
+                                event.preventDefault();
+                                event.stopPropagation();
+                                openEdit(memory);
+                              }}
+                              className="grid h-8 w-8 cursor-pointer place-items-center rounded-full text-ink-ghost transition-colors hover:bg-white/70 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lavender"
+                            >
+                              <Pencil size={13} strokeWidth={1.7} aria-hidden="true" />
+                            </span>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`删除：${name}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setDeleting(memory);
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key !== 'Enter' && event.key !== ' ') return;
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setDeleting(memory);
+                              }}
+                              className="grid h-8 w-8 cursor-pointer place-items-center rounded-full text-ink-ghost transition-colors hover:bg-[rgba(247,222,217,0.6)] hover:text-[#8a4a45] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lavender"
+                            >
+                              <Trash2 size={13} strokeWidth={1.7} aria-hidden="true" />
+                            </span>
+                          </span>
+                        </button>
                       </li>
                     );
                   })}
@@ -149,6 +205,19 @@ export function JarOverlay({ open, onClose }: JarOverlayProps) {
           </>
         )}
       </GlassSheet>
+
+      <MemoryDetailDialog
+        memory={reading}
+        onClose={() => setReading(null)}
+        onEdit={(memory) => {
+          setReading(null);
+          openEdit(memory);
+        }}
+        onDelete={(memory) => {
+          setReading(null);
+          setDeleting(memory);
+        }}
+      />
 
       <MemoryFormDialog
         open={formOpen}

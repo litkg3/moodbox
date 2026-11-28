@@ -31,15 +31,6 @@ interface MemoryFormDialogProps {
   onSaved: (memory: Memory, isNew: boolean) => void;
 }
 
-/** 内容为空时的兜底标题：取第一个短句，避免从句子中间截断 */
-function fallbackTitle(content: string): string {
-  const clean = content.replace(/\s+/g, '').trim();
-  if (clean.length === 0) return '一件小小的事';
-  const firstClause = clean.split(/[，。！？；、,.!?;]/)[0] ?? clean;
-  if (firstClause.length >= 4 && firstClause.length <= 18) return firstClause;
-  return clean.length > 16 ? `${clean.slice(0, 16)}…` : clean;
-}
-
 export function MemoryFormDialog({
   open,
   onClose,
@@ -121,8 +112,15 @@ export function MemoryFormDialog({
     setSubmitting(true);
     const payload = {
       date,
-      // 不再让用户起名字：标题由正文自动取一个短句，编辑时保留原标题
-      title: isEdit && memory ? memory.title : fallbackTitle(content),
+      /*
+        纸条只有正文，没有标题。
+
+        这里原来会用 fallbackTitle() 从正文首句截一个标题存进去，界面上
+        再把它显示在第一行 —— 于是同一句话出现两遍，用户也从没起过名字。
+        现在标题一律写空串（字段保留，旧数据与导出文件还带着它），
+        需要念出名字的地方（删除确认、读屏）走 lib/memory-title.ts 兜底。
+      */
+      title: '',
       content: content.trim(),
       mood,
       image,
