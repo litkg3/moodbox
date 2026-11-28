@@ -163,13 +163,13 @@ export function HomeExperience() {
               <span className="home-title-brand font-display text-[26px] font-light leading-none tracking-[0.2em] text-ink sm:text-[32px]">
                 MoodBox
               </span>
-              <span className="home-title-invite mt-4 font-display text-[15px] font-light leading-[1.9] tracking-[0.16em] text-ink/90 sm:mt-5 sm:text-[17.5px] lg:mt-3.5">
+              <span className="home-title-invite mt-4 font-display text-[15px] font-light leading-[1.9] tracking-[0.16em] text-ink/90 sm:mt-5 sm:text-[17.5px] lg:mt-3.5 lg:text-[18.5px]">
                 点开一颗情绪球！
               </span>
             </h1>
 
             <p
-              className="mb-reveal mt-5 text-[10.5px] leading-[2.1] tracking-[0.05em] text-ink-soft sm:text-[11px] lg:mt-4"
+              className="mb-reveal mt-5 text-[10.5px] leading-[2.1] tracking-[0.05em] text-ink-soft sm:text-[11px] lg:mt-4 lg:text-[12px]"
               data-delay="1"
             >
               {HOME_BLESSING_LINES.map((line) => (
@@ -185,7 +185,7 @@ export function HomeExperience() {
                 href="/square"
                 prefetch={false}
                 onClick={enterSquare}
-                className="group mb-btn-warm inline-flex h-10 items-center gap-2 rounded-full px-5 text-[12.5px] tracking-[0.06em] transition-all duration-500 hover:brightness-[1.02] sm:h-11 sm:px-6"
+                className="group mb-btn-warm inline-flex h-10 items-center gap-2 rounded-full px-5 text-[12.5px] tracking-[0.06em] transition-all duration-500 hover:brightness-[1.02] sm:h-11 sm:px-6 lg:text-[13.5px]"
               >
                 <MessageCircleHeart
                   size={15}
