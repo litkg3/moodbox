@@ -1775,8 +1775,41 @@ html[data-theme='night'] .orb-surface {
   position: relative;
   display: flex;
   width: 100%;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: clamp(8px, 1.3vh, 16px);
+}
+
+/*
+ * 盘下面那句说明。
+ *
+ * 它是正文，不是图形：不跟着 SVG 缩放，也不吃 transform，
+ * 窄屏上该换行就换行。
+ *
+ * 颜色取 ink-faint 再压一点透明度 —— 它是注释，不该和白底上的词
+ * 抢注意力，但也不至于要凑近了才看得见。行高放到 1.9：两行的时候
+ * 句读才不挤。
+ */
+.emotion-wheel-note {
+  max-width: 34em;
+  margin: 0;
+  padding: 0 16px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.9;
+  letter-spacing: 0.07em;
+  color: color-mix(in srgb, var(--color-ink-faint) 86%, transparent);
+}
+
+/*
+ * 一个分句一个原子块：句子内部不折行，只在逗号处换行。
+ * 用 inline-block 而不是 nowrap —— 后者只是禁止在块内断行，
+ * 相邻两个 inline 之间的断点仍然可能落在字中间。
+ */
+.emotion-wheel-note > span {
+  display: inline-block;
+  white-space: nowrap;
 }
 
 .emotion-wheel-board {
@@ -1812,6 +1845,25 @@ html[data-theme='night'] .orb-surface {
    */
   .emotion-wheel-board {
     width: min(620px, 46vw, 64vh);
+  }
+}
+
+/*
+ * 矮屏（笔记本 700~780 高这一档）：盘下面的说明是新增的一行正文，
+ * 它一进来，第二屏就可能多出几像素可滚高度 —— 整屏吸附会被这几像素
+ * 顶得发飘。这里把盘的高度上限往下收，把位置让给说明。
+ *
+ * 只在「宽屏 + 矮屏」这一小块生效：正常高度（≥ 800）盘还是 64vh，
+ * 不会因为一句话就白白小一圈。
+ */
+@media (min-width: 1024px) and (max-height: 800px) {
+  .emotion-wheel-board {
+    width: min(620px, 46vw, calc(64vh - 46px));
+  }
+
+  .emotion-wheel-note {
+    font-size: 11px;
+    line-height: 1.8;
   }
 }
 
@@ -2130,6 +2182,15 @@ html[data-theme='night'] .emotion-wheel-core-ring {
   .emotion-wheel-slice[data-tier='0'] .emotion-wheel-slice-label,
   .emotion-wheel-slice[data-tier='1'] .emotion-wheel-slice-label {
     font-size: 11px;
+  }
+
+  /* 说明文字再收一档：手机上它容易占掉第二屏的余量，别让它挤到盘。 */
+  .emotion-wheel-note {
+    max-width: 24em;
+    padding: 0 8px;
+    font-size: 11px;
+    line-height: 1.85;
+    letter-spacing: 0.05em;
   }
 }
 

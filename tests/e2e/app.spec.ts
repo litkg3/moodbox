@@ -28,16 +28,6 @@ function topLabelOf(page: Page) {
 }
 
 /**
- * 点转盘上某一格。
- *
- * 转盘是 8 瓣 × 3 层：可点的 <g> 只有一个被 clipPath 裁过的 path 算数，
- * 而八个内层格的外框（getBoundingClientRect）是整瓣的轮廓，彼此在圆心附近
- * 大面积重叠。Playwright 默认点外框中心，对内层格来说那个点常常落进隔壁瓣，
- * 于是报「被别的格子挡住」。关掉命中检查、按默认中心点，落点由 React 自己
- * 的 closest('.emotion-wheel-slice') 决定，落到哪一格就是哪一格 ——
- * 这几条用例要的都是「锁定 / 切换卡片」，不是「这一格的几何一定压在上面」。
- */
-/**
  * 把某一格滚到屏幕上，返回它的盒子。
  *
  * 转盘在自动转，格子的屏幕位置一直在变，所以量坐标之前先让盘停住：
@@ -54,9 +44,10 @@ async function holdCell(page: Page, label: string) {
 /**
  * 点转盘上某一格。
  *
- * 为什么不能直接 cell.click()：可点的 <g> 里只有被 clipPath 裁过的 path
- * 算数，而 getBoundingClientRect 是裁剪前的整瓣轮廓 —— 八个框都从圆心开始、
- * 互相重叠，点框中心会落进隔壁瓣甚至中间的空心圆。
+ * 为什么不能直接 cell.click()：一格的形状是「一段上宽下窄的带子 + 两条弧」，
+ * 它的 getBoundingClientRect 是个斜置的外接矩形 —— 内层那两环更是接近
+ * 三角形，外接矩形的中心落在外面的空白里。Playwright 默认点外框中心，
+ * 于是报「被别的格子挡住」。
  *
  * 这里的做法是量「这一格真正能被点到的所有像素」的重心，再从重心附近找
  * 一个确实命中自己的点按下去。悬停先让盘停住，量出来的坐标才有效。
@@ -304,6 +295,79 @@ test('情绪转盘：8 瓣 × 3 层，点击放大并展示完整信息，可返
   await card.getByRole('button', { name: '返回转盘' }).click();
   await expect(card).toBeHidden();
   await expect(sad).toHaveAttribute('aria-checked', 'false');
+});
+
+test('情绪转盘：八个复合词落在瓣缝里，盘下有强度说明', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openHome(page);
+  await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
+
+  // 说明文字就在盘下面，三句话都在
+  const note = page.locator('.emotion-wheel-note');
+  await expect(note).toBeVisible();
+  await expect(note).toContainText('外边缘是低强度情绪');
+  await expect(note).toContainText('向中心区情绪渐强');
+  await expect(note).toContainText('无色区是混合情绪');
+
+  /*
+   * 复合词的位置。它们必须落在「两瓣之间的缝」上 —— 也就是离最近的两瓣
+   * 各差半个瓣（22.5°），而不是压在某一片花瓣的中线上。
+   *
+   * 上一版这里多加了 PETAL_DEG / 2，八个词于是全跑到瓣尖正上方，看着像
+   * 给那一片花瓣起了个别名，而它本该说的是「左边这瓣 + 右边这瓣」。
+   */
+  const measured = await page.evaluate(() => {
+    const svg = document.querySelector('.emotion-wheel-svg') as SVGSVGElement;
+    const m = svg.getScreenCTM()!;
+    const cx = m.a * 200 + m.c * 200 + m.e;
+    const cy = m.b * 200 + m.d * 200 + m.f;
+    const angleOf = (el: Element) => {
+      const b = el.getBoundingClientRect();
+      return (Math.atan2((b.top + b.bottom) / 2 - cy, (b.left + b.right) / 2 - cx) * 180) / Math.PI;
+    };
+
+    const petals = [...document.querySelectorAll('.emotion-wheel-petal')].map((petal) => {
+      const labels = petal.querySelectorAll('.emotion-wheel-slice-label');
+      const mid = labels[1] as Element;
+      return { name: mid.textContent ?? '', angle: angleOf(mid) };
+    });
+
+    return [...document.querySelectorAll('.emotion-wheel-dyad text')].map((text) => {
+      const angle = angleOf(text);
+      const nearby = petals
+        .map((petal) => ({ name: petal.name, delta: ((angle - petal.angle + 540) % 360) - 180 }))
+        .sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta))
+        .slice(0, 2);
+      return {
+        dyad: text.textContent ?? '',
+        neighbours: nearby.map((n) => n.name).sort(),
+        gap: Math.round(Math.min(...nearby.map((n) => Math.abs(n.delta)))),
+      };
+    });
+  });
+
+  /*
+   * 配对表按「每瓣中间那一层」的词写（悲伤、惊讶、厌恶……），
+   * 因为下面的测量取的就是 labels[1]。复合词本身是两瓣的高强度档撞出来的，
+   * 换成外层的伤感 / 不解 / 惊吓来读也对，只是对不上这份表。
+   */
+  const expected: Record<string, [string, string]> = {
+    乐观: ['喜悦', '期待'],
+    喜爱: ['信任', '喜悦'],
+    屈从: ['信任', '恐惧'],
+    敬畏: ['恐惧', '惊讶'],
+    悲观: ['悲伤', '惊讶'],
+    悔恨: ['悲伤', '厌恶'],
+    鄙视: ['厌恶', '生气'],
+    好斗: ['生气', '期待'],
+  };
+
+  expect(measured).toHaveLength(8);
+  for (const item of measured) {
+    // 半个瓣 = 22.5°，允许几度误差（字盒中心与锚点不完全重合）
+    expect(Math.abs(item.gap - 22.5), `${item.dyad} 的落点偏离瓣缝 ${item.gap}°`).toBeLessThanOrEqual(4);
+    expect(item.neighbours, `${item.dyad} 两侧的花瓣`).toEqual([...(expected[item.dyad] ?? [])].sort());
+  }
 });
 
 test('情绪转盘：卡片内部不出现滚动条', async ({ page }) => {

@@ -70,11 +70,14 @@ const R_TIER1 = 126;
 /**
  * 复合情绪标签所在的半径。
  *
- * 必须落在花瓣尖（R_TIP=168）之外。192 是「再往外就顶到 viewBox 边缘」
- * 的位置：200 是半宽，字旋转后还要占十来个单位，取 192 刚好贴边不溢出
- * （SVG 允许溢出显示，真超出也只会多出一两像素）。
+ * 必须落在花瓣尖（R_TIP=168）之外，又不能探出 viewBox（半宽 200）。
+ * 词是横排的，两个字加字距宽约 27 单位，所以圆心距最多 200 − 13.5 = 186.5；
+ * 取 186：左右两个正好贴边，不越界也不会看着像飘在外头。
+ *
+ * （早先字是切向旋转的，那时按「旋转后还占十来个单位」估到 192，横排之后
+ * 收回来 6 个单位，和瓣尖的关系看起来近多了。）
  */
-const R_DYAD = 192;
+const R_DYAD = 186;
 
 /** 极坐标 → 直角坐标。0° 指向正右，传入用「度」。 */
 function polar(radius: number, angleDeg: number) {
@@ -716,9 +719,21 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
               {/*
                 复合情绪：八个只读标签，落在相邻两瓣的夹角上。
                 它们不参与点击 —— 点开能看的仍然是那二十四层的词。
+
+                角度必须是 i × 45°（第 i 瓣的**起始边**），不是 i × 45° + 22.5°。
+                后者是这一瓣自己的中线 —— 词会跑到瓣尖正上方，看着像给
+                这一瓣起了个别名，而它本该说的是「左边这一瓣 + 右边这一瓣」。
+                第 0 个落在第 7 瓣与第 0 瓣之间（乐观 = 期待 + 喜悦），
+                后面依次顺时针跟上去。
+
+                字和花瓣里的词一样是横排、且抵消整盘转动。早先这里跟着
+                角度切向转，盘一转，绕到下半圈的那几个就成了倒字（乐观、
+                喜爱直接头朝下）—— 一圈里八个方向的字，总有一半是歪的。
+                横排之后八个词读法一致；半径也从 192 收到 186，正好把左右
+                那两个收进 viewBox。
               */}
               {EMOTION_DYADS.map((dyad, index) => {
-                const angle = START_DEG + index * PETAL_DEG + PETAL_DEG / 2;
+                const angle = START_DEG + index * PETAL_DEG;
                 const pos = polar(R_DYAD, angle);
                 return (
                   <g
@@ -727,14 +742,11 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
                     transform={`translate(${pos.x.toFixed(2)} ${pos.y.toFixed(2)})`}
                     aria-hidden="true"
                   >
-                    <text
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      className="emotion-wheel-dyad-text"
-                      transform={`rotate(${angle + 90})`}
-                    >
-                      {dyad}
-                    </text>
+                    <g className="emotion-wheel-counter" style={{ transform: `rotate(${-spinGroup}deg)` }}>
+                      <text textAnchor="middle" dominantBaseline="middle" className="emotion-wheel-dyad-text">
+                        {dyad}
+                      </text>
+                    </g>
                   </g>
                 );
               })}
@@ -749,6 +761,24 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
             </g>
           </svg>
         </div>
+
+        {/*
+          盘下面这句是读盘的说明书。
+
+          没有它，第一次看到这个盘的人只会看到一堆颜色：为什么同一个词
+          出现三次、为什么越往里越「重」、外面那些转着的小字是什么关系 ——
+          全靠自己猜。四句话说清三件事：方向（外低内高）、渐变（向心渐强）、
+          以及那圈没有颜色的缝（混合情绪）。
+
+          分四个 span 而不是一整串：整串在窄屏上会被折断在「情」和「绪」
+          中间，读着别扭。每个分句自己不许断行，断点只留在逗号处。
+        */}
+        <p className="emotion-wheel-note">
+          <span>外边缘是低强度情绪，</span>
+          <span>中心圆是高强度情绪，</span>
+          <span>向中心区情绪渐强，</span>
+          <span>无色区是混合情绪。</span>
+        </p>
 
         {showCard && (
           <div
