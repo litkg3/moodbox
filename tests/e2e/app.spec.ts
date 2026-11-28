@@ -297,15 +297,15 @@ test('情绪转盘：8 瓣 × 3 层，点击放大并展示完整信息，可返
   await expect(sad).toHaveAttribute('aria-checked', 'false');
 });
 
-test('情绪转盘：八个复合词落在瓣缝里，盘下有四条强度说明', async ({ page }) => {
+test('情绪转盘：八个复合词落在瓣缝里，盘下是分条说明', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openHome(page);
   await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
 
-  // 说明就在盘下面：四条「名词 · 一句话」，一条一行
+  // 说明就在盘下面：五条「名词 · 一句话」，一条一行
   const note = page.locator('.emotion-wheel-note');
   await expect(note).toBeVisible();
-  await expect(note.locator('.emotion-wheel-note-row')).toHaveCount(4);
+  await expect(note.locator('.emotion-wheel-note-row')).toHaveCount(5);
   const pairs = await note.evaluate((el) =>
     [...el.querySelectorAll('.emotion-wheel-note-row')].map((row) => [
       row.querySelector('dt')?.textContent?.trim(),
@@ -317,6 +317,7 @@ test('情绪转盘：八个复合词落在瓣缝里，盘下有四条强度说�
     ['中心圆', '高强度情绪'],
     ['向中心', '情绪渐强'],
     ['无色区', '混合情绪'],
+    ['对角', '混合情绪互为相反'],
   ]);
 
   /*
@@ -378,6 +379,63 @@ test('情绪转盘：八个复合词落在瓣缝里，盘下有四条强度说�
     expect(Math.abs(item.gap - 22.5), `${item.dyad} 的落点偏离瓣缝 ${item.gap}°`).toBeLessThanOrEqual(4);
     expect(item.neighbours, `${item.dyad} 两侧的花瓣`).toEqual([...(expected[item.dyad] ?? [])].sort());
   }
+});
+
+test('情绪转盘：悬停一个复合词，它和对角那个一起亮', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openHome(page);
+  await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
+
+  // 先把鼠标放到盘上让自动转动停住，量出来的坐标才有效
+  const board = (await page.locator('.emotion-wheel-svg').boundingBox())!;
+  await page.mouse.move(board.x + board.width / 2, board.y + board.height * 0.2);
+  await page.waitForTimeout(300);
+
+  const dyad = page.locator('.emotion-wheel-dyad[data-dyad="乐观"]');
+  const box = (await dyad.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(400);
+
+  /*
+   * 亮起来的一对：自己 + 对面那个。乐观与悲观相差 180°，说的正是相反的事。
+   * 只亮自己是不够的 —— 那只是「鼠标停在这里」，说明不了对称关系。
+   */
+  const lit = await page.evaluate(() =>
+    [...document.querySelectorAll('.emotion-wheel-dyad.is-lit')].map((el) =>
+      (el as HTMLElement).dataset.dyad,
+    ),
+  );
+  expect(lit.sort()).toEqual(['乐观', '悲观']);
+
+  // 移到别处，两个都熄掉
+  await page.mouse.move(10, 10);
+  await page.waitForTimeout(300);
+  await expect(page.locator('.emotion-wheel-dyad.is-lit')).toHaveCount(0);
+});
+
+test('情绪转盘：卡片里列出两侧混合情绪与各自的相反词', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openHome(page);
+  await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
+
+  // 「悲痛」所在的这一瓣两侧是「悲观」（惊讶 + 悲伤）与「悔恨」（悲伤 + 厌恶）
+  await clickCell(page, '悲痛');
+  const card = page.locator('.emotion-wheel-card');
+  await expect(card).toBeVisible();
+
+  /*
+   * 中点只存在于 CSS 的 ::after 里（四个标签共用一条规则），
+   * 所以 textContent 取不到它，这里按纯文字拼。
+   */
+  const rows = await card.locator('.emotion-wheel-card-mixed-row').evaluateAll((els) =>
+    els.map((el) => el.textContent?.replace(/\s+/g, '') ?? ''),
+  );
+  expect(rows).toEqual(['悲观惊讶+悲伤相反乐观', '悔恨悲伤+厌恶相反喜爱']);
+
+  // 每个词的对面确实是它的反面（数据层已由单测覆盖，这里只看界面读得到）
+  await expect(card).toContainText('相反');
+  await expect(card).toContainText('乐观');
+  await expect(card).toContainText('喜爱');
 });
 
 test('情绪转盘：卡片内部不出现滚动条', async ({ page }) => {

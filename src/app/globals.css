@@ -2249,12 +2249,54 @@ html[data-theme='night'] .emotion-wheel-core-ring {
  * 颜色必须比普通说明文字重一档。它夹在两片彩色花瓣之间，花瓣本身也有
  * 亮度，用 ink-faint 会被吃掉；夜里更糟，深色底上几乎看不见。
  */
+/*
+ * 复合词：只读标注，但可以悬停 / 聚焦。
+ *
+ * 悬停时它和**对面那个**一起亮 —— 这两个词相差 180°，说的正是相反的情绪
+ * （乐观 ↔ 悲观、喜爱 ↔ 悔恨、屈从 ↔ 鄙视、敬畏 ↔ 好斗）。
+ * 中间那圈空白本来就窄，词又都挂在圆边外侧，所以不加任何背景块，
+ * 只靠字重、颜色和一小截箭头来提示。
+ */
+.emotion-wheel-dyad {
+  cursor: default;
+  outline: none;
+  /* 箭头和文字共用同一个墨色，省得两处各写一遍 */
+  color: var(--color-ink-soft);
+}
+
 .emotion-wheel-dyad-text {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.14em;
   fill: var(--color-ink-soft);
-  transition: fill 0.45s ease;
+  transition:
+    fill 0.36s ease,
+    letter-spacing 0.36s ease;
+}
+
+/* 朝外的那一小截箭头：平时藏着，点亮才淡入 */
+.emotion-wheel-dyad-link {
+  opacity: 0;
+  transition: opacity 0.36s ease;
+}
+
+.emotion-wheel-dyad.is-lit .emotion-wheel-dyad-link {
+  opacity: 0.75;
+}
+
+/*
+ * 点亮：字加深、字距松一点、箭头露出来。
+ *
+ * 不用 scale —— 字盒一放大就会碰到旁边的花瓣尖；靠颜色和字距已经足够
+ * 让人看出「这两个是一对」。
+ */
+.emotion-wheel-dyad.is-lit .emotion-wheel-dyad-text {
+  fill: var(--color-ink);
+  letter-spacing: 0.2em;
+}
+
+.emotion-wheel-dyad.is-lit {
+  color: var(--color-ink);
 }
 
 html[data-theme='night'] .emotion-wheel-dyad-text {
@@ -2264,6 +2306,11 @@ html[data-theme='night'] .emotion-wheel-dyad-text {
   stroke: color-mix(in srgb, var(--color-cream) 55%, transparent);
   stroke-width: 2.4px;
   stroke-linejoin: round;
+}
+
+html[data-theme='night'] .emotion-wheel-dyad.is-lit .emotion-wheel-dyad-text {
+  /* 夜里 ink 本身已经接近白色，再靠加深就看不出「点亮」了，改用纯白 */
+  fill: #ffffff;
 }
 
 /* 花瓣尖旁边的那个「+」，说明这两瓣混出了中间那个词 */
@@ -2753,6 +2800,99 @@ html[data-theme='night'] .emotion-wheel-card-method .emotion-wheel-card-text {
 
 html[data-theme='night'] .emotion-wheel-card-method .emotion-wheel-card-key {
   color: color-mix(in srgb, var(--slice-color) 55%, rgba(238, 232, 250, 0.5));
+}
+
+/* ---------------- 卡片里的两侧混合情绪 ---------------- */
+
+/*
+ * 一瓣两侧各有一个复合情绪，两个都列出来；每个再补一句它的对立面。
+ *
+ * 每对占两行：
+ *   悲观 · 惊讶 + 悲伤
+ *   相反 · 乐观
+ *
+ * 试过排成一行，排不下 —— 桌面卡内宽只有 129，而「悲观 · 惊讶 + 悲伤」
+ * 加「相反 · 乐观」在 10px 下要 133，差 4px；再压字号就小到看不清了。
+ * 分成两行反而好读：上一行是这个混合情绪怎么来的，下一行是它的反面。
+ *
+ * 两行都用「词 · 说明」的形式，冒号位（那个中点）因此对齐成一条竖线。
+ */
+.emotion-wheel-card-mixed {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 一对 = 一个 li，里面两行 div */
+.emotion-wheel-card-mixed-row {
+  padding: 3px 0;
+  color: var(--color-ink-faint);
+}
+
+.emotion-wheel-card-mixed-row + .emotion-wheel-card-mixed-row {
+  margin-top: 2px;
+  border-top: 1px solid color-mix(in srgb, var(--color-ink-faint) 14%, transparent);
+}
+
+.emotion-wheel-card-mixed-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 10.5px;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.emotion-wheel-card-mixed-label {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--slice-edge) 78%, var(--color-ink) 22%);
+}
+
+/* 词后面的那个中点：两行同宽，才能对齐成一条竖线 */
+.emotion-wheel-card-mixed-label::after {
+  content: '·';
+  margin-left: 4px;
+  font-weight: 400;
+  opacity: 0.45;
+}
+
+.emotion-wheel-card-mixed-form,
+.emotion-wheel-card-mixed-opp {
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+/*
+ * 「相反」这一行的标签。
+ *
+ * 它不能复用 .emotion-wheel-card-mixed-label —— 那个是彩色（跟着花瓣走），
+ * 而「相反」不是情绪词，是给下面那个词定性。用同一套灰、同一个中点，
+ * 只把字重收到 500，这样两行的中点能对齐成一条竖线。
+ */
+.emotion-wheel-card-mixed-opp-key {
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--color-ink-faint) 92%, transparent);
+}
+
+.emotion-wheel-card-mixed-opp-key::after {
+  content: '·';
+  margin-left: 4px;
+  font-weight: 400;
+  opacity: 0.45;
+}
+
+.emotion-wheel-card-mixed-opp {
+  color: color-mix(in srgb, var(--color-ink-faint) 80%, transparent);
+}
+
+html[data-theme='night'] .emotion-wheel-card-mixed-label {
+  color: color-mix(in srgb, var(--slice-color) 62%, rgba(238, 232, 250, 0.9));
+}
+
+html[data-theme='night'] .emotion-wheel-card-mixed-opp {
+  color: color-mix(in srgb, rgba(238, 232, 250, 0.9) 58%, transparent);
 }
 
 .emotion-wheel-card-close {

@@ -159,21 +159,35 @@ export const EMOTION_PETALS: readonly EmotionPetal[] = [
  * 上（i × 45°，从正上方顺时针）。0 号没有前一瓣，接在最后一瓣与第一瓣
  * 之间（乐观 = 期待 + 喜悦）。八个词正好绕满一圈，谁也漏不下。
  *
- * 每个词由相邻两瓣的高强度那一档撞出来：敬畏 = 恐惧 + 惊讶，
- * 悲观 = 惊讶 + 悲伤，屈从 = 信任 + 恐惧……所以摆放顺序不能随手改，
+ * 每个词由相邻两瓣撞出来，用的是两瓣里**同级**的那一档：
+ * 乐观 = 期待 + 喜悦（中层 + 中层），悲观 = 惊讶 + 悲伤，
+ * 屈从 = 信任 + 恐惧，敬畏 = 恐惧 + 惊讶……所以摆放顺序不能随手改，
  * 一改就对不上「左边这瓣 + 右边这瓣」。
  *
- * 它们只是标注，不参与点击 —— 点开能看的仍然是那二十四层的词。
+ * 八个复合词正好两两相对（相差 180°），而相对的每一对是**相反情绪**：
+ * 乐观 ↔ 悲观、喜爱 ↔ 悔恨、屈从 ↔ 鄙视、敬畏 ↔ 好斗。
+ * 这个关系不是凑出来的 —— 它由圆周上「隔了四瓣」这件事自然给出来，
+ * 所以下面用 `opposite` 字段把对面那个词的名字写死，方便卡片直接引用，
+ * 也方便测试核对两边是否真的互相指认。
  */
-export const EMOTION_DYADS: readonly string[] = [
-  '乐观', // 喜悦 + 期待
-  '喜爱', // 喜悦 + 钦佩
-  '屈从', // 钦佩 + 惊悚
-  '敬畏', // 惊悚 + 惊吓
-  '悲观', // 惊吓 + 悲痛
-  '悔恨', // 悲痛 + 憎恶
-  '鄙视', // 憎恶 + 暴怒
-  '好斗', // 暴怒 + 警惕
+export interface EmotionDyad {
+  /** 这个词本身 */
+  label: string;
+  /** 由哪两瓣撞成（中层那一档的名字），只用于说明 */
+  from: readonly [string, string];
+  /** 对面那个复合词：与它相差 180°，含相反的情绪 */
+  opposite: string;
+}
+
+export const EMOTION_DYADS: readonly EmotionDyad[] = [
+  { label: '乐观', from: ['期待', '喜悦'], opposite: '悲观' },
+  { label: '喜爱', from: ['喜悦', '信任'], opposite: '悔恨' },
+  { label: '屈从', from: ['信任', '恐惧'], opposite: '鄙视' },
+  { label: '敬畏', from: ['恐惧', '惊讶'], opposite: '好斗' },
+  { label: '悲观', from: ['惊讶', '悲伤'], opposite: '乐观' },
+  { label: '悔恨', from: ['悲伤', '厌恶'], opposite: '喜爱' },
+  { label: '鄙视', from: ['厌恶', '生气'], opposite: '屈从' },
+  { label: '好斗', from: ['生气', '期待'], opposite: '敬畏' },
 ] as const;
 
 /** 强度档对应的中文说法，卡片上用。 */
@@ -201,6 +215,14 @@ export interface EmotionCell {
   tier: number;
   petalIndex: number;
   petal: EmotionPetal;
+  /**
+   * 这一格两侧的复合情绪。
+   *
+   * 第 i 瓣的两侧分别是「第 i−1 与第 i 之间」和「第 i 与第 i+1 之间」，
+   * 所以下标就是 i 和 (i + 1) % 8 —— 这两个词都含这一瓣，是它「还能长成
+   * 什么样」。放在数据层算，组件里只需要照单渲染，也方便单测核对。
+   */
+  dyads: readonly [EmotionDyad, EmotionDyad];
 }
 
 export const EMOTION_CELLS: readonly EmotionCell[] = EMOTION_PETALS.flatMap((petal, petalIndex) =>
@@ -212,5 +234,9 @@ export const EMOTION_CELLS: readonly EmotionCell[] = EMOTION_PETALS.flatMap((pet
     tier: tierIndex,
     petalIndex,
     petal,
+    dyads: [
+      EMOTION_DYADS[petalIndex] as EmotionDyad,
+      EMOTION_DYADS[(petalIndex + 1) % EMOTION_DYADS.length] as EmotionDyad,
+    ],
   })),
 );

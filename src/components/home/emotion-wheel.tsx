@@ -78,6 +78,23 @@ const R_TIER1 = 126;
  * 收回来 6 个单位，和瓣尖的关系看起来近多了。）
  */
 const R_DYAD = 186;
+/**
+ * 复合词被「点亮」时，从它往对面那根连线怎么画。
+ *
+ * 不画整根直径（从这头的词一直连到对面那个词，要横穿整个盘、压掉中间
+ * 两层花瓣），只在复合词自己的这一侧画一小截：
+ * 内侧从 R_DYAD − 30 起（外面留着花瓣尖和那个「+」），外侧到 198 收住
+ * （viewBox 半宽 200，再往外就出框）。
+ *
+ * 之所以是一小截而不是整根，是因为八个词绕成一圈，八根直径会交在圆心，
+ * 盘心那块「颜色汇聚」的地方会被织成一张网 —— 想说明「这两个相反」，
+ * 一根从词往外指的短线就够了。
+ *
+ * 线不加箭头：八个词里总有几个在斜向，那里的词离 viewBox 边只剩几个
+ * 单位，箭头伸进去会被裁掉半截，看着像画坏了。不带头的线被裁一点也无妨。
+ */
+const R_DYAD_LINK_INNER = R_DYAD - 30;
+const R_DYAD_LINK_OUTER = 198;
 
 /** 极坐标 → 直角坐标。0° 指向正右，传入用「度」。 */
 function polar(radius: number, angleDeg: number) {
@@ -241,6 +258,7 @@ const WHEEL_NOTES: ReadonlyArray<{ term: string; text: string }> = [
   { term: '中心圆', text: '高强度情绪' },
   { term: '向中心', text: '情绪渐强' },
   { term: '无色区', text: '混合情绪' },
+  { term: '对角', text: '混合情绪互为相反' },
 ];
 
 /** 指针停在哪一格用「第几瓣」。自动步进也是按瓣走。 */
@@ -274,6 +292,14 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
   const [cardMode, setCardMode] = useState<'follow' | 'locked' | 'off'>('follow');
   /** 当前用键盘聚焦的那一格（cell 下标）。 */
   const [keyboardFocus, setKeyboardFocus] = useState<number | null>(null);
+  /**
+   * 被点亮的那一对相反情绪（复合词的名字）。为空表示没点亮。
+   *
+   * 悬停或聚焦某个复合词时它亮起来，对面那个也一起亮 —— 这两个词说的是
+   * 同一件相反的事。点亮时再朝外画一小截箭头，连到画面边缘暗示「相反的
+   * 在对面」，而不是横穿盘心画一根线（八根会织成一张网）。
+   */
+  const [litDyad, setLitDyad] = useState<string | null>(null);
   /** 只有桌面端才自动转（手机上自动转会分散注意力）。 */
   const [isDesktop, setIsDesktop] = useState(false);
   const titleId = useId();
@@ -752,16 +778,49 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
               {EMOTION_DYADS.map((dyad, index) => {
                 const angle = START_DEG + index * PETAL_DEG;
                 const pos = polar(R_DYAD, angle);
+                /*
+                 * 这一对里有没有人被点亮：自己亮，或者对面那个亮 ——
+                 * 两个都要亮，因为它们说的正是「相反」这件事。
+                 */
+                const isLit =
+                  litDyad !== null && (dyad.label === litDyad || dyad.opposite === litDyad);
+
                 return (
                   <g
-                    key={dyad}
-                    className="emotion-wheel-dyad"
+                    key={dyad.label}
+                    className={cn('emotion-wheel-dyad', isLit && 'is-lit')}
                     transform={`translate(${pos.x.toFixed(2)} ${pos.y.toFixed(2)})`}
-                    aria-hidden="true"
+                    data-dyad={dyad.label}
+                    data-opposite={dyad.opposite}
+                    /*
+                     * 可聚焦但不进 tab 序列（tabIndex -1）：键盘用户不需要
+                     * 为八个只读标注多按八下跳格；但用读写器去「读到这里」
+                     * 时，它得能被聚焦，否则点亮这件事只有鼠标能做。
+                     */
+                    tabIndex={-1}
+                    onPointerEnter={() => setLitDyad(dyad.label)}
+                    onPointerLeave={() => setLitDyad((current) => (current === dyad.label ? null : current))}
+                    onFocus={() => setLitDyad(dyad.label)}
+                    onBlur={() => setLitDyad((current) => (current === dyad.label ? null : current))}
                   >
+                    {/*
+                      朝外的那一小截线，只在点亮时出现 —— 它说的是「相反的
+                      在对面的那一头」。从词的内侧往外画，不越过文字。
+                    */}
+                    <line
+                      className="emotion-wheel-dyad-link"
+                      x1={0}
+                      y1={-(R_DYAD - R_DYAD_LINK_INNER)}
+                      x2={0}
+                      y2={-(R_DYAD_LINK_OUTER - R_DYAD)}
+                      stroke="currentColor"
+                      strokeWidth={1.2}
+                      strokeLinecap="round"
+                      aria-hidden="true"
+                    />
                     <g className="emotion-wheel-counter" style={{ transform: `rotate(${-spinGroup}deg)` }}>
                       <text textAnchor="middle" dominantBaseline="middle" className="emotion-wheel-dyad-text">
-                        {dyad}
+                        {dyad.label}
                       </text>
                     </g>
                   </g>
@@ -859,6 +918,36 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
                   {focused.petal.tiers[2].label}这一瓣
                 </span>
               </p>
+
+              {/*
+                这一瓣两侧各长出一个复合情绪，两个都说，每个再补一句它的对立面。
+
+                为什么把「相反」放在这里：复合词本身是只读标注，不弹卡片，
+                而「对面是谁」这件事只有在点开某一格时才说得出口。给每对
+                加一行「相反 · 乐观」，比单独说一句「乐观是期待加喜悦」
+                更能让人记住这个盘的结构 —— 它的八个混合情绪是对称的。
+              */}
+              {focused.dyads.length > 0 ? (
+                <ul
+                  key={`d-${focused.id}`}
+                  className="emotion-wheel-card-mixed emotion-wheel-card-swap emotion-wheel-card-swap-late"
+                >
+                  {focused.dyads.map((dyad) => (
+                    <li key={dyad.label} className="emotion-wheel-card-mixed-row">
+                      <div className="emotion-wheel-card-mixed-line">
+                        <span className="emotion-wheel-card-mixed-label">{dyad.label}</span>
+                        <span className="emotion-wheel-card-mixed-form">
+                          {dyad.from[0]} + {dyad.from[1]}
+                        </span>
+                      </div>
+                      <div className="emotion-wheel-card-mixed-line">
+                        <span className="emotion-wheel-card-mixed-opp-key">相反</span>
+                        <span className="emotion-wheel-card-mixed-opp">{dyad.opposite}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
 
               {/*
                 这一格的具体说明。文案还没写，所以这一块先不渲染 ——
