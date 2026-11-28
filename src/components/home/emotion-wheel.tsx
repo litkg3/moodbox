@@ -226,6 +226,23 @@ function tierValue(table: Record<number, number>, tierIndex: number, fallback: n
   return table[tierIndex] ?? fallback;
 }
 
+/**
+ * 盘下面那四条说明。
+ *
+ * 「名词：一句话」的对照式，一条一行 —— 四条各说一件不同的事（外低、内高、
+ * 渐变方向、没有颜色的那圈缝隙），排成一行长句读起来要断句才能找到自己
+ * 关心的那一条；竖着列开，扫一眼就能对上盘上的位置。
+ *
+ * 写法上和盘里保持同一个方向感：先「外边缘」再「中心圆」，最后才说
+ * 「向中心」怎么变 —— 读者顺着盘的半径由外向内看，文字也是这个顺序。
+ */
+const WHEEL_NOTES: ReadonlyArray<{ term: string; text: string }> = [
+  { term: '外边缘', text: '低强度情绪' },
+  { term: '中心圆', text: '高强度情绪' },
+  { term: '向中心', text: '情绪渐强' },
+  { term: '无色区', text: '混合情绪' },
+];
+
 /** 指针停在哪一格用「第几瓣」。自动步进也是按瓣走。 */
 const PETAL_COUNT = EMOTION_PETALS.length;
 
@@ -763,22 +780,20 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
         </div>
 
         {/*
-          盘下面这句是读盘的说明书。
+          盘下面这组是读盘的说明书。
 
           没有它，第一次看到这个盘的人只会看到一堆颜色：为什么同一个词
           出现三次、为什么越往里越「重」、外面那些转着的小字是什么关系 ——
-          全靠自己猜。四句话说清三件事：方向（外低内高）、渐变（向心渐强）、
-          以及那圈没有颜色的缝（混合情绪）。
-
-          分四个 span 而不是一整串：整串在窄屏上会被折断在「情」和「绪」
-          中间，读着别扭。每个分句自己不许断行，断点只留在逗号处。
+          全靠自己猜。
         */}
-        <p className="emotion-wheel-note">
-          <span>外边缘是低强度情绪，</span>
-          <span>中心圆是高强度情绪，</span>
-          <span>向中心区情绪渐强，</span>
-          <span>无色区是混合情绪。</span>
-        </p>
+        <dl className="emotion-wheel-note">
+          {WHEEL_NOTES.map((item) => (
+            <div key={item.term} className="emotion-wheel-note-row">
+              <dt>{item.term}</dt>
+              <dd>{item.text}</dd>
+            </div>
+          ))}
+        </dl>
 
         {showCard && (
           <div

@@ -1782,34 +1782,70 @@ html[data-theme='night'] .orb-surface {
 }
 
 /*
- * 盘下面那句说明。
+ * 盘下面那四条说明。
  *
- * 它是正文，不是图形：不跟着 SVG 缩放，也不吃 transform，
- * 窄屏上该换行就换行。
+ * 正文，不是图形：不跟着 SVG 缩放，也不吃 transform。
  *
- * 颜色取 ink-faint 再压一点透明度 —— 它是注释，不该和白底上的词
- * 抢注意力，但也不至于要凑近了才看得见。行高放到 1.9：两行的时候
- * 句读才不挤。
+ * 排法用「对照表」而不是一句话：四条各是一个「名词 → 一句话」，
+ * 竖着列开，每一行的名词右对齐、解释左对齐，中间一条淡淡的竖线分开。
+ * 这样四条各自成行，扫一眼就能对上盘上的位置；挤成一行长句的话，
+ * 得先断句才知道哪句说的是哪一块。
+ *
+ * 颜色取 ink-faint 再压一点透明度 —— 它是注释，不该和白底上的词抢注意力，
+ * 但也不至于要凑近了才看得见。
  */
 .emotion-wheel-note {
-  max-width: 34em;
+  display: grid;
+  gap: 2px;
   margin: 0;
   padding: 0 16px;
-  text-align: center;
   font-size: 12px;
-  line-height: 1.9;
-  letter-spacing: 0.07em;
+  line-height: 1.55;
+  letter-spacing: 0.06em;
   color: color-mix(in srgb, var(--color-ink-faint) 86%, transparent);
 }
 
 /*
- * 一个分句一个原子块：句子内部不折行，只在逗号处换行。
- * 用 inline-block 而不是 nowrap —— 后者只是禁止在块内断行，
- * 相邻两个 inline 之间的断点仍然可能落在字中间。
+ * 一行 = 一个 div 包着 dt / dd。
+ *
+ * 用 grid 而不是 flex：两列宽度由内容自己决定（最长的那个名词有多宽，
+ * 左列就多宽），四条因此天然对齐，不用给「外边缘 / 中心圆 / 无色区」
+ * 这些字数不一样的名词定死一个宽度。
  */
-.emotion-wheel-note > span {
-  display: inline-block;
+.emotion-wheel-note-row {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  justify-content: center;
+  column-gap: 10px;
+}
+
+/*
+ * 名词那一列：右对齐 + 中点分隔。
+ *
+ * 右对齐是为了让四个名词的「末尾」站在同一条线上，冒号位（那条竖线）
+ * 才会齐；用实心小点而不是冒号，是为了让它看着是分隔符而不是标点 ——
+ * 一行一个冒号，四行下来就成了一串标点。
+ */
+.emotion-wheel-note-row dt {
+  position: relative;
+  padding-right: 10px;
+  text-align: right;
   white-space: nowrap;
+}
+
+.emotion-wheel-note-row dt::after {
+  content: '·';
+  position: absolute;
+  right: 0;
+  color: color-mix(in srgb, currentColor 55%, transparent);
+}
+
+.emotion-wheel-note-row dd {
+  margin: 0;
+  text-align: left;
+  white-space: nowrap;
+  letter-spacing: 0.08em;
 }
 
 .emotion-wheel-board {
@@ -1858,7 +1894,9 @@ html[data-theme='night'] .orb-surface {
  */
 @media (min-width: 1024px) and (max-height: 800px) {
   .emotion-wheel-board {
-    width: min(620px, 46vw, calc(64vh - 46px));
+    /* 说明从「一行」变成「四条」之后高了 30 多像素，原来的 −46px 不够，
+       改到 −78px（1px 的余量都不留，吸附才不会因为亚像素抖动而发飘）。 */
+    width: min(620px, 46vw, calc(64vh - 78px));
   }
 
   .emotion-wheel-note {
@@ -2186,11 +2224,19 @@ html[data-theme='night'] .emotion-wheel-core-ring {
 
   /* 说明文字再收一档：手机上它容易占掉第二屏的余量，别让它挤到盘。 */
   .emotion-wheel-note {
-    max-width: 24em;
+    gap: 1px;
     padding: 0 8px;
     font-size: 11px;
-    line-height: 1.85;
+    line-height: 1.5;
     letter-spacing: 0.05em;
+  }
+
+  .emotion-wheel-note-row {
+    column-gap: 8px;
+  }
+
+  .emotion-wheel-note-row dt {
+    padding-right: 8px;
   }
 }
 

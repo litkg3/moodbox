@@ -297,17 +297,27 @@ test('情绪转盘：8 瓣 × 3 层，点击放大并展示完整信息，可返
   await expect(sad).toHaveAttribute('aria-checked', 'false');
 });
 
-test('情绪转盘：八个复合词落在瓣缝里，盘下有强度说明', async ({ page }) => {
+test('情绪转盘：八个复合词落在瓣缝里，盘下有四条强度说明', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openHome(page);
   await page.locator('.emotion-wheel').scrollIntoViewIfNeeded();
 
-  // 说明文字就在盘下面，三句话都在
+  // 说明就在盘下面：四条「名词 · 一句话」，一条一行
   const note = page.locator('.emotion-wheel-note');
   await expect(note).toBeVisible();
-  await expect(note).toContainText('外边缘是低强度情绪');
-  await expect(note).toContainText('向中心区情绪渐强');
-  await expect(note).toContainText('无色区是混合情绪');
+  await expect(note.locator('.emotion-wheel-note-row')).toHaveCount(4);
+  const pairs = await note.evaluate((el) =>
+    [...el.querySelectorAll('.emotion-wheel-note-row')].map((row) => [
+      row.querySelector('dt')?.textContent?.trim(),
+      row.querySelector('dd')?.textContent?.trim(),
+    ]),
+  );
+  expect(pairs).toEqual([
+    ['外边缘', '低强度情绪'],
+    ['中心圆', '高强度情绪'],
+    ['向中心', '情绪渐强'],
+    ['无色区', '混合情绪'],
+  ]);
 
   /*
    * 复合词的位置。它们必须落在「两瓣之间的缝」上 —— 也就是离最近的两瓣
