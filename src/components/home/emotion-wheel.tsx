@@ -15,8 +15,9 @@ import { cn } from '@/lib/utils';
  * ------------------------------------------------------------------
  * 情绪转盘（普拉奇克情绪轮）
  *
- * 形状是一朵八瓣的花：八个花瓣各是一种基础情绪，每瓣从外到内分三层，
- * 越靠圆心越强烈。相邻两瓣交界处的空白里，各标着一个复合情绪。
+ * 中间是一整块实心圆，八种高强度情绪绕圆心拼满这一圈；圆的外沿一道白线，
+ * 线外才是花瓣 —— 八片火焰形，底部贴着圆的弧、往外收成尖。每片花瓣再从
+ * 外到内分三层，越靠圆心越强烈。相邻两瓣交界处的空白里，各标着一个复合情绪。
  *
  * 交互沿用之前那一版，只是「一格」从扇形变成了「某个花瓣的某一层」：
  * - 桌面端待机时整盘每秒转过 45°，指针下的那一瓣自动被选中；
@@ -46,44 +47,34 @@ const CY = SIZE / 2;
 /*
  * 花瓣的几条半径。
  *
- * 形状不是正圆：每瓣从圆心伸出去，尖端在 R_TIP，两瓣之间收进 R_VALLEY，
- * 所以是八个凸起的叶瓣，而不是一个均匀的饼。
+ * 形状不是正圆：每瓣从核心圆的边上出发，往外收成一个尖，所以是八片
+ * 尖头的火焰，而不是一个均匀的饼。
  */
-const R_TIP = 162;
+const R_TIP = 168;
 /**
- * 两瓣交界处离圆心多远。
+ * 中间那个核心圆的半径。
  *
- * 这个值决定花瓣「胖瘦」。取 96（比尖端小一半）时每瓣像一根细长的柳叶，
- * 三个词塞不下、字全挤在中线上；取 138 后又太瘦，外层放字的位置只剩
- * 二十几个单位宽。145 是实测下来「瓣形好看」和「放得下字」的交点。
+ * 参考图的最里面不是一块空花心，而是一整块实心圆：八种高强度情绪绕着
+ * 圆心排一圈，圆的外沿再画一道白线，把「核心」和外面的花瓣分开。
+ *
+ * 这条半径同时是两个分界 —— 高强度层的外沿，和中层的内沿。
  */
-const R_VALLEY = 145;
+const R_RING = 90;
 /**
- * 层与层的分界（从外往里数）。
+ * 中层与最外层的分界。
  *
- * 分界线要落在两层文字中间，不能压字。三层锚点是 88 / 110 / 135，
- * 所以两条线取在 99 和 123 —— 各自离上下的字都有十来个单位。
+ * 分界线要落在两层文字中间，不能压字。外层的字在 r=147、中层在 108，
+ * 取 126 正好夹在中间，离上下各有十来个单位。
  */
-const R_TIER1 = 123;
-const R_TIER2 = 99;
-/**
- * 内层一直收到这里。
- *
- * 这个值决定内层词离圆心多远，是这一版调得最久的一个数。
- *
- * 八个花瓣在圆心交汇，内层词的锚点只要落到 r≈70 以内，相邻两瓣的
- * 笔画就会顶在一起（实测 r=71 时「憎恶」和「惊悚」的下缘已经叠上）。
- * 收到 62 之后锚点落到 r≈90，八个词才围成一圈、彼此让开。
- * 圆心因此空出一块 —— 参考图里那块空是白圆，这里留空也一样成立。
- */
-const R_CORE = 62;
+const R_TIER1 = 126;
 /**
  * 复合情绪标签所在的半径。
  *
- * 必须落在花瓣尖（R_TIP=162）之外。190 是「再往外就顶到 viewBox 边缘」
- * 的位置：200 是半宽，字旋转后还要占十来个单位，取 190 刚好贴边不溢出。
+ * 必须落在花瓣尖（R_TIP=168）之外。192 是「再往外就顶到 viewBox 边缘」
+ * 的位置：200 是半宽，字旋转后还要占十来个单位，取 192 刚好贴边不溢出
+ * （SVG 允许溢出显示，真超出也只会多出一两像素）。
  */
-const R_DYAD = 190;
+const R_DYAD = 192;
 
 /** 极坐标 → 直角坐标。0° 指向正右，传入用「度」。 */
 function polar(radius: number, angleDeg: number) {
@@ -92,127 +83,110 @@ function polar(radius: number, angleDeg: number) {
 }
 
 /**
- * 把「瓣心角」换算成文字该转的角度，保证字正着读。
+ * 花瓣在半径 r 处的半角（度）。
  *
- * 瓣心角 midDeg 是从 12 点顺时针量的，单独照着它转，下半圈那几瓣的字
- * 会整个倒过来（读的人得把屏幕转 180° 才看得懂）。
+ * 这是整个轮盘的形状来源：一瓣占 45°，在核心圆的边上刚好占满（±22.5°，
+ * 也就是说八瓣在圆心处严丝合缝地拼成一整块），往外一路收，到尖端收成 0。
  *
- * 文字是横切半径的，所以先按 midDeg - 90 把基线摆成切向（中轴线在 12 点
- * 时即水平），再归一到 (-180, 180]，超出 ±90 就翻 180° —— 翻过来之后
- * 它仍是切向，只是朝里朝外互换，读起来一样。
+ * 为什么不用贝塞尔曲线描一只「叶子」：真画出来是两头尖、中间鼓的叶形，
+ * 而参考图的瓣是「底部最宽、往外收尖」的火焰形 —— 因为它的底边就是核心
+ * 那个圆的弧。用半角函数描述，形状和「八瓣拼成实心圆」这件事天然一致，
+ * 不会出现两瓣之间漏一条缝、或者花瓣自己凹进去一块的情况。
  */
-function uprightDeg(_midDeg: number): number {
+function halfAngleAt(r: number): number {
+  const t = (r - R_RING) / (R_TIP - R_RING);
+  if (t <= 0) return PETAL_DEG / 2;
+  if (t >= 1) return 0;
   /*
-   * 文字一律横排。
-   *
-   * 试过竖排和斜排，都不行：竖排会在左半圈倒着读，斜排（45°）的中文笔画
-   * 全是斜的，八瓣里还有四瓣歪向不同方向。横排是唯一既好读、又能在每个
-   * 圆环里放下两个字的排法 —— 层与层之间靠半径和切向同时错开来分。
-   *
-   * 横排就不需要转任何角度了：字本来就是正的。这里恒返回 0，留着这个
-   * 函数是因为 counter 那一层还要按它算偏移 —— 将来若要重新考虑斜排，
-   * 改动点也只在这一处。
+   * cos 让尖端收得干净（导数在 t=1 处不为零，收成尖角而不是圆头）；
+   * 指数 1.1 把「宽」往根部压，花瓣看起来才挺，不会被削成三角。
    */
-  return 0;
+  return (PETAL_DEG / 2) * Math.pow(Math.cos((Math.PI / 2) * Math.pow(t, 1.1)), 1.1);
 }
 
 /**
- * 一个花瓣的轮廓。
+ * 沿花瓣的一侧取一串采样点，从半径 rFrom 走到 rTo。
  *
- * 用四段三次贝塞尔描一个「叶瓣」：圆心 → 尖端 → 回到圆心。
- * 关键在于控制点要贴着自己那一侧走 —— 一开始我把控制点放在半径 R_TIP×0.62
- * 的弧上，那等于把花瓣从中间掐住，画出来是八根尖刺，不是八片叶。
+ * sign = -1 是左边界、+1 是右边界。两边的半角都取同一个 halfAngleAt(r)，
+ * 所以从哪里切、切多厚，两侧永远对称 —— 用错一边的话，画出来的瓣会
+ * 整片歪向一侧，像被风吹过。
  */
-function petalOutline(startDeg: number, endDeg: number): string {
+function sidePoints(
+  startDeg: number,
+  endDeg: number,
+  rFrom: number,
+  rTo: number,
+  sign: 1 | -1,
+): Array<{ x: number; y: number }> {
   const mid = (startDeg + endDeg) / 2;
-  const tip = polar(R_TIP, mid);
-  // 两侧谷底：就落在相邻两瓣的分界方向上
-  const valleyL = polar(R_VALLEY, startDeg);
-  const valleyR = polar(R_VALLEY, endDeg);
-  const f = (n: number) => n.toFixed(2);
+  const steps = 10;
+  const out: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i <= steps; i += 1) {
+    const r = rFrom + ((rTo - rFrom) * i) / steps;
+    out.push(polar(r, mid + sign * halfAngleAt(r)));
+  }
+  return out;
+}
 
-  /*
-   * 四段控制点，围出来的是一只饱满的叶瓣。
-   *
-   * 圆心 → 尖端：控制点要**贴着本瓣的边界**斜着拉出去，花瓣才会从腰部
-   * 鼓起来；如果把控制点放在中线上，画出来是一根细针。
-   * 尖端 → 谷底：反过来，控制点要往谷的方向收，尖端才不会变成一根刺。
-   */
-  const c1 = polar(R_TIP * 0.34, startDeg + PETAL_DEG * 0.06);
-  const c2 = polar(R_TIP * 0.88, mid - PETAL_DEG * 0.3);
-  const c3 = polar(R_TIP * 0.88, mid + PETAL_DEG * 0.3);
-  const c4 = polar(R_VALLEY, endDeg - PETAL_DEG * 0.1);
-
-  return [
-    `M ${CX} ${CY}`,
-    `C ${f(c1.x)} ${f(c1.y)} ${f(c2.x)} ${f(c2.y)} ${f(tip.x)} ${f(tip.y)}`,
-    `C ${f(c3.x)} ${f(c3.y)} ${f(c4.x)} ${f(c4.y)} ${f(valleyR.x)} ${f(valleyR.y)}`,
-    // 沿两瓣之间的山谷回到圆心，走一条略微内凹的弧，让腰部收得干净
-    `Q ${CX} ${CY} ${f(valleyL.x)} ${f(valleyL.y)}`,
-    'Z',
-  ].join(' ');
+/** 圆弧上的一串点，从 fromDeg 到 toDeg。 */
+function arcPoints(r: number, fromDeg: number, toDeg: number): Array<{ x: number; y: number }> {
+  const steps = 6;
+  const out: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i <= steps; i += 1) {
+    out.push(polar(r, fromDeg + ((toDeg - fromDeg) * i) / steps));
+  }
+  return out;
 }
 
 /**
- * 某一层花瓣的填充。
+ * 把一串点连成一条闭合路径。
  *
- * 做法：取「这一瓣的轮廓」与「半径区间 [rInner, rOuter] 的圆环」的交集。
- *
- * 直接用花瓣曲线按比例缩半径是不行的 —— 半径一小，花瓣就窄成一条，字放不下。
- * 交集则天然保留了每一层的真实形状：外层是贴着瓣边的宽叶，往里逐层变瘦，
- * 但每一层在该半径处的宽度就是花瓣本身的宽度，跟参考图那种「同心分层」一致。
- *
- * 交集没法直接写成一条 path，所以用 circle 的 clip 思路反过来做：
- * 这里只负责给出「花瓣形状 ∩ 圆环」，靠 SVG 的 clipPath 在渲染时完成裁切。
+ * 采样点足够密（每侧十段、每段弧六段），在 620px 的盘上每一小段只有几个
+ * 像素，看不出是折线。比硬凑贝塞尔稳：改半径、改胖瘦都不用重算控制点。
  */
-/**
- * 某一格的完整形状：外沿弧与内沿弧之间、被两条瓣侧夹住的那一块。
- *
- * 只用来接收指针 —— fill 设成透明，靠 pointer-events="all" 生效。
- * 为什么不能直接复用色块那条 path：命中测试看的是 path 自己的几何，
- * clipPath 不参与判定，所以三层的色块（d 都是整瓣轮廓）会互相盖死。
- *
- * 填法用 evenodd（不是 nonzero）：外沿顺时针、内沿逆时针不必刻意配平，
- * 两条环之间自然留空，就不必再挂一层 clipPath 去掉圆心那一块。
- */
-function tierBandPath(startDeg: number, endDeg: number, rOuter: number, rInner: number): string {
+function polyPath(points: Array<{ x: number; y: number }>): string {
   const f = (n: number) => n.toFixed(2);
+  return `M ${points.map((p) => `${f(p.x)} ${f(p.y)}`).join(' L ')} Z`;
+}
+
+/**
+ * 某一层的形状：花瓣在 [rInner, rOuter] 之间的那一段。
+ *
+ * 两条弧各按自己的半径画（外沿宽、内沿窄），两侧沿花瓣的边界收 ——
+ * 所以它不是「矩形转个角度」，而是一条上宽下窄的带子，正好贴合这一层。
+ */
+function petalBandPath(startDeg: number, endDeg: number, rOuter: number, rInner: number): string {
   const mid = (startDeg + endDeg) / 2;
-  /*
-   * 两层弧用同一套控制点比例（控制点落在本半径的 0.88 处、沿弧偏 0.3 个
-   * 瓣宽），和 petalOutline 里 valley 段那条贝塞尔是同一种走法 —— 这样
-   * 可点区域的边和画出来的瓣边严丝合缝，不会差出一圈缝。
-   */
-  const arc = (r: number) => {
-    const l = polar(r, startDeg);
-    const rp = polar(r, endDeg);
-    const c1 = polar(r * 0.88, mid - PETAL_DEG * 0.3);
-    const c2 = polar(r * 0.88, mid + PETAL_DEG * 0.3);
-    return { l, rp, c1, c2 };
-  };
-  const out = arc(rOuter);
-  const inn = arc(rInner);
-  return [
-    // 外沿：瓣左 → 瓣右
-    `M ${f(out.l.x)} ${f(out.l.y)}`,
-    `C ${f(out.c1.x)} ${f(out.c1.y)} ${f(out.c2.x)} ${f(out.c2.y)} ${f(out.rp.x)} ${f(out.rp.y)}`,
-    // 径向收到内沿，再由内沿弧走回来
-    `L ${f(inn.rp.x)} ${f(inn.rp.y)}`,
-    `C ${f(inn.c2.x)} ${f(inn.c2.y)} ${f(inn.c1.x)} ${f(inn.c1.y)} ${f(inn.l.x)} ${f(inn.l.y)}`,
-    'Z',
-  ].join(' ');
+  const wOuter = halfAngleAt(rOuter);
+  const wInner = halfAngleAt(rInner);
+  const points = [
+    // 外沿：左 → 右
+    ...arcPoints(rOuter, mid - wOuter, mid + wOuter),
+    // 右边界：外 → 内
+    ...sidePoints(startDeg, endDeg, rOuter, rInner, 1).slice(1),
+    // 内沿：右 → 左
+    ...arcPoints(rInner, mid + wInner, mid - wInner).slice(1),
+    // 左边界：内 → 外
+    ...sidePoints(startDeg, endDeg, rInner, rOuter, -1).slice(1, -1),
+  ];
+  return polyPath(points);
 }
 
-function ringPath(rOuter: number, rInner: number): string {
+/**
+ * 核心：一整块 45° 的扇形，从圆心到 R_RING。
+ *
+ * 八个扇形拼起来正好填满那个圆 —— 这就是「八种高强度情绪围成一个中心圆」
+ * 的几何含义。核心不能沿用花瓣的轮廓：花瓣在圆心处半角是 0，八个拼起来
+ * 中间会空出一朵风车，不成圆。
+ */
+function sectorPath(startDeg: number, endDeg: number, r: number): string {
   const f = (n: number) => n.toFixed(2);
-  // 外圆顺时针、内圆逆时针，中间的环形就是填充区（nonzero 规则）
+  const a = polar(r, startDeg);
+  const b = polar(r, endDeg);
   return [
-    `M ${CX} ${CY - rOuter}`,
-    `A ${f(rOuter)} ${f(rOuter)} 0 1 1 ${CX} ${CY + rOuter}`,
-    `A ${f(rOuter)} ${f(rOuter)} 0 1 1 ${CX} ${CY - rOuter}`,
-    `M ${CX} ${CY - rInner}`,
-    `A ${f(rInner)} ${f(rInner)} 0 1 0 ${CX} ${CY + rInner}`,
-    `A ${f(rInner)} ${f(rInner)} 0 1 0 ${CX} ${CY - rInner}`,
+    `M ${f(CX)} ${f(CY)}`,
+    `L ${f(a.x)} ${f(a.y)}`,
+    `A ${f(r)} ${f(r)} 0 0 1 ${f(b.x)} ${f(b.y)}`,
     'Z',
   ].join(' ');
 }
@@ -226,23 +200,23 @@ function ringPath(rOuter: number, rInner: number): string {
  */
 const TIER_BANDS: Record<number, { outer: number; inner: number }> = {
   0: { outer: R_TIP, inner: R_TIER1 },
-  1: { outer: R_TIER1, inner: R_TIER2 },
-  2: { outer: R_TIER2, inner: R_CORE },
+  1: { outer: R_TIER1, inner: R_RING },
+  2: { outer: R_RING, inner: 0 },
 };
 
 /**
- * 三层文字的落点（实测值）：半径 + 沿切向的偏移。
+ * 三层文字各自落在哪个半径上。
  *
- * 三个词不是沿一个方向排开的，而是"往里收 + 切向错开"一起用 —— 这样
- * 每个词都落在自己那个圆环的正中，前后、左右都不撞。
+ * 外两层差 39、中层到核心差 42 —— 看着比字盒（16 高）宽得多，但在左右两瓣
+ * 上「径向差」就是「水平间距」：两个 25 宽的词只留 14 个单位，再小就会贴上
+ * （上一版差 27 时实测只剩 1 个单位）。
+ *
+ * 核心那一层收到 66，贴着核心圆的边站成一圈，圆心留出颜色汇聚的那一块 ——
+ * 参考图也是这么排的。
  */
-const TIER_TEXT_GEO: Record<number, { r: number; shift: number }> = {
-  0: { r: 134, shift: 11 },
-  1: { r: 112, shift: 0 },
-  2: { r: 90, shift: -11 },
-};
-/** 三层各自的字号（viewBox 单位）。径向排布不受花瓣宽度限制，可以给足。 */
-const TIER_FONT: Record<number, number> = { 0: 12, 1: 12.5, 2: 12 };
+const TIER_TEXT_R: Record<number, number> = { 0: 147, 1: 108, 2: 66 };
+/** 三层各自的字号（viewBox 单位）。核心那一层略大一点，读作「这一瓣的顶」。 */
+const TIER_FONT: Record<number, number> = { 0: 12, 1: 12.5, 2: 13 };
 
 /** 取表里的值，永远给一个明确的兜底 —— 免得每个调用点都要处理 undefined。 */
 function tierValue(table: Record<number, number>, tierIndex: number, fallback: number): number {
@@ -579,49 +553,16 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
 
                 return (
                   <g key={petal.id} className="emotion-wheel-petal" data-petal={petal.family}>
-                    {/*
-                      描边单独画在最底层，填充不画。
-
-                      原来这道描边挂在「花瓣底色」那个 path 上，于是它同时是
-                      三层的共同底 —— 高亮某一层时，整片几何一起变色，看着像
-                      三格连成了一体。现在描边只管轮廓，填充交给每个可点的
-                      层自己画（.emotion-wheel-slice-shape），这样 hover、
-                      选中、聚焦才能只作用在被指着的那一格上。
-                    */}
-                    <path
-                      d={petalOutline(startDeg, endDeg)}
-                      fill="none"
-                      stroke={petal.edge}
-                      strokeWidth={1.6}
-                      strokeLinejoin="round"
-                      className="emotion-wheel-petal-outline"
-                      pointerEvents="none"
-                    />
-
                     {petal.tiers.map((tier, tierIndex) => {
                       const cellIndex = petalIndex * 3 + tierIndex;
                       const cell = EMOTION_CELLS[cellIndex] as EmotionCell;
-                      const band = TIER_BANDS[tierIndex] ?? { outer: R_TIER2, inner: R_CORE };
-                      const clipId = `${titleId}-t${petalIndex}-${tierIndex}`;
+                      const band = TIER_BANDS[tierIndex] ?? { outer: R_RING, inner: 0 };
                       /*
-                       * 三层落在哪：先沿瓣中线取到锚点，再沿「层叠方向」
-                       * 偏移 —— 外圈朝外、内圈朝内、中层居中。
-                       *
-                       * 偏移是垂直或平行于瓣轴线的方向（见 layerShiftAngle），
-                       * 所以外层往外推 SPACING、内层往里收 SPACING，三层在
-                       * 画面上就是整齐的一列（或一行），间距恒定。
+                       * 核心那一层没有内沿：它一直铺到圆心，是这八个花瓣共同的
+                       * 底盘。其余两层是「外沿弧到内沿弧」的一条环带。
                        */
-                      /*
-                       * 三层的落点，全是写死的：外 / 中 / 内 = 半径 134 / 112 / 90，
-                       * 各自沿瓣中线（切向）让开 11 / 0 / -11。
-                       *
-                       * 这些数是量出来的，不是推出来的 —— 字盒实测 25×16（两个字），
-                       * 而这一瓣在 r=112 处切向只有 33 单位、径向有 44 单位，所以
-                       * 三个词能排开，靠的是"切向错开 ±11、径向同时收 22"，两个方向
-                       * 一起用。只错一个方向，半径小的地方就一定会顶到隔壁层。
-                       */
-                      const tierGeo = TIER_TEXT_GEO[tierIndex] ?? { r: 90, shift: -11 };
-                      const anchor = polar(tierGeo.r, midDeg + tierGeo.shift);
+                      const solidCore = band.inner <= 0;
+                      const anchor = polar(tierValue(TIER_TEXT_R, tierIndex, 111), midDeg);
                       const isActive = lockedId === cell.id;
                       const isDimmed = lockedId !== null && !isActive;
                       const isTop = petalIndex === pointerPetal && tierIndex === DEFAULT_TIER;
@@ -685,95 +626,41 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
                           }
                         >
                           {/*
-                            这一层的填充：花瓣轮廓 ∩ 半径区间。
+                            这一格的形状 —— 一条 path 既是色块，也是可点区域。
 
-                            不用「把花瓣曲线按比例缩半径」那一套 —— 半径一小
-                            花瓣就窄成一条，内层会缩成一根尖刺，字放不下。
-                            这里让 clipPath 取圆环，形状用整瓣的轮廓，交集
-                            自然就是「贴着瓣边、按半径切开」的那一块，
-                            和参考图那种同心分层是同一种结构。
-                          */}
-                          <clipPath id={clipId}>
-                            <path d={ringPath(band.outer, band.inner)} />
-                          </clipPath>
-                          <clipPath id={`${clipId}-petal`}>
-                            <path d={petalOutline(startDeg, endDeg)} />
-                          </clipPath>
+                            以前这里是「整瓣轮廓 + clipPath 取圆环」，同一个格子
+                            要画两条 path（一条上色、一条透明接点击），因为
+                            命中测试只认 path 自己的几何。现在带子的路径是直接
+                            算出来的，画出来的形状就是点得到的形状，一条够。
 
-                          {/*
-                            可点区域 —— 必须单独再画一遍，不能指望上面那个被裁过的色块。
-
-                            命中测试看的是 path 自己的几何，clipPath 只影响绘制：
-                            那个 <path> 的 d 是整瓣轮廓，于是三层的可点区域都是
-                            同一整瓣，谁在上面谁吃掉全部点击（实测内层把外两层
-                            全盖住了）。这里按「外沿弧 + 两条瓣侧」画出这一层真正的
-                            范围，再用 clipPath 把圆环以内切掉，正好剩下这一格。
-
-                            填充是透明的，但 pointer-events="all" 让它照样接收指针 ——
-                            视觉上什么也没多，可点区域和看得见的那块终于对上了。
+                            核心那一层不是带子，是扇形：八个扇形拼成一个整圆。
                           */}
                           <path
-                            d={tierBandPath(startDeg, endDeg, band.outer, band.inner)}
-                            fill="transparent"
-                            stroke="none"
-                            fillRule="evenodd"
-                            pointerEvents="all"
+                            d={
+                              solidCore
+                                ? sectorPath(startDeg, endDeg, band.outer)
+                                : petalBandPath(startDeg, endDeg, band.outer, band.inner)
+                            }
+                            fill={petal.color}
+                            stroke={petal.edge}
+                            strokeWidth={0.9}
+                            strokeOpacity={0.5}
+                            strokeLinejoin="round"
+                            className="emotion-wheel-slice-shape"
                           />
 
-                          <g clipPath={`url(#${clipId})`}>
-                            <path
-                              d={petalOutline(startDeg, endDeg)}
-                              fill={petal.color}
-                              stroke="none"
-                              className="emotion-wheel-slice-shape"
-                            />
-                          </g>
                           {/*
-                            分界线：这一层的内沿。
+                            词一律横排、且不动。
 
-                            三个裁剪条件缺一不可 —— 圆环（不然整圈都在）、
-                            花瓣（不然横穿旁边的空白）、以及排除圆心那一块。
-                            放在被裁的组外面画，是因为它正好压在裁剪边界上，
-                            放进去会被自己那刀裁掉一半。
-                          */}
-                          <g clipPath={`url(#${clipId}-petal)`} pointerEvents="none">
-                            <circle
-                              r={band.inner}
-                              cx={CX}
-                              cy={CY}
-                              fill="none"
-                              stroke={petal.edge}
-                              strokeWidth={1.2}
-                              strokeOpacity={0.62}
-                              className="emotion-wheel-divider"
-                            />
-                          </g>
+                            三层靠半径分开（147 / 108 / 66），差着 39 和 42，
+                            比一个字盒（16 高）宽得多，所以不需要任何角度上的
+                            技巧。上一版在切向上错开 ±11 的做法也随之取消了。
 
-                          {/*
-                            词的方向：横切半径，但要保证「正着读」。
-
-                            最早试过三种，只有最后这种排得开：
-
-                            1. 水平横排 —— 斜向花瓣在同一半径上只剩一条斜缝，
-                               两个字放不下，出界。
-                            2. 沿半径竖着排 —— 字能放下，但两个字要占 20 多个
-                               单位长，而层与层的间距只有 22~25 单位，同一瓣
-                               三层的词首尾相接，糊成一条（"伤感悲伤悲痛"）。
-                            3. 横切半径（现在这种）—— 文字基线垂直于这一瓣的
-                               中轴线，正好压在圆环的切线方向上。每个词只占
-                               一个字的宽度（约 12 单位）在径向上，三层之间
-                               因此稳稳隔开；切向那边由花瓣的宽度兜底，
-                               外宽内窄，正好对上字号由大到小。
-
-                            再加一步翻正：切向角度如果让字上下颠倒，就翻 180°，
-                            让它落在「右半边朝外、左半边朝内」这个可读区间。
-                            原图里八瓣的字也都是正立或轻微倾斜，没有倒着的。
+                            外层那个 -spinGroup 是抵消盘面的转动：盘在转，
+                            字不能跟着转，否则读不了。
                           */}
                           <g transform={`translate(${anchor.x.toFixed(2)} ${anchor.y.toFixed(2)})`} pointerEvents="none">
-                            <g
-                              className="emotion-wheel-counter"
-                              style={{ transform: `rotate(${-spinGroup + uprightDeg(midDeg)}deg)` }}
-                            >
+                            <g className="emotion-wheel-counter" style={{ transform: `rotate(${-spinGroup}deg)` }}>
                               <g key={`label-${cell.id}`} className="emotion-wheel-slice-caption">
                                 <text
                                   textAnchor="middle"
@@ -809,6 +696,22 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
                   </g>
                 );
               })}
+
+              {/*
+                核心圆的那道白圈。
+
+                它就是参考图里最里面那个圆 —— 圈内是八种高强度情绪，圈外
+                才开始分层。半径取高强度层的外沿，正好压在那条分界上；
+                pointer-events 关掉，它只管好看，不跟底下的格子抢点击。
+              */}
+              <circle
+                cx={CX}
+                cy={CY}
+                r={R_RING}
+                fill="none"
+                className="emotion-wheel-core-ring"
+                pointerEvents="none"
+              />
 
               {/*
                 复合情绪：八个只读标签，落在相邻两瓣的夹角上。

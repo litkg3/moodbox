@@ -1895,6 +1895,16 @@ html[data-theme='night'] .orb-surface {
 
 .emotion-wheel-slice {
   cursor: pointer;
+  /*
+   * 缩放要以「这一格自己的中心」为原点。
+   *
+   * SVG 里 transform-origin 默认是 (0,0)，也就是 viewBox 的左上角 ——
+   * 沿着它 scale(1.045)，一格里离左上角越远的点被推得越远：实测悬停一格
+   * 会整体窜出去 13~16px。看起来像被吸走，鼠标还常常因此离开这一格，
+   * hover 一进一出地闪。
+   */
+  transform-box: fill-box;
+  transform-origin: center;
   transition:
     transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
     opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1);
@@ -2037,6 +2047,17 @@ html[data-theme='night'] .emotion-wheel-slice-shape {
 }
 
 /*
+ * 核心那一块在夜里要稍微亮一点。
+ *
+ * 外面两层压暗是为了沉进夜空，但核心现在是一整块实心圆 —— 跟着一起压，
+ * 它就会和花瓣糊成同一片，只剩那道白圈在划界。留一档亮度差，中心才
+ * 看得出来是「圆心」。
+ */
+html[data-theme='night'] .emotion-wheel-slice[data-tier='2'] .emotion-wheel-slice-shape {
+  filter: saturate(0.86) brightness(1.02);
+}
+
+/*
  * 悬停/被点中那一格的提亮，要在夜间的基础上叠加，不能把上面那条覆盖掉。
  *
  * 白天那几条悬停规则本来就写了 filter（brightness / saturate / drop-shadow），
@@ -2063,42 +2084,52 @@ html[data-theme='night'] .emotion-wheel-slice-top .emotion-wheel-slice-shape {
  * 所以换一瓣就换一套色，两套主题共用同一份几何。
  * --------------------------------------------------------------- */
 
-/* 花瓣轮廓：比层分界线重一点，让八瓣的边界先立住 */
-.emotion-wheel-petal-outline {
+/*
+ * 层分界线现在由每条带子自己的描边画出来（见组件里的 stroke 属性），
+ * 不再单独画圆环 —— 圆环只有落在花瓣内部的那一段才该出现，用描边天然
+ * 就是这个效果，还省掉一次裁剪。
+ */
+
+/*
+ * 核心圆的白圈。
+ *
+ * 参考图里最里面那块是一整块实心圆，靠一道白线跟外面的花瓣分开 ——
+ * 没有这道线，八瓣的颜色连成一片，读不出「这里是圆心」。
+ * 白日用纯白压住彩色，夜里换成淡紫白、透明度降下来，免得刺眼。
+ */
+.emotion-wheel-core-ring {
+  stroke: #ffffff;
+  stroke-width: 2.4;
+  opacity: 0.78;
   transition: opacity 0.45s ease;
 }
 
-/* 层分界线：图上那种「越往里越深」的分格，保持很轻，不抢字 */
-.emotion-wheel-divider {
-  transition: opacity 0.45s ease;
-}
-
-/* 选中某一格时，同族的其他格子淡下去；分界线也一起淡，免得留在上面 */
-.emotion-wheel.has-active .emotion-wheel-divider {
-  opacity: 0.5;
+html[data-theme='night'] .emotion-wheel-core-ring {
+  stroke: #efe9ff;
+  opacity: 0.42;
 }
 
 /*
- * 手机端：只显示最外层那一圈字，里面两圈只留色块。
+ * 手机端：三层都留着，只把字号压一档。
  *
- * 400 单位里要塞 24 个词，缩到手机宽度后每层字号只有 10px 上下，
- * 三行叠在一起就糊成一片 —— 放大盘也只够多挤出 1px，解决不了。
+ * 上一版这里是「只显示最外圈」—— 因为当时三层只靠 22 个单位拉开，
+ * 缩到手机宽度就糊成一片。现在三层分开在 96 / 126 / 164 的半径上，
+ * 间距够了，藏起来反而把「核心」这个最重要的结构丢掉了。
  *
- * 取舍是「看得清」优先于「一次看全」：外圈的字保留，里两圈的字藏起来，
- * 点一下那一格，卡片里会把这个词、它属于哪一瓣、强度第几层一起说清楚。
- * 盘面这时候仍然有三层的色块深浅，结构一眼看得见。
+ * 字号用 em 跟着盘一起缩：盘宽 94vw 时 12 个单位大约等于 11px，
+ * 再小就难认了，所以只在最窄的那档再压 1px。
  */
 @media (max-width: 767px) {
-  .emotion-wheel-slice[data-tier='1'] .emotion-wheel-slice-caption,
-  .emotion-wheel-slice[data-tier='2'] .emotion-wheel-slice-caption {
-    /*
-     * 必须是 display: none，不能用 opacity: 0。
-     *
-     * .emotion-wheel-slice-caption 上挂着一个入场动画（keyframes 里写的就是
-     * opacity 0→1），动画运行期间它的优先级盖过普通声明 —— 实测写
-     * opacity: 0 之后计算值仍然是 1，字照样显示。
-     */
-    display: none;
+  /*
+   * 手机上盘只有 366px 左右，12 个单位的字落下来刚好 11px。三层一起显示时
+   * 左右两瓣的两层词会挨得太近（径向差 34 单位 ≈ 31px，而字宽 25 单位），
+   * 所以中层再收 1px，给两侧留出呼吸的位置。
+   *
+   * 核心那一层不收：它是这一版的主角，而且离得最远，不缺空间。
+   */
+  .emotion-wheel-slice[data-tier='0'] .emotion-wheel-slice-label,
+  .emotion-wheel-slice[data-tier='1'] .emotion-wheel-slice-label {
+    font-size: 11px;
   }
 }
 
