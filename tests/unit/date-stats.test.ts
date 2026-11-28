@@ -8,7 +8,12 @@ import {
   toDateKey,
   todayKey,
 } from '@/lib/date';
-import { buildDaySummary, buildMonthStats, groupEmotionLogsByDate } from '@/lib/stats';
+import {
+  buildDaySummary,
+  buildEmotionComposition,
+  buildMonthStats,
+  groupEmotionLogsByDate,
+} from '@/lib/stats';
 import type { EmotionLog, MemoryRecord } from '@/types';
 
 function log(id: string, emotionId: EmotionLog['emotionId'], date: string, createdAt: string): EmotionLog {
@@ -153,5 +158,38 @@ describe('旧情绪 id 的兼容', () => {
     expect(ids).not.toContain('worry');
     expect(ids).toContain('numbness');
     expect(ids).toContain('anxiety');
+  });
+});
+
+describe('情绪构成（这些天出现过的情绪）', () => {
+  it('按次数降序，占比之和为 1', () => {
+    const logs = [
+      log('a', 'joy', '2026-11-10', '2026-11-10T09:00:00.000Z'),
+      log('b', 'joy', '2026-11-11', '2026-11-11T09:00:00.000Z'),
+      log('c', 'anxiety', '2026-11-12', '2026-11-12T09:00:00.000Z'),
+      log('d', 'lost', '2026-11-12', '2026-11-12T10:00:00.000Z'),
+      log('e', 'lost', '2026-11-12', '2026-11-12T11:00:00.000Z'),
+      log('f', 'numbness', '2026-11-12', '2026-11-12T12:00:00.000Z'),
+    ];
+    const shares = buildEmotionComposition(logs);
+    // 次数相同时按情绪 id 排，保证每次渲染顺序稳定
+    expect(shares.map((item) => item.id)).toEqual(['joy', 'lost', 'anxiety', 'numbness']);
+    expect(shares.map((item) => item.count)).toEqual([2, 2, 1, 1]);
+    expect(shares.reduce((sum, item) => sum + item.share, 0)).toBeCloseTo(1);
+    expect(shares[0]?.share).toBeCloseTo(2 / 6);
+  });
+
+  it('已下线的球收敛到现存的那一颗，不会变成没名字的空行', () => {
+    const legacy = ['emo', 'worry', 'fear'] as unknown as EmotionLog['emotionId'][];
+    const logs = legacy.map((emotionId, index) =>
+      log(`l${index}`, emotionId, '2026-11-12', `2026-11-12T0${index}:00:00.000Z`),
+    );
+    const shares = buildEmotionComposition(logs);
+    expect(shares.map((item) => item.id).sort()).toEqual(['anxiety', 'numbness']);
+    expect(shares.find((item) => item.id === 'anxiety')?.count).toBe(2);
+  });
+
+  it('空记录给出空构成，而不是 NaN', () => {
+    expect(buildEmotionComposition([])).toEqual([]);
   });
 });

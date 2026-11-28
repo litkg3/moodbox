@@ -263,9 +263,49 @@ test('情绪足迹里能看到当天收藏的快乐', async ({ page }) => {
   await expect(page.getByText('今天在便利店遇到了很久没见的朋友。').first()).toBeVisible();
   await expect(page.getByRole('button', { name: /1 份快乐记忆/ }).first()).toBeVisible();
 
-  // 「这些天出现过的情绪」那块横条排行已经删掉 —— 它只是「最常出现的情绪」那张数字卡的展开
-  await expect(page.getByText('这些天出现过的情绪')).toHaveCount(0);
+  // 「这些天出现过的情绪」回来了：当日没有情绪记录，它给一段说明，而不是整块消失
+  const composition = page.locator('section[aria-labelledby="weekly-emotions-title"]');
+  await expect(composition.getByRole('heading', { name: '这些天出现过的情绪' })).toBeVisible();
+  await expect(composition).toContainText('近七日 · 共 0 次');
+  await expect(composition).toContainText('还没有记录。回到主页点开一颗情绪球');
   await expect(page.getByText('最常出现的情绪').first()).toBeVisible();
+});
+
+/*
+ * 「记录了情绪，页面上却显示没有」。
+ *
+ * 界面曾经在两种情况下把记录吞掉：初始化读库回来时整份覆盖快照（读的是几分钟前
+ * 那一刻的库），以及情绪记录缺 date 时被 by-date 索引漏掉。这条用例走完整链路：
+ * 在面板里记一次 → 重新打开情绪足迹 → 数字卡、情绪构成、当天详情三处都要认它。
+ */
+test('记录情绪之后，情绪足迹里能看到这条记录', async ({ page }) => {
+  await openHome(page);
+
+  // 小球一直在飘，鼠标点会被判成「元素不稳定」；焦点 + 回车走的是同一条路径
+  await page.getByRole('button', { name: /^开心：/ }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog', { name: /开心/ })).toBeVisible();
+
+  await page.getByRole('button', { name: '记录此刻的情绪' }).click();
+  await expect(page.getByText('已收进今天的情绪里')).toBeVisible();
+
+  await gotoHydrated(page, '/calendar');
+  await expect(page.getByRole('heading', { name: '情绪足迹' })).toBeVisible();
+
+  // 三张数字卡：这次记录被算进「记录了情绪的天数」
+  const weekly = page.locator('section[aria-labelledby="weekly-summary-title"]');
+  await expect(weekly).toContainText('记录了情绪的天数');
+  await expect(weekly).toContainText('共 1 次');
+  await expect(page.getByText('最常出现的情绪').first()).toBeVisible();
+
+  // 情绪构成：认这条记录，共 1 次
+  const composition = page.locator('section[aria-labelledby="weekly-emotions-title"]');
+  await expect(composition.getByRole('heading', { name: '这些天出现过的情绪' })).toBeVisible();
+  await expect(composition).toContainText('近七日 · 共 1 次');
+  await expect(composition.getByText('开心').first()).toBeVisible();
+
+  // 当天详情里挂着这条情绪，可以单独删掉
+  await expect(page.getByRole('button', { name: '删除 开心 这条情绪记录' })).toBeVisible();
 });
 
 test('可以导出全部数据为一份备份文件', async ({ page }) => {

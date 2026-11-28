@@ -16,6 +16,29 @@ export interface EmotionCount {
   count: number;
 }
 
+/** 一段记录里的情绪构成：按次数降序，share 是占总次数的比例（0–1）。 */
+export interface EmotionShare extends EmotionCount {
+  share: number;
+}
+
+/**
+ * 把一组情绪记录折成「哪种情绪、几次、占多少」。
+ *
+ * 已下线的球（EMO / 担心 / 害怕）在这里收敛到现存的那一颗，
+ * 否则旧记录会在构成里变成一个没有名字的空行。
+ */
+export function buildEmotionComposition(logs: EmotionLog[]): EmotionShare[] {
+  const counter = new Map<EmotionId, number>();
+  for (const log of logs) {
+    const id = normalizeEmotionId(log.emotionId);
+    counter.set(id, (counter.get(id) ?? 0) + 1);
+  }
+  const total = logs.length || 1;
+  return [...counter.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([id, count]) => ({ id, count, share: count / total }));
+}
+
 export interface MonthStats {
   /** 本月有情绪记录的天数（只统计用户主动记录的日子） */
   recordedDays: number;

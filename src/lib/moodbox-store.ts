@@ -59,6 +59,30 @@ class MoodBoxStore {
   private snapshot: MoodBoxSnapshot = INITIAL_SNAPSHOT;
   private listeners = new Set<() => void>();
   private initPromise: Promise<void> | null = null;
+  /**
+   * 「读库 → 写快照」和「写库 → 写快照」排成一条队列。
+   *
+   * 不做这一步会有一种很难复现、但用户一定会遇到的错：
+   * 打开页面时 `init()` 先把三条读请求发出去（记忆里有图片时，读要几百毫秒），
+   * 这期间用户点开一颗球、按下「记录此刻的情绪」，记录已经写进库、也进了快照；
+   * 等那三条读请求回来，`init()` 拿**几分钟前那一刻**的结果整份覆盖快照，
+   * 刚记下的情绪就从界面上消失了 —— 刷新才会回来。
+   *
+   * 串行之后，读和写不会再交错：要么读在写之前（写完会再补一次快照），
+   * 要么读在写之后（读到的是含新记录的库）。代价只是「库里还没读完时按下的
+   * 那一下」会多等一个读的时间，换来的是记录不会凭空消失。
+   */
+  private queue: Promise<unknown> = Promise.resolve();
+
+  /** 把一段必须独占数据的异步任务排进队列，前一段结束（无论成败）后执行。 */
+  private enqueue<T>(task: () => Promise<T>): Promise<T> {
+    const next = this.queue.then(task, task);
+    this.queue = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -90,7 +114,7 @@ class MoodBoxStore {
     }
 
     this.emit({ status: 'loading' });
-    this.initPromise = (async () => {
+    this.initPromise = this.enqueue(async () => {
       try {
         // 先把上次没等到「自己飘回来」的捏爆收尾，再把天空一次性读出来。
         // 顺序不能反：如果先读 bursts，界面会先少一颗球再补回来，闪一下。
@@ -106,75 +130,93 @@ class MoodBoxStore {
           status: 'error',
           error: error instanceof Error ? error.message : '读取本地数据失败。',
         });
-      } finally {
-        this.initPromise = null;
       }
-    })();
+    }).finally(() => {
+      this.initPromise = null;
+    });
 
     return this.initPromise;
   }
 
   async reload(): Promise<void> {
-    const [memories, emotionLogs, bursts] = await Promise.all([
-      listMemories(),
-      listEmotionLogs(),
-      listBursts(),
-    ]);
-    this.emit({ status: 'ready', memories, emotionLogs, bursts, error: null });
+    await this.enqueue(async () => {
+      const [memories, emotionLogs, bursts] = await Promise.all([
+        listMemories(),
+        listEmotionLogs(),
+        listBursts(),
+      ]);
+      this.emit({ status: 'ready', memories, emotionLogs, bursts, error: null });
+    });
   }
 
   async addMemory(draft: MemoryDraft): Promise<MemoryRecord> {
-    const record = await createMemory(draft);
-    this.emit({
-      status: 'ready',
-      memories: sortMemories([record, ...this.snapshot.memories]),
+    return this.enqueue(async () => {
+      const record = await createMemory(draft);
+      this.emit({
+        status: 'ready',
+        memories: sortMemories([record, ...this.snapshot.memories]),
+      });
+      return record;
     });
-    return record;
   }
 
   async editMemory(id: string, patch: Partial<MemoryDraft>): Promise<MemoryRecord> {
-    const updated = await updateMemory(id, patch);
-    this.emit({
-      memories: sortMemories(
-        this.snapshot.memories.map((memory) => (memory.id === id ? updated : memory)),
-      ),
+    return this.enqueue(async () => {
+      const updated = await updateMemory(id, patch);
+      this.emit({
+        memories: sortMemories(
+          this.snapshot.memories.map((memory) => (memory.id === id ? updated : memory)),
+        ),
+      });
+      return updated;
     });
-    return updated;
   }
 
   async removeMemory(id: string): Promise<void> {
-    await deleteMemory(id);
-    this.emit({ memories: this.snapshot.memories.filter((memory) => memory.id !== id) });
+    await this.enqueue(async () => {
+      await deleteMemory(id);
+      this.emit({ memories: this.snapshot.memories.filter((memory) => memory.id !== id) });
+    });
   }
 
   async checkInEmotion(emotionId: EmotionId, date = toDateKey(new Date())): Promise<EmotionLog> {
     const safeDate = isValidDateKey(date) ? date : toDateKey(new Date());
-    const log = await addEmotionLog(emotionId, safeDate);
-    this.emit({ emotionLogs: sortLogs([log, ...this.snapshot.emotionLogs]) });
-    return log;
+    return this.enqueue(async () => {
+      const log = await addEmotionLog(emotionId, safeDate);
+      this.emit({ status: 'ready', emotionLogs: sortLogs([log, ...this.snapshot.emotionLogs]) });
+      return log;
+    });
   }
 
   async removeEmotionLog(id: string): Promise<void> {
-    await deleteEmotionLog(id);
-    this.emit({ emotionLogs: this.snapshot.emotionLogs.filter((log) => log.id !== id) });
+    await this.enqueue(async () => {
+      await deleteEmotionLog(id);
+      this.emit({ emotionLogs: this.snapshot.emotionLogs.filter((log) => log.id !== id) });
+    });
   }
 
   async clearEverything(): Promise<void> {
-    await clearAllData();
-    this.emit({ memories: [], emotionLogs: [], bursts: [], status: 'ready', error: null });
+    await this.enqueue(async () => {
+      await clearAllData();
+      this.emit({ memories: [], emotionLogs: [], bursts: [], status: 'ready', error: null });
+    });
   }
 
   /** 捏爆一颗球：从天空里拿掉，并记住这个决定。 */
   async burst(emotionId: EmotionId): Promise<void> {
-    await addBurst(emotionId);
-    if (this.snapshot.bursts.includes(emotionId)) return;
-    this.emit({ bursts: [...this.snapshot.bursts, emotionId] });
+    await this.enqueue(async () => {
+      await addBurst(emotionId);
+      if (this.snapshot.bursts.includes(emotionId)) return;
+      this.emit({ bursts: [...this.snapshot.bursts, emotionId] });
+    });
   }
 
   /** 让所有散去的球回到天上。 */
   async restoreBursts(): Promise<void> {
-    await clearBursts();
-    this.emit({ bursts: [] });
+    await this.enqueue(async () => {
+      await clearBursts();
+      this.emit({ bursts: [] });
+    });
   }
 
   /**
@@ -185,8 +227,10 @@ class MoodBoxStore {
    */
   async restoreBurst(emotionId: EmotionId): Promise<void> {
     if (!this.snapshot.bursts.includes(emotionId)) return;
-    await removeBurst(emotionId);
-    this.emit({ bursts: this.snapshot.bursts.filter((id) => id !== emotionId) });
+    await this.enqueue(async () => {
+      await removeBurst(emotionId);
+      this.emit({ bursts: this.snapshot.bursts.filter((id) => id !== emotionId) });
+    });
   }
 
   /** 供导入等批量写入后刷新快照 */

@@ -1,5 +1,5 @@
 import { getDB, toStorageError } from '@/lib/db';
-import { toDateKey } from '@/lib/date';
+import { isValidDateKey, toDateKey } from '@/lib/date';
 import { createId } from '@/lib/utils';
 import type { EmotionId, EmotionLog, MemoryMoodId, MemoryRecord } from '@/types';
 
@@ -29,10 +29,35 @@ export async function listMemories(): Promise<MemoryRecord[]> {
   }
 }
 
+/**
+ * 一条情绪记录该落在哪一天。
+ *
+ * 正常写入时 `date` 一定是 `yyyy-MM-dd`；但备份导入、早期版本、手工改过的库
+ * 都可能带来缺字段或格式不对的记录。这类记录在 `by-date` 索引里根本不存在，
+ * 用 `getAllFromIndex` 读就等于把它们从时间线上悄悄抹掉 ——
+ * 用户看到的是「我明明记过，日历上却没有」。所以这里补一次：缺日期就用
+ * `createdAt` 回推本地日期，实在推不出来才算今天。
+ */
+export function resolveEmotionLogDate(log: EmotionLog): EmotionLog {
+  if (isValidDateKey(log.date)) return log;
+  const created = typeof log.createdAt === 'string' ? new Date(log.createdAt) : null;
+  if (created && !Number.isNaN(created.getTime())) {
+    return { ...log, date: toDateKey(created) };
+  }
+  return { ...log, date: toDateKey(new Date()) };
+}
+
 export async function listEmotionLogs(): Promise<EmotionLog[]> {
   try {
     const db = await getDB();
-    return db.getAllFromIndex('emotionLogs', 'by-date');
+    // 不用 by-date 索引读：以日期为索引键的记录，缺日期就整条读不到。
+    // 全部取出来再补日期、排序，记录一条都不会丢。
+    const all = await db.getAll('emotionLogs');
+    return all
+      .map(resolveEmotionLogDate)
+      .sort((a, b) =>
+        a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : b.date.localeCompare(a.date),
+      );
   } catch (error) {
     throw toStorageError(error);
   }

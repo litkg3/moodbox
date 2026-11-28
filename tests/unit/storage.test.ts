@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearAllData, createMemory, deleteMemory, listEmotionLogs, listMemories, updateMemory } from '@/lib/memories-repo';
+import { getDB } from '@/lib/db';
+import { toDateKey } from '@/lib/date';
+import type { EmotionLog } from '@/types';
 import { addEmotionLog } from '@/lib/memories-repo';
 import {
   buildExportPayload,
@@ -55,6 +58,33 @@ describe('记忆仓储（IndexedDB）', () => {
     const logs = await listEmotionLogs();
     expect(logs).toHaveLength(2);
     expect(logs.map((log) => log.emotionId).sort()).toEqual(['anxiety', 'joy']);
+  });
+
+  /*
+   * 「我明明记过，日历上却没有」的另一半原因：
+   * by-date 索引只认 date 字段，缺了它的记录用 getAllFromIndex 根本读不到。
+   * 这类记录可能来自早期的库结构或手工改过的备份 —— 读的时候要补回那一天，
+   * 而不是让它在时间线上凭空消失。
+   */
+  it('缺日期的情绪记录不会消失，按 createdAt 补回本地那一天', async () => {
+    const db = await getDB();
+    await db.put('emotionLogs', {
+      id: 'log_without_date',
+      emotionId: 'joy',
+      createdAt: '2026-11-10T23:30:00.000Z',
+    } as unknown as EmotionLog);
+
+    const logs = await listEmotionLogs();
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.id).toBe('log_without_date');
+    expect(logs[0]?.date).toBe(toDateKey(new Date('2026-11-10T23:30:00.000Z')));
+  });
+
+  it('情绪记录按日期倒序返回，同一天按记录时间倒序', async () => {
+    await addEmotionLog('joy', '2026-11-10');
+    await addEmotionLog('anxiety', '2026-11-12');
+    const logs = await listEmotionLogs();
+    expect(logs.map((log) => log.date)).toEqual(['2026-11-12', '2026-11-10']);
   });
 
   it('编辑不存在的记录会给出明确错误', async () => {

@@ -4,10 +4,10 @@ import { useMemo } from 'react';
 import { subDays } from 'date-fns';
 import { Sparkles } from 'lucide-react';
 import { EMOTIONS } from '@/data/emotions';
-import { EMOTION_MAP, normalizeEmotionId } from '@/lib/emotions';
+import { EMOTION_MAP } from '@/lib/emotions';
+import { buildEmotionComposition } from '@/lib/stats';
 import { useMoodBox } from '@/hooks/use-moodbox';
 import { parseDateKey, toDateKey, todayKey } from '@/lib/date';
-import type { EmotionId } from '@/types';
 
 /** 近七日。日期键按本地时区生成，和情绪记录用的是同一套口径。 */
 function buildRange(): string[] {
@@ -45,14 +45,19 @@ export function WeeklySummary() {
       count: logs.filter((log) => log.date === date).length,
     }));
 
-    const counter = new Map<EmotionId, number>();
-    for (const log of logs) {
-      // 已下线的球（EMO / 担心）按最接近的现存情绪计入，旧记录不会凭空消失
-      const id = normalizeEmotionId(log.emotionId);
-      counter.set(id, (counter.get(id) ?? 0) + 1);
-    }
-    const ranked = [...counter.entries()].sort((a, b) => b[1] - a[1]);
+    // 情绪构成：已下线的球在 buildEmotionComposition 里收敛到现存的那一颗
+    const ranked = buildEmotionComposition(logs);
     const maxDay = Math.max(1, ...byDay.map((day) => day.count));
+
+    /*
+     * 这七天之外、用户自己记下的次数。
+     *
+     * 只用来说清楚一件事：构成表空着，不代表记录没了 —— 它们可能在更早的日子。
+     * 示例数据不算「你记的」，所以排除掉。
+     */
+    const earlierOwnCount = emotionLogs.filter(
+      (log) => !log.isDemo && !inRange.has(log.date),
+    ).length;
 
     return {
       range,
@@ -60,6 +65,7 @@ export function WeeklySummary() {
       byDay,
       ranked,
       maxDay,
+      earlierOwnCount,
       recordedDays: byDay.filter((day) => day.count > 0).length,
       memoryCount: weekMemories.length,
       top: ranked[0] ?? null,
@@ -67,7 +73,7 @@ export function WeeklySummary() {
   }, [emotionLogs, memories]);
 
   const loading = status === 'idle' || status === 'loading';
-  const topEmotion = model.top ? EMOTION_MAP[model.top[0]] : null;
+  const topEmotion = model.top ? EMOTION_MAP[model.top.id] : null;
 
   return (
     <section aria-labelledby="weekly-summary-title" className="mt-8">
@@ -109,7 +115,7 @@ export function WeeklySummary() {
             <StatCard
               label="最常出现的情绪"
               value={topEmotion ? topEmotion.label : '—'}
-              detail={model.top ? `${model.top[1]} 次` : '还没有记录'}
+              detail={model.top ? `${model.top.count} 次` : '还没有记录'}
               tint={topEmotion?.palette.mid}
             />
           </section>
@@ -141,6 +147,74 @@ export function WeeklySummary() {
                 );
               })}
             </div>
+          </section>
+
+          {/* 情绪构成 */}
+          {/*
+            这块曾经删过一版，理由是「它只是『最常出现的情绪』那张卡的展开」。
+            可删掉之后，用户记完情绪回来，页面上找不到「我记的那几种」——
+            卡片只报一个冠军，第二名往后全看不见。所以它回来了：
+            按次数排，横条长度就是占比，没有评分，也没有名次。
+
+            空的时候不整块隐藏。隐藏会让人以为功能没了 / 记录丢了；
+            这里留一段话，说清楚「这七天没有」和「更早有 N 次」的区别。
+          */}
+          <section
+            aria-labelledby="weekly-emotions-title"
+            className="mb-surface rounded-[24px] p-6 sm:p-7"
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <h3 id="weekly-emotions-title" className="text-[13px] tracking-[0.1em] text-ink">
+                这些天出现过的情绪
+              </h3>
+              <p className="text-[11px] tabular-nums text-ink-ghost">
+                近七日 · 共 {model.logs.length} 次
+              </p>
+            </div>
+
+            {model.ranked.length > 0 ? (
+              <>
+                <ul className="mt-5 space-y-3">
+                  {model.ranked.map(({ id, count, share }) => {
+                    const emotion = EMOTION_MAP[id];
+                    if (!emotion) return null;
+                    return (
+                      <li
+                        key={id}
+                        className="flex items-center gap-3"
+                        title={`${emotion.label}：${count} 次，占 ${Math.round(share * 100)}%`}
+                      >
+                        <span className="w-10 shrink-0 text-[12px] text-ink-soft">
+                          {emotion.label}
+                        </span>
+                        <span className="relative h-[7px] flex-1 overflow-hidden rounded-full bg-[rgba(141,133,152,0.14)]">
+                          <span
+                            aria-hidden="true"
+                            className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-700"
+                            style={{
+                              width: `${Math.max(4, share * 100)}%`,
+                              background: `linear-gradient(90deg, ${emotion.palette.mid}, ${emotion.palette.deep})`,
+                            }}
+                          />
+                        </span>
+                        <span className="w-8 shrink-0 text-right text-[11px] tabular-nums text-ink-faint">
+                          {count}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="mt-4 text-[10.5px] leading-[1.8] text-ink-ghost">
+                  横条是占比，不是分数 —— 一次不算「差」，一次也不算「好」。
+                </p>
+              </>
+            ) : (
+              <p className="mt-4 text-[12px] leading-[1.95] text-ink-ghost">
+                {model.earlierOwnCount > 0
+                  ? `这七天没有新的记录。你更早以前记过 ${model.earlierOwnCount} 次，都留在上面的日历里。`
+                  : '还没有记录。回到主页点开一颗情绪球，就能把此刻的心情记下来。'}
+              </p>
+            )}
           </section>
 
           {/* 一段人话 */}

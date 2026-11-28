@@ -15,6 +15,7 @@ import { MemoryDetailDialog } from '@/components/memories/memory-detail-dialog';
 import { MemoryFormDialog } from '@/components/memories/memory-form-dialog';
 import { useMoodBox } from '@/hooks/use-moodbox';
 import { formatMonthTitle, todayKey } from '@/lib/date';
+import { normalizeEmotionId } from '@/lib/emotions';
 import { buildDaySummary, buildMonthStats } from '@/lib/stats';
 import { moodBoxStore } from '@/lib/moodbox-store';
 import type { EmotionLog, Memory } from '@/types';
@@ -43,7 +44,10 @@ export function CalendarView() {
     };
     for (const log of emotionLogs) {
       const entry = ensure(log.date);
-      if (!entry.emotions.includes(log.emotionId)) entry.emotions.push(log.emotionId);
+      // 旧记录里可能有已下线的 id：不收敛的话，格子上会是一颗没有颜色、
+      // 读屏也念不出名字的灰点 —— 等于这天「看起来没记过」。
+      const emotionId = normalizeEmotionId(log.emotionId);
+      if (!entry.emotions.includes(emotionId)) entry.emotions.push(emotionId);
     }
     for (const memory of memories) {
       ensure(memory.date).memoryCount += 1;
