@@ -39,7 +39,11 @@ export function MoreMenu() {
   useEffect(() => {
     if (!open) return;
 
-    const header = document.querySelector('header');
+    /*
+     * 页面上不止一个 <header>（主页的 MBTI 区块也是），
+     * 这里要的是站点头，按类名取。
+     */
+    const header = document.querySelector('header.mb-header');
     if (header) setTop(Math.round(header.getBoundingClientRect().bottom));
 
     const onKey = (event: KeyboardEvent) => {

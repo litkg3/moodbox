@@ -56,8 +56,15 @@ export function SiteHeader() {
           className="group mb-brand flex shrink-0 items-center gap-2.5 rounded-full focus-visible:outline-offset-4"
           aria-label="情绪盒子 MoodBox 首页"
         >
-          {/* 站标 36×36，与文字之间 10px（gap-2.5）；hover 时轻轻抬一下，像盒盖被顶起来一点 */}
-          <MoodBoxMark className="h-9 w-9 shrink-0 drop-shadow-[0_5px_12px_rgba(142,118,184,0.35)] transition-transform duration-700 group-hover:-translate-y-[1px] group-hover:scale-[1.06]" />
+          {/*
+            站标 36×36，与文字之间 10px（gap-2.5）；hover 时轻轻抬一下，像盒盖被顶起来一点。
+
+            桌面（≥1024）的长到 40：页头 72 之后，一行里的刻度是
+            导航条 46 / 圆钮 44 / 站标 40 —— 站标最小但不能再小，
+            36 配 72 的页头会显得是被忘在上一版的尺寸。
+            手机上保持 36：375px 的宽度预算里，品牌多占 4px 就要挤按钮。
+          */}
+          <MoodBoxMark className="h-9 w-9 shrink-0 drop-shadow-[0_5px_12px_rgba(142,118,184,0.35)] transition-transform duration-700 group-hover:-translate-y-[1px] group-hover:scale-[1.06] lg:h-10 lg:w-10" />
           <span className="mb-brand-text flex min-w-0 flex-col justify-center leading-none max-[359px]:hidden">
             {/*
               375px 的宽度预算：三颗按钮按规范占约 204px，品牌剩 131px，

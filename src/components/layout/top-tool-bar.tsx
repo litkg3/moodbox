@@ -40,13 +40,18 @@ export function TopToolBar() {
           {TOOL_ITEMS.map((item) => {
             const Icon = TOOL_ICONS[item.key];
             const active = item.href !== undefined && item.href === pathname;
+            /*
+             * 36 高（原来 32）。外面那圈玻璃条 p-1 + 1px 描边，合起来 46 ——
+             * 正是页头 72 减去上下各 13px。图标 14 / 字号 12 跟着抬一档，
+             * 否则条子长高了、里面的字还蹲在原地，看着像没对齐。
+             */
             const className = cn(
-              'mb-nav-item flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[11.5px] font-medium tracking-[0.05em] transition-all duration-500',
+              'mb-nav-item flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[12px] font-medium tracking-[0.05em] transition-all duration-500',
               active ? 'mb-pill-active' : 'hover:bg-white/55',
             );
             const inner = (
               <>
-                <Icon size={13} strokeWidth={1.6} aria-hidden="true" />
+                <Icon size={14} strokeWidth={1.6} aria-hidden="true" />
                 <span className="hidden xl:inline">{item.label}</span>
             </>
           );

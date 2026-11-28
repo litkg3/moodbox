@@ -33,8 +33,14 @@ const PETAL_DEG = 360 / EMOTION_PETALS.length; // 45°
 /** 第一个花瓣的左边界从正上方（12 点）开始，顺时针排开。 */
 const START_DEG = -90;
 
-/** 自动转动：每步停留多久（毫秒）。0.82s 转 + 约 2.2s 停，够读一个词。 */
-const STEP_MS = 3000;
+/**
+ * 自动转动：每步停留多久（毫秒）。0.82s 转 + 约 4.2s 停。
+ *
+ * 原来是 3 秒（停 2.2s）。八瓣 × 三层，一瓣里三层文字都要读，
+ * 2.2 秒只够扫一眼就被带到下一瓣；转到第 8 瓣时人已经跟丢，
+ * 只能等一整圈再回来。放到 5 秒是「读完刚好要走」的位置。
+ */
+const STEP_MS = 5000;
 
 /** 盘的旋转过渡时长（毫秒），必须和 globals.css 里 .emotion-wheel-spin 对上。 */
 const SPIN_MS = 820;
@@ -578,6 +584,12 @@ export function EmotionWheel({ className }: EmotionWheelProps) {
     <section
       aria-labelledby={titleId}
       className={cn('emotion-wheel', lockedId && 'has-active', className)}
+      /*
+        待机节拍写进 DOM：e2e 里那些「等一格」「跨过两个步进点」的断言
+        要按真实间隔算，不能把 3000 抄进测试 —— 一改节拍就红一片，
+        而且红的地方看起来像"转盘坏了"，其实只是测试记着旧数字。
+      */
+      data-step-ms={STEP_MS}
     >
       <h2 id={titleId} className="sr-only">
         情绪转盘

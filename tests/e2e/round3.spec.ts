@@ -70,6 +70,58 @@ test('桌面端：所有入口都在页头那一行，底部不再有第二条�
   await expect(page.locator('.mb-dock')).toHaveCount(0);
 });
 
+/*
+ * 页头这一行的刻度。
+ *
+ * 量的是「关系」而不是具体的像素：页头 72 之后，一行里三样东西应当是
+ * 导航条 46 > 圆钮 44 > 站标 40，且四个元素的中线在同一条线上。
+ *
+ * 为什么值得单独测：改页头高度最容易漏的就是同行组件 —— 以前就是
+ * 页头 64、导航条 42、圆钮 44，容器比里面的按钮还矮，一行看着发扁。
+ * 中线只要差 1px，肉眼在 1440 宽下就能看出「右边两个偏低」。
+ */
+test('桌面端页头：导航条、圆钮、站标同中线，高度做一个递减的刻度', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openHome(page);
+
+  const metrics = await page.evaluate(() => {
+    const rect = (el: Element | null) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { w: r.width, h: r.height, cy: r.top + r.height / 2 };
+    };
+    const header = document.querySelector('header.mb-header');
+    const nav = document.querySelector('.mb-glass-nav');
+    const toggle = header?.querySelector('button[aria-pressed]') ?? null;
+    const audio =
+      [...(header?.querySelectorAll('button') ?? [])].find((b) =>
+        (b.getAttribute('aria-label') ?? '').includes('背景音乐'),
+      ) ?? null;
+    const mark = header?.querySelector('.mb-brand svg') ?? null;
+    return {
+      header: rect(header),
+      nav: rect(nav),
+      toggle: rect(toggle),
+      audio: rect(audio),
+      mark: rect(mark),
+    };
+  });
+
+  // 页头 72：比原来的 64 高一点点，一行才不贴着内容
+  expect(metrics.header?.h).toBe(72);
+
+  // 中线：四个元素齐平，容差 1px（亚像素渲染）
+  const centers = [metrics.nav, metrics.toggle, metrics.audio, metrics.mark].map(
+    (m) => m!.cy,
+  );
+  const spread = Math.max(...centers) - Math.min(...centers);
+  expect(spread, `四个元素的中线不一致：${centers.map((c) => c.toFixed(1)).join(', ')}`).toBeLessThanOrEqual(1);
+
+  // 刻度：导航条 > 圆钮 > 站标，每一档至少差 2px，否则看着就是「一样高」的一排
+  expect(metrics.nav!.h).toBeGreaterThanOrEqual(metrics.toggle!.h + 2);
+  expect(metrics.toggle!.h).toBeGreaterThanOrEqual(metrics.mark!.h + 2);
+});
+
 test('移动端：右上角只有主页与更多，九个入口都收在更多里', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openHome(page);

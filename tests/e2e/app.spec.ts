@@ -28,6 +28,18 @@ function topLabelOf(page: Page) {
 }
 
 /**
+ * 转盘待机一格的毫秒数，从转盘自己的 `data-step-ms` 上读。
+ *
+ * 读不到就退回 5000 —— 不是为了兜底，是为了让「属性被删了」这件事
+ * 不至于让三条用例卡在 NaN 上、报一个看不懂的错。
+ */
+async function stepMs(page: Page) {
+  const raw = await page.locator('.emotion-wheel').getAttribute('data-step-ms');
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : 5000;
+}
+
+/**
  * 把某一格滚到屏幕上，返回它的盒子。
  *
  * 转盘在自动转，格子的屏幕位置一直在变，所以量坐标之前先让盘停住：
@@ -419,6 +431,24 @@ test('情绪转盘：八个复合词落在瓣缝里，盘下是分条说明', as
   }
 });
 
+/**
+ * 等转盘真正停住（连续两次采样角度一致）。
+ *
+ * 悬停会取消定时器，但「已经在转的那一下」不会立刻停 —— 820ms 的过渡还在跑。
+ * 这时候量出来的复合词坐标是旧位置，鼠标一落下去就落到隔壁瓣上了，
+ * `is-lit` 为空、用例红，看上去像「悬停坏了」，其实只是量早了。
+ */
+async function waitSpinSettled(page: Page) {
+  const spin = page.locator('.emotion-wheel-spin');
+  let last = '';
+  for (let i = 0; i < 40; i += 1) {
+    const now = await spin.evaluate((el) => getComputedStyle(el).transform);
+    if (now === last) return;
+    last = now;
+    await page.waitForTimeout(80);
+  }
+}
+
 test('情绪转盘：悬停一个复合词，它和对角那个一起亮', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openHome(page);
@@ -427,7 +457,7 @@ test('情绪转盘：悬停一个复合词，它和对角那个一起亮', async
   // 先把鼠标放到盘上让自动转动停住，量出来的坐标才有效
   const board = (await page.locator('.emotion-wheel-svg').boundingBox())!;
   await page.mouse.move(board.x + board.width / 2, board.y + board.height * 0.2);
-  await page.waitForTimeout(300);
+  await waitSpinSettled(page);
 
   const dyad = page.locator('.emotion-wheel-dyad[data-dyad="乐观"]');
   const box = (await dyad.boundingBox())!;
@@ -560,7 +590,8 @@ test('情绪转盘：点空白处关闭详情，点击已选中扇形也能收�
   await expect(card).toHaveCount(0);
   await expect(page.locator('.emotion-wheel-card-close')).toHaveCount(0);
   // 等过一个自动步进周期，确认卡片没有随着转动复活
-  await page.waitForTimeout(2400);
+  const step = await stepMs(page);
+  await page.waitForTimeout(step + 600);
   await expect(card).toHaveCount(0);
 
   // 重新点开，再点转盘外的空白处关闭
@@ -568,7 +599,7 @@ test('情绪转盘：点空白处关闭详情，点击已选中扇形也能收�
   await expect(card).toHaveCount(1);
   await page.mouse.click(24, 780);
   await expect(card).toHaveCount(0);
-  await page.waitForTimeout(2400);
+  await page.waitForTimeout(step + 600);
   await expect(card).toHaveCount(0);
 });
 
@@ -722,8 +753,16 @@ test('情绪转盘：桌面端自动转到每一格并自动选中，卡片与�
   const readTop = () => topLabelOf(page);
 
   /*
-   * 待机节奏是 3 秒一格（0.82s 旋转 + 约 2.2s 静止）。
+   * 待机节拍从 DOM 上读，不在这儿抄一个数字。
    *
+   * 以前这里写死 3 秒，节拍一改成 5 秒，「等一格」就变成「等了大半格」，
+   * 三条断言同时红，看上去像转盘坏了，其实只是测试记着旧常量。
+   * 现在转盘把 STEP_MS 挂在自己的 data-step-ms 上，测试按它算。
+   */
+  const step = await stepMs(page);
+  expect(step, '需求是 5 秒一转（原来 3 秒）').toBe(5000);
+
+  /*
    * 先确认「刚转完一格的样子」在一秒内不会变 —— 这一条专门守住"别再把
    * 间隔改回 1 秒"：1 秒的话这一步必然已经转走了。
    */
@@ -731,8 +770,8 @@ test('情绪转盘：桌面端自动转到每一格并自动选中，卡片与�
   await page.waitForTimeout(900);
   expect(await readTransform(), '一秒内不该转走，否则说明间隔被改短了').toBe(first);
 
-  // 等到下一个 3 秒点，整盘角度必然变了
-  await page.waitForTimeout(2600);
+  // 等到下一个步进点（一格 + 半秒余量），整盘角度必然变了
+  await page.waitForTimeout(step - 900 + 500);
   expect(await readTransform()).not.toBe(first);
 
   // 盘在转，但卡片一直在（自动选中），而且卡片标题与指针下那一格一致
@@ -741,8 +780,8 @@ test('情绪转盘：桌面端自动转到每一格并自动选中，卡片与�
   expect(await readCard()).toBe(topLabel);
   await expect(page.locator('.emotion-wheel-pointer')).toHaveClass(/is-on/);
 
-  // 再等一格（3 秒 + 一点余量），卡片跟着指针换人 —— 这就是「自动选中」
-  await page.waitForTimeout(3600);
+  // 再等一格，卡片跟着指针换人 —— 这就是「自动选中」
+  await page.waitForTimeout(step + 600);
   const nextTop = await readTop();
   expect(await readCard()).toBe(nextTop);
 });
@@ -794,14 +833,15 @@ test('情绪转盘：鼠标悬停停住并切到那一格，移开后继续转',
     .evaluate((el) => el.textContent ?? '');
   await expect(page.locator('.emotion-wheel-card-title')).toHaveText(hotLabel);
 
-  // 悬停期间跨过不止一个步进点（3 秒一格），角度必须一直不变
+  // 悬停期间跨过不止一个步进点（一格就是 stepMs），角度必须一直不变
+  const step = await stepMs(page);
   const paused = await readTransform();
-  await page.waitForTimeout(4200);
+  await page.waitForTimeout(step + 1200);
   expect(await readTransform()).toBe(paused);
 
   // 移开之后重新开始转：要等过一个完整的步进间隔才会动
   await page.mouse.move(24, 120, { steps: 8 });
-  await page.waitForTimeout(3800);
+  await page.waitForTimeout(step + 800);
   expect(await readTransform()).not.toBe(paused);
 });
 
